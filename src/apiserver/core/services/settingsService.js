@@ -10,7 +10,7 @@
 //   - logs_config        → logging storage, levels, capture options, management
 //   - auth_provider      → active authentication provider
 //
-// FALLBACK: If DB is unavailable, falls back to seedData/ JSON
+// FALLBACK: If DB is unavailable, falls back to core/database/seedData/ JSON
 // files (read-only). Writes always require DB.
 //
 // USAGE:
@@ -21,14 +21,14 @@
 import DatabaseService from '#core/database/databaseService.js';
 import { config } from '#config';
 import { logger } from '#shared/logger.js';
-import { loadJson } from '#shared/loadJson.js';
+import { loadSeedJson } from '#shared/loadJson.js';
 
 const schema = config.db.schema || 'pulseops';
 
-// Map config keys to their fallback seed files
+// Map config keys to their fallback seed files (in core/database/seedData/)
 const FALLBACK_FILES = {
-  general_settings: 'seedData/GeneralSettings.json',
-  logs_config:      'seedData/LogsConfig.json',
+  general_settings: 'GeneralSettings.json',
+  logs_config:      'LogsConfig.json',
 };
 
 const SettingsService = {
@@ -54,7 +54,7 @@ const SettingsService = {
       const fallbackFile = FALLBACK_FILES[key];
       if (fallbackFile) {
         try {
-          return loadJson(fallbackFile);
+          return loadSeedJson(fallbackFile);
         } catch {
           logger.warn(`[SettingsService] Fallback file not found for key '${key}'`);
         }

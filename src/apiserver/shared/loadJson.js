@@ -18,6 +18,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const configDir = path.resolve(__dirname, '../config');
+const seedDataDir = path.resolve(__dirname, '../core/database/seedData');
 
 /**
  * Load and parse a JSON file from the config directory.
@@ -26,6 +27,16 @@ const configDir = path.resolve(__dirname, '../config');
  */
 export function loadJson(relativePath) {
   const fullPath = path.resolve(configDir, relativePath);
+  return JSON.parse(fs.readFileSync(fullPath, 'utf8'));
+}
+
+/**
+ * Load and parse a JSON seed data file from core/database/seedData/.
+ * @param {string} fileName - File name (e.g. 'GeneralSettings.json')
+ * @returns {Object} Parsed JSON object
+ */
+export function loadSeedJson(fileName) {
+  const fullPath = path.resolve(seedDataDir, fileName);
   return JSON.parse(fs.readFileSync(fullPath, 'utf8'));
 }
 

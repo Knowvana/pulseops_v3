@@ -3,7 +3,7 @@
 //
 // PURPOSE: CRUD endpoints for general platform settings. Database is the
 // source of truth (system_config table, key='general_settings').
-// Falls back to seedData/GeneralSettings.json if DB unavailable.
+// Falls back to core/database/seedData/GeneralSettings.json if DB unavailable.
 //
 // ENDPOINTS:
 //   GET   /settings           → Get current general settings

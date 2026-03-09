@@ -613,16 +613,36 @@ router.post('/:id/schema', authenticate, async (req, res) => {
   logger.info(`[${requestId}] Modules:POST /${id}/schema — provisioning module DB tables`);
 
   try {
-    // Validate module exists in DB
+    // Ensure module has a row in system_modules (may not exist yet during install flow).
+    // If the module isn't registered yet, read metadata from constants.json and pre-register.
     const existing = await DatabaseService.query(
-      `SELECT module_id, installed, schema_initialized FROM ${schema}.system_modules WHERE module_id = $1`,
+      `SELECT module_id, schema_initialized FROM ${schema}.system_modules WHERE module_id = $1`,
       [id]
     );
-    if (existing.rows.length === 0 || !existing.rows[0].installed) {
-      return res.status(400).json({
-        success: false,
-        error: { message: 'Module must be installed before creating schema.', requestId },
-      });
+    if (existing.rows.length === 0) {
+      // Read module metadata from dist-modules/<id>/constants.json
+      const available = ModuleScanner.scan();
+      const moduleMeta = available.find(m => m.id === id);
+      if (!moduleMeta) {
+        return res.status(404).json({
+          success: false,
+          error: { message: 'Module not found in dist-modules/.', requestId },
+        });
+      }
+      // Pre-register with full metadata so schema_initialized can be tracked
+      await DatabaseService.query(`
+        INSERT INTO ${schema}.system_modules
+          (module_id, name, short_name, version, description, roles, is_core, "order",
+           has_manifest, has_api, installed, enabled, schema_initialized, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false, false, false, NOW())
+        ON CONFLICT (module_id) DO NOTHING
+      `, [
+        id, moduleMeta.name, moduleMeta.shortName || '', moduleMeta.version,
+        moduleMeta.description || '', JSON.stringify(moduleMeta.roles || []),
+        moduleMeta.isCore || false, moduleMeta.order ?? 99,
+        moduleMeta.hasManifest || false, moduleMeta.hasApi || false,
+      ]);
+      logger.info(`[${requestId}] Modules:POST /${id}/schema — pre-registered module in system_modules`);
     }
 
     // Find Schema.json
@@ -728,6 +748,99 @@ router.post('/:id/schema', authenticate, async (req, res) => {
     return res.status(500).json({
       success: false,
       error: { message: `Schema provisioning failed: ${err.message}`, requestId },
+    });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE /modules/:id/schema — Drop module database tables
+// Removes all tables defined in the module's Schema.json and resets schema_initialized.
+// ─────────────────────────────────────────────────────────────────────────────
+router.delete('/:id/schema', authenticate, async (req, res) => {
+  const requestId = req.requestId;
+  const { id } = req.params;
+  logger.info(`[${requestId}] Modules:DELETE /${id}/schema — dropping module DB tables`);
+
+  try {
+    // Validate module exists in DB
+    const existing = await DatabaseService.query(
+      `SELECT module_id, installed, schema_initialized FROM ${schema}.system_modules WHERE module_id = $1`,
+      [id]
+    );
+    if (existing.rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Module not found in system_modules.', requestId },
+      });
+    }
+
+    // Find Schema.json
+    const schemaPath = resolveModuleSchemaPath(id);
+    if (!schemaPath) {
+      // No schema to delete — just reset the flag
+      await DatabaseService.query(
+        `UPDATE ${schema}.system_modules SET schema_initialized = false, updated_at = NOW() WHERE module_id = $1`,
+        [id]
+      );
+      return res.json({
+        success: true,
+        data: { tablesDropped: 0 },
+        message: 'Module has no schema — schema_initialized flag reset.',
+      });
+    }
+
+    const schemaDef = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
+    const tableDefs = schemaDef.tables || [];
+
+    if (tableDefs.length === 0) {
+      return res.json({
+        success: true,
+        data: { tablesDropped: 0 },
+        message: 'Schema.json has no table definitions.',
+      });
+    }
+
+    // Drop tables in a transaction
+    const client = await DatabaseService.getPool().connect();
+    let tablesDropped = 0;
+
+    try {
+      await client.query('BEGIN');
+
+      // Drop tables in reverse order (to handle foreign keys)
+      for (let i = tableDefs.length - 1; i >= 0; i--) {
+        const tableName = tableDefs[i].name;
+        await client.query(`DROP TABLE IF EXISTS ${schema}.${tableName} CASCADE`);
+        tablesDropped++;
+        logger.info(`[${requestId}] Modules:DELETE /${id}/schema — table dropped: ${schema}.${tableName}`);
+      }
+
+      // Reset schema_initialized flag
+      await client.query(
+        `UPDATE ${schema}.system_modules SET schema_initialized = false, updated_at = NOW() WHERE module_id = $1`,
+        [id]
+      );
+
+      await client.query('COMMIT');
+
+      logger.info(`[${requestId}] Modules:DELETE /${id}/schema — complete: ${tablesDropped} table(s) dropped`);
+      return res.json({
+        success: true,
+        data: { tablesDropped },
+        message: `Module schema deleted: ${tablesDropped} table(s) dropped.`,
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      logger.error(`[${requestId}] Modules:DELETE /${id}/schema — DDL failed`, { error: err.message });
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    logger.error(`[${requestId}] Modules:DELETE /${id}/schema — failed`, { error: err.message });
+    return res.status(500).json({
+      success: false,
+      error: { message: `Schema deletion failed: ${err.message}`, requestId },
     });
   }
 });

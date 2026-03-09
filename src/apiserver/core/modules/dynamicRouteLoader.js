@@ -1,5 +1,5 @@
 // ============================================================================
-// Dynamic Route Loader — PulseOps V2 API
+// Dynamic Route Loader — PulseOps V3 API
 //
 // PURPOSE: Loads and unloads module API routes at runtime without restarting
 // the Express server. This is the backbone of zero-downtime API module
@@ -10,10 +10,10 @@
 //   - When a module is enabled, its router is mounted on /api/<moduleId>
 //   - When disabled, the router is unmounted
 //   - Routes are loaded via dynamic import() from dist-modules/<id>/api/index.js
-//   - On pod restart, all enabled modules are re-loaded from ModulesConfig.json
+//   - On pod restart, all enabled modules are re-loaded from system_modules DB table
 //
 // KUBERNETES COMPATIBILITY:
-//   - Module state is persisted in ModulesConfig.json (mounted as ConfigMap/PV)
+//   - Module state is persisted in system_modules DB table
 //   - On startup, rehydrateEnabledModules() re-loads all previously enabled modules
 //   - No in-memory-only state — everything survives pod restarts
 //
@@ -23,20 +23,21 @@
 //
 // DEPENDENCIES:
 //   - #shared/logger.js             → Winston logger
-//   - #shared/loadJson.js           → loadJson, saveJson for ModulesConfig.json
 //   - #core/middleware/auth.js       → authenticate middleware
+//   - #core/database/databaseService.js → DB queries for module state
 //   - ./moduleScanner.js            → Module discovery
 // ============================================================================
 import path from 'path';
 import fs from 'fs';
 import { pathToFileURL } from 'url';
 import { logger } from '#shared/logger.js';
-import { loadJson, saveJson } from '#shared/loadJson.js';
 import { authenticate } from '#core/middleware/auth.js';
+import { config } from '#config';
+import DatabaseService from '#core/database/databaseService.js';
 import ModuleScanner from './moduleScanner.js';
 import { addModuleRouter, removeModuleRouter } from './moduleGateway.js';
 
-const MODULES_CONFIG = 'ModulesConfig.json';
+const schema = config.db.schema || 'pulseops';
 
 // ── In-memory registry of loaded module routers ──────────────────────────────
 // Maps moduleId → { router, mountPath, onDisable? }
@@ -156,7 +157,7 @@ export function isModuleLoaded(moduleId) {
 
 /**
  * Rehydrate all enabled modules on server startup.
- * Reads ModulesConfig.json and loads routes for each enabled module.
+ * Queries system_modules DB table for installed + enabled modules.
  * Called once from server.js or app.js after createApp().
  *
  * KUBERNETES: This ensures pod restarts re-load all enabled modules
@@ -169,8 +170,10 @@ export async function rehydrateEnabledModules(app) {
   logger.info('[DynamicRouteLoader] Rehydrating enabled modules on startup...');
 
   try {
-    const config = loadJson(MODULES_CONFIG);
-    const enabledModules = (config.modules || []).filter(m => m.enabled && m.installed);
+    const result = await DatabaseService.query(
+      `SELECT module_id FROM ${schema}.system_modules WHERE installed = true AND enabled = true`
+    );
+    const enabledModules = result.rows || [];
 
     if (enabledModules.length === 0) {
       logger.info('[DynamicRouteLoader] No enabled modules to rehydrate');
@@ -179,17 +182,18 @@ export async function rehydrateEnabledModules(app) {
 
     for (const mod of enabledModules) {
       // Only load if the module still exists in dist-modules/
-      if (ModuleScanner.exists(mod.id)) {
-        const result = await loadModuleRoutes(app, mod.id);
-        logger.info(`[DynamicRouteLoader] Rehydrated '${mod.id}': ${result.message}`);
+      if (ModuleScanner.exists(mod.module_id)) {
+        const loadResult = await loadModuleRoutes(app, mod.module_id);
+        logger.info(`[DynamicRouteLoader] Rehydrated '${mod.module_id}': ${loadResult.message}`);
       } else {
-        logger.warn(`[DynamicRouteLoader] Module '${mod.id}' is enabled but not found in dist-modules/`);
+        logger.warn(`[DynamicRouteLoader] Module '${mod.module_id}' is enabled but not found in dist-modules/`);
       }
     }
 
     logger.info(`[DynamicRouteLoader] Rehydration complete — ${enabledModules.length} module(s) processed`);
   } catch (err) {
-    logger.error('[DynamicRouteLoader] Failed to rehydrate modules', { error: err.message });
+    // DB may not be available yet on first startup — this is expected
+    logger.warn('[DynamicRouteLoader] Failed to rehydrate modules (DB may not be ready)', { error: err.message });
   }
 }
 

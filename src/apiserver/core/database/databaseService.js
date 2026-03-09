@@ -38,7 +38,7 @@ import { fileURLToPath } from 'url';
 import bcrypt from 'bcryptjs';
 import { config } from '#config';
 import { logger } from '#shared/logger.js';
-import { messages, errors, loadJson } from '#shared/loadJson.js';
+import { messages, errors, loadJson, loadSeedJson } from '#shared/loadJson.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const schemaJsonPath = path.resolve(__dirname, 'DefaultDatabaseSchema.json');
@@ -399,15 +399,15 @@ const DatabaseService = {
       }
 
       // ── Seed default settings into system_config ────────────────────────────
-      // GeneralSettings and LogsConfig are loaded from seedData/
+      // GeneralSettings and LogsConfig are loaded from core/database/seedData/
       // and stored in system_config table. These files are ONLY used for seeding.
       const seedConfigs = [
-        { key: 'general_settings', file: 'seedData/GeneralSettings.json', desc: 'Platform general settings (timezone, date/time formats)' },
-        { key: 'logs_config',      file: 'seedData/LogsConfig.json',      desc: 'Logging configuration (storage, levels, capture options, management)' },
+        { key: 'general_settings', file: 'GeneralSettings.json', desc: 'Platform general settings (timezone, date/time formats)' },
+        { key: 'logs_config',      file: 'LogsConfig.json',      desc: 'Logging configuration (storage, levels, capture options, management)' },
       ];
       for (const seed of seedConfigs) {
         try {
-          const seedData = loadJson(seed.file);
+          const seedData = loadSeedJson(seed.file);
           await client.query(
             `INSERT INTO ${schema}.system_config (key, value, description)
              VALUES ($1, $2, $3)

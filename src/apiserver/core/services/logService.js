@@ -21,7 +21,7 @@
 //
 // ARCHITECTURE:
 //   - Reads config from DB on every operation (honors changes without restart)
-//   - Falls back to seedData/LogsConfig.json if DB unavailable
+//   - Falls back to core/database/seedData/LogsConfig.json if DB unavailable
 //   - All modules write logs with a `module` column for filtering
 //   - Core platform logs use "Core" as the module identifier
 //   - Supports batch inserts for performance
@@ -38,7 +38,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { config } from '#config';
 import { logger } from '#shared/logger.js';
-import { loadJson, messages, errors } from '#shared/loadJson.js';
+import { loadJson, loadSeedJson, messages, errors } from '#shared/loadJson.js';
 import SettingsService from '#core/services/settingsService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -78,9 +78,9 @@ async function refreshLogsConfig() {
   } catch (err) {
     logger.warn('Failed to load logs config from DB, using fallback', { error: err.message });
   }
-  // Fallback to seed file
+  // Fallback to seed file (core/database/seedData/)
   try {
-    _cachedLogsConfig = loadJson('seedData/LogsConfig.json');
+    _cachedLogsConfig = loadSeedJson('LogsConfig.json');
   } catch {
     _cachedLogsConfig = DEFAULT_LOGS_CONFIG;
   }

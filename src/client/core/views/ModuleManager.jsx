@@ -140,20 +140,40 @@ export default function ModuleManager({ onModulesChanged }) {
     log.info('performAction', `${action} module '${moduleId}'`);
 
     try {
-      // ── Enable interceptor: check for module schema before enabling ────
-      if (action === 'enable') {
+      // ── Install interceptor: check for module schema before installing ────
+      if (action === 'install') {
         const schemaUrl = buildUrl(urls.modules.schema, moduleId);
         const schemaRes = await apiFetch(schemaUrl);
         if (schemaRes.success && schemaRes.data?.hasSchema && !schemaRes.data?.schemaInitialized) {
-          // Module has un-provisioned schema — show setup dialog
+          // Module has un-provisioned schema — show setup dialog before install
           const modMeta = [...availableModules, ...installedModules].find(m => m.id === moduleId);
           setSchemaSetup({
             moduleId,
             moduleName: modMeta?.name || moduleId,
             schemaPreview: schemaRes.data,
+            action: 'install', // Flag to indicate this is for install, not enable
           });
           setActionLoading(null);
-          log.info('performAction', `enable '${moduleId}' — schema required, showing setup dialog`);
+          log.info('performAction', `install '${moduleId}' — schema required, showing setup dialog`);
+          return;
+        }
+      }
+
+      // ── Remove interceptor: check for module schema before removing ────
+      if (action === 'remove') {
+        const schemaUrl = buildUrl(urls.modules.schema, moduleId);
+        const schemaRes = await apiFetch(schemaUrl);
+        if (schemaRes.success && schemaRes.data?.hasSchema && schemaRes.data?.schemaInitialized) {
+          // Module has provisioned schema — show deletion dialog before remove
+          const modMeta = [...availableModules, ...installedModules].find(m => m.id === moduleId);
+          setSchemaSetup({
+            moduleId,
+            moduleName: modMeta?.name || moduleId,
+            schemaPreview: schemaRes.data,
+            action: 'remove', // Flag to indicate this is for remove (schema deletion)
+          });
+          setActionLoading(null);
+          log.info('performAction', `remove '${moduleId}' — schema deletion required, showing confirmation dialog`);
           return;
         }
       }
@@ -193,29 +213,47 @@ export default function ModuleManager({ onModulesChanged }) {
     }
   }, [fetchAvailable, fetchInstalled, onModulesChanged, availableModules, installedModules]);
 
-  // ── Schema setup complete handler ──────────────────────────────────────────
-  // After schema tables are created, proceed to enable the module.
+  // ── Schema setup/deletion complete handler ────────────────────────────────
+  // After schema tables are created/deleted, proceed with the next action.
   const handleSchemaComplete = useCallback(async () => {
     if (!schemaSetup) return;
-    const { moduleId } = schemaSetup;
+    const { moduleId, action: schemaAction } = schemaSetup;
     setSchemaSetup(null);
-    log.info('handleSchemaComplete', `Schema created for '${moduleId}' — now enabling...`);
-
-    // Now enable the module (schema is already initialized, so the interceptor won't trigger again)
     setActionLoading(moduleId);
+
     try {
-      const url = buildUrl(urls.modules.enable, moduleId);
-      const result = await apiFetch(url, { method: 'POST' });
-      if (result.ok !== false && result.success) {
-        setToast({ type: 'success', message: viewText.toast.enableSuccess || result.message });
-        log.info('handleSchemaComplete', `enable '${moduleId}' — success`);
-        await Promise.all([fetchAvailable(), fetchInstalled()]);
-        if (typeof onModulesChanged === 'function') onModulesChanged();
-      } else {
-        setToast({ type: 'error', message: result.error?.message || viewText.toast.actionFailed });
+      if (schemaAction === 'install') {
+        // Schema was created during install — now proceed to install the module
+        log.info('handleSchemaComplete', `Schema created for '${moduleId}' — now installing...`);
+        const url = buildUrl(urls.modules.install, moduleId);
+        const result = await apiFetch(url, { method: 'POST' });
+        if (result.ok !== false && result.success) {
+          setToast({ type: 'success', message: viewText.toast.installSuccess || result.message });
+          log.info('handleSchemaComplete', `install '${moduleId}' — success`);
+          await Promise.all([fetchAvailable(), fetchInstalled()]);
+          if (typeof onModulesChanged === 'function') onModulesChanged();
+        } else {
+          setToast({ type: 'error', message: result.error?.message || viewText.toast.actionFailed });
+          log.error('handleSchemaComplete', `install '${moduleId}' — failed`, { error: result.error });
+        }
+      } else if (schemaAction === 'remove') {
+        // Schema was deleted during remove — now proceed to remove the module
+        log.info('handleSchemaComplete', `Schema deleted for '${moduleId}' — now removing...`);
+        const url = buildUrl(urls.modules.remove, moduleId);
+        const result = await apiFetch(url, { method: 'DELETE' });
+        if (result.ok !== false && result.success) {
+          setToast({ type: 'success', message: viewText.toast.removeSuccess || result.message });
+          log.info('handleSchemaComplete', `remove '${moduleId}' — success`);
+          await Promise.all([fetchAvailable(), fetchInstalled()]);
+          if (typeof onModulesChanged === 'function') onModulesChanged();
+        } else {
+          setToast({ type: 'error', message: result.error?.message || viewText.toast.actionFailed });
+          log.error('handleSchemaComplete', `remove '${moduleId}' — failed`, { error: result.error });
+        }
       }
     } catch (err) {
       setToast({ type: 'error', message: viewText.toast.actionFailed });
+      log.error('handleSchemaComplete', `${schemaAction} '${moduleId}' — exception`, { error: err.message });
     } finally {
       setActionLoading(null);
     }
@@ -372,6 +410,7 @@ export default function ModuleManager({ onModulesChanged }) {
         moduleId={schemaSetup?.moduleId}
         moduleName={schemaSetup?.moduleName}
         schemaPreview={schemaSetup?.schemaPreview}
+        mode={schemaSetup?.action === 'remove' ? 'delete' : 'create'}
         onComplete={handleSchemaComplete}
         onClose={() => setSchemaSetup(null)}
       />

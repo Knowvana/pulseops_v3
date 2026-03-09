@@ -1,5 +1,5 @@
 // ============================================================================
-// ServiceNowConnectionTab — PulseOps V2 ServiceNow Module Config
+// ServiceNowConnectionTab — PulseOps V3 ServiceNow Module Config
 //
 // PURPOSE: Configuration tab for ServiceNow API connection credentials.
 // Provides fields for Instance URL, Username, and API Token/Password with
@@ -24,14 +24,15 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Wifi, WifiOff, CheckCircle2, AlertCircle, Loader2, Eye, EyeOff,
-  ExternalLink, Shield,
+  ExternalLink, Shield, Zap, Save, RefreshCw, Bug, FileText, GitPullRequest, User,
 } from 'lucide-react';
-import { createLogger, ConfirmationModal } from '@shared';
+import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
 // Module-local API URLs — no dependency on platform urls.json
 const snApi = {
   config:     '/api/servicenow/config',
   configTest: '/api/servicenow/config/test',
+  sync:       '/api/servicenow/sync',
 };
 import uiText from '../../config/uiText.json';
 
@@ -48,276 +49,325 @@ export default function ServiceNowConnectionTab() {
     apiToken:    '',
   });
   const [currentConfig, setCurrentConfig] = useState(null);
-  const [loading,       setLoading]       = useState(true);
-  const [testing,       setTesting]       = useState(false);
-  const [testResult,    setTestResult]    = useState(null); // { success, error, latencyMs }
-  const [showToken,     setShowToken]     = useState(false);
-  const [showConfirm,   setShowConfirm]   = useState(false);
-  const [fetchError,    setFetchError]    = useState(null);
-  const initRan = useRef(false);
+  const [connStatus, setConnStatus]       = useState('not_connected');
+  const [apiStatuses, setApiStatuses]     = useState({ incidents: null, ritms: null, changes: null });
+  const [lastTestedAt, setLastTestedAt]   = useState(null);
+  const [connecting, setConnecting]       = useState(false);
+  const [connectProgress, setConnectProgress] = useState(0);
+  const [saving, setSaving]               = useState(false);
+  const [syncing, setSyncing]             = useState(false);
+  const [saveResult, setSaveResult]       = useState(null);
+  const [syncResult, setSyncResult]       = useState(null);
+  const [showToken, setShowToken]         = useState(false);
+  const [fetchError, setFetchError]       = useState(null);
+  const autoConnectDone = useRef(false);
 
-  // ── Load existing config ────────────────────────────────────────────────
-  const loadConfig = useCallback(async () => {
-    log.debug('loadConfig', 'Loading ServiceNow connection config');
-    setLoading(true);
-    setFetchError(null);
+  // ── Load config and auto-connect ────────────────────────────────────────
+  const loadConfigAndConnect = useCallback(async () => {
+    if (autoConnectDone.current) return;
+    autoConnectDone.current = true;
+
+    setConnecting(true);
+    setConnectProgress(10);
+
     try {
-      const res = await ApiClient.get(snApi.config);
-      if (res?.success) {
-        const conn = res.data.connection || {};
-        log.info('loadConfig', 'Config loaded', { isConfigured: conn.isConfigured });
-        setCurrentConfig(res.data);
+      const configRes = await ApiClient.get(snApi.config);
+      setConnectProgress(30);
+
+      if (configRes?.success && configRes.data?.connection) {
+        const conn = configRes.data.connection;
+        setCurrentConfig(configRes.data);
         setForm({
           instanceUrl: conn.instanceUrl || '',
           username:    conn.username    || '',
-          apiToken:    conn.apiToken    || '', // Will be '••••••••' if token exists
+          apiToken:    conn.apiToken    || '',
         });
+
+        setConnectProgress(50);
+        const testRes = await ApiClient.post(snApi.configTest, {
+          instanceUrl: conn.instanceUrl,
+          username:    conn.username,
+          apiToken:    conn.apiToken,
+        });
+        setConnectProgress(90);
+
+        if (testRes?.success && testRes.data) {
+          setConnStatus(testRes.data.success ? 'connected' : 'not_connected');
+          setLastTestedAt(testRes.data.testedAt || new Date().toISOString());
+          if (testRes.data.apis) {
+            setApiStatuses(testRes.data.apis);
+          }
+          log.info('loadConfigAndConnect', 'Auto-connect successful', { status: testRes.data.success });
+        } else {
+          setConnStatus('not_connected');
+        }
       } else {
-        log.warn('loadConfig', 'Failed to load config', { error: res?.error?.message });
-        setFetchError(res?.error?.message || uiText.common.fetchError);
+        setConnStatus('not_connected');
       }
     } catch (err) {
-      log.error('loadConfig', 'Unexpected error', { error: err.message });
-      setFetchError(uiText.common.fetchError);
-    } finally {
-      setLoading(false);
+      log.error('loadConfigAndConnect', 'Auto-connect failed', { error: err.message });
+      setConnStatus('not_connected');
     }
+
+    setConnectProgress(100);
+    setTimeout(() => { setConnecting(false); setConnectProgress(0); }, 400);
   }, []);
 
-  // StrictMode guard
-  useEffect(() => {
-    if (initRan.current) return;
-    initRan.current = true;
-    log.info('mount', 'ServiceNowConnectionTab mounted');
-    loadConfig();
-  }, [loadConfig]);
+  useEffect(() => { loadConfigAndConnect(); }, [loadConfigAndConnect]);
 
   const handleChange = useCallback((field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
-    // Clear test result when user edits credentials
-    setTestResult(null);
+    setSaveResult(null);
   }, []);
 
   // ── Test connection ─────────────────────────────────────────────────────
-  const handleTest = useCallback(async () => {
-    log.info('handleTest', 'Testing ServiceNow connection', { instanceUrl: form.instanceUrl });
-    setTesting(true);
-    setTestResult(null);
+  const handleTestConnection = useCallback(async () => {
+    setConnecting(true);
+    setConnectProgress(20);
     try {
+      setConnectProgress(50);
       const res = await ApiClient.post(snApi.configTest, {
         instanceUrl: form.instanceUrl,
         username:    form.username,
         apiToken:    form.apiToken,
       });
-      if (res?.success) {
-        const result = res.data;
-        log.info('handleTest', `Test ${result.success ? 'passed' : 'failed'}`, { latencyMs: result.latencyMs });
-        setTestResult(result);
+      setConnectProgress(90);
+      if (res?.success && res.data) {
+        setConnStatus(res.data.success ? 'connected' : 'not_connected');
+        setLastTestedAt(res.data.testedAt || new Date().toISOString());
+        if (res.data.apis) setApiStatuses(res.data.apis);
       } else {
-        log.warn('handleTest', 'Test request failed', { error: res?.error?.message });
-        setTestResult({ success: false, error: res?.error?.message || uiText.common.fetchError });
+        setConnStatus('not_connected');
       }
     } catch (err) {
-      log.error('handleTest', 'Unexpected error', { error: err.message });
-      setTestResult({ success: false, error: uiText.common.fetchError });
-    } finally {
-      setTesting(false);
+      setConnStatus('not_connected');
+      log.error('handleTestConnection', 'Test failed', { error: err.message });
     }
+    setConnectProgress(100);
+    setTimeout(() => { setConnecting(false); setConnectProgress(0); }, 400);
   }, [form]);
 
-  // ── Save config (via ConfirmationModal) ────────────────────────────────
+  // ── Save config ─────────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
-    log.info('handleSave', 'Saving ServiceNow connection config');
-    const currentConn = currentConfig?.connection || {};
-    const res = await ApiClient.put(snApi.config, {
-      connection: {
-        instanceUrl: form.instanceUrl,
-        username:    form.username,
-        apiToken:    form.apiToken,
-      },
-      sla:  currentConfig?.sla,
-      sync: currentConfig?.sync,
-    });
-    if (!res?.success) {
-      throw new Error(res?.error?.message || uiText.common.fetchError);
+    if (!form.instanceUrl || !form.username) {
+      setSaveResult({ success: false, message: 'Instance URL and username are required' });
+      return;
     }
-    log.info('handleSave', 'Config saved');
-    await loadConfig(); // Refresh from server
-    return { instanceUrl: form.instanceUrl };
-  }, [form, currentConfig, loadConfig]);
+    setSaving(true);
+    setSaveResult(null);
+    try {
+      const res = await ApiClient.put(snApi.config, {
+        connection: {
+          instanceUrl: form.instanceUrl,
+          username:    form.username,
+          apiToken:    form.apiToken,
+        },
+        sla:  currentConfig?.sla,
+        sync: currentConfig?.sync,
+      });
+      if (res?.success) {
+        setSaveResult({ success: true, message: t.configSaved || 'Configuration saved successfully' });
+        log.info('handleSave', 'Config saved');
+        autoConnectDone.current = false;
+        await loadConfigAndConnect();
+      } else {
+        setSaveResult({ success: false, message: res?.error?.message || 'Failed to save configuration' });
+      }
+    } catch (err) {
+      setSaveResult({ success: false, message: 'Failed to save configuration' });
+      log.error('handleSave', 'Save failed', { error: err.message });
+    }
+    setSaving(false);
+    setTimeout(() => setSaveResult(null), 4000);
+  }, [form, currentConfig, loadConfigAndConnect]);
 
-  // ── Derived state ───────────────────────────────────────────────────────
-  const isConfigured   = currentConfig?.connection?.isConfigured;
-  const lastTested     = currentConfig?.connection?.lastTested;
-  const hasToken       = currentConfig?.connection?.hasToken;
-  const canTest        = !testing && form.instanceUrl && form.username && (form.apiToken || hasToken);
-  const canSave        = form.instanceUrl && form.username;
+  // ── Sync data ───────────────────────────────────────────────────────────
+  const handleSyncData = useCallback(async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await ApiClient.post(snApi.sync, {});
+      if (res?.success) {
+        setSyncResult({ success: true, message: t.syncSuccess || 'Data synchronized successfully' });
+        log.info('handleSyncData', 'Sync completed', { count: res.data?.count });
+      } else {
+        setSyncResult({ success: false, message: res?.error?.message || 'Sync failed' });
+      }
+    } catch (err) {
+      setSyncResult({ success: false, message: 'Sync failed' });
+      log.error('handleSyncData', 'Sync failed', { error: err.message });
+    }
+    setSyncing(false);
+    setTimeout(() => setSyncResult(null), 5000);
+  }, []);
 
-  // ── Render ──────────────────────────────────────────────────────────────
-  if (loading) {
-    return (
-      <div className="p-8 flex items-center justify-center">
-        <Loader2 size={20} className="text-brand-400 animate-spin" />
-      </div>
-    );
-  }
+  const isConnected = connStatus === 'connected';
+  const hasToken = currentConfig?.connection?.apiToken || form.apiToken;
 
   return (
-    <div className="p-5 space-y-5 max-w-xl">
-      {/* Status badge */}
-      <div className="flex items-center gap-2">
-        {isConfigured
-          ? <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <Wifi size={11} />{t.configuredBadge}
-            </span>
-          : <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-surface-100 text-surface-600 border border-surface-200">
-              <WifiOff size={11} />{t.notConfiguredBadge}
-            </span>
-        }
-        {lastTested && (
-          <span className="text-xs text-surface-400">{t.lastTested}: {new Date(lastTested).toLocaleString()}</span>
+    <div className="space-y-6 animate-fade-in p-5">
+      {/* Connection Status Banner with inline progress */}
+      <div className={`rounded-2xl border shadow-sm p-4 ${isConnected ? 'bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200' : 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200'}`}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            {connecting ? (
+              <Loader2 size={20} className="text-brand-500 animate-spin" />
+            ) : isConnected ? (
+              <CheckCircle2 size={20} className="text-emerald-600" />
+            ) : (
+              <AlertCircle size={20} className="text-rose-500" />
+            )}
+            <div>
+              <p className="text-sm font-semibold text-surface-800">
+                {t.statusLabel || 'Status'}: {connecting ? 'Testing...' : (isConnected ? 'Connected' : 'Not Connected')}
+              </p>
+              {lastTestedAt && !connecting && (
+                <p className="text-xs text-surface-400 mt-0.5">
+                  {t.lastTestedLabel || 'Last tested'}: {new Date(lastTestedAt).toLocaleString()}
+                </p>
+              )}
+            </div>
+          </div>
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
+            isConnected ? 'text-emerald-600 bg-emerald-50 border-emerald-200' : 'text-rose-600 bg-rose-50 border-rose-200'
+          }`}>
+            {isConnected ? 'Connected' : 'Not Connected'}
+          </span>
+        </div>
+
+        {/* Inline progress bar */}
+        {connecting && (
+          <div className="mb-3">
+            <div className="w-full bg-surface-100 rounded-full h-1.5 overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-brand-400 to-brand-600 rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${connectProgress}%` }}
+              />
+            </div>
+            <p className="text-xs text-surface-400 mt-1">Testing APIs...</p>
+          </div>
+        )}
+
+        {/* Per-API status */}
+        {!connecting && (apiStatuses.incidents || apiStatuses.ritms || apiStatuses.changes) && (
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { key: 'incidents', label: 'Incidents API', icon: Bug },
+              { key: 'ritms', label: 'RITMs API', icon: FileText },
+              { key: 'changes', label: 'Changes API', icon: GitPullRequest },
+            ].map(({ key, label, icon: Icon }) => {
+              const st = apiStatuses[key];
+              const ok = st?.status === 'connected';
+              return (
+                <div key={key} className="flex items-center gap-2 p-2 rounded-lg bg-surface-50 border border-surface-100">
+                  <Icon size={14} className="text-surface-500" />
+                  <span className="text-xs font-medium text-surface-700 flex-1">{label}</span>
+                  {ok ? <CheckCircle2 size={12} className="text-emerald-500" /> : <AlertCircle size={12} className="text-rose-400" />}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
-      {/* Fetch error */}
-      {fetchError && (
-        <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs">
-          <AlertCircle size={13} />{fetchError}
-        </div>
-      )}
-
-      {/* Security note */}
-      <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-teal-50 border border-teal-200 text-teal-700 text-xs">
-        <Shield size={13} className="flex-shrink-0 mt-0.5" />
-        <span>{t.apiTokenHint}</span>
-      </div>
-
-      {/* Form */}
+      {/* Connection Form */}
       <div className="space-y-4">
         {/* Instance URL */}
         <div>
-          <label className="block text-xs font-semibold text-surface-700 mb-1">{t.instanceUrlLabel}</label>
-          <div className="relative">
+          <label className="block text-sm font-medium text-surface-700 mb-1">{t.instanceUrlLabel || 'Instance URL'}</label>
+          <div className="flex items-center gap-2">
+            <Wifi size={16} className="text-surface-400" />
             <input
               type="url"
               value={form.instanceUrl}
-              onChange={e => handleChange('instanceUrl', e.target.value)}
-              placeholder={t.instanceUrlPlaceholder}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-surface-300 bg-white text-surface-700 placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent transition-all"
+              onChange={(e) => handleChange('instanceUrl', e.target.value)}
+              placeholder={t.instanceUrlPlaceholder || 'https://your-instance.service-now.com'}
+              className="flex-1 px-3 py-2 rounded-lg border border-surface-200 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none"
             />
-            {form.instanceUrl && (
-              <a
-                href={form.instanceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-surface-400 hover:text-brand-600"
-                title="Open in browser"
-              >
-                <ExternalLink size={13} />
-              </a>
-            )}
           </div>
-          <p className="text-[10px] text-surface-400 mt-1">{t.instanceUrlHint}</p>
         </div>
 
         {/* Username */}
         <div>
-          <label className="block text-xs font-semibold text-surface-700 mb-1">{t.usernameLabel}</label>
-          <input
-            type="text"
-            value={form.username}
-            onChange={e => handleChange('username', e.target.value)}
-            placeholder={t.usernamePlaceholder}
-            autoComplete="username"
-            className="w-full px-3 py-2 text-sm rounded-lg border border-surface-300 bg-white text-surface-700 placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent transition-all"
-          />
-          <p className="text-[10px] text-surface-400 mt-1">{t.usernameHint}</p>
+          <label className="block text-sm font-medium text-surface-700 mb-1">{t.usernameLabel || 'Username'}</label>
+          <div className="flex items-center gap-2">
+            <User size={16} className="text-surface-400" />
+            <input
+              type="text"
+              value={form.username}
+              onChange={(e) => handleChange('username', e.target.value)}
+              placeholder={t.usernamePlaceholder || 'admin'}
+              className="flex-1 px-3 py-2 rounded-lg border border-surface-200 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none"
+            />
+          </div>
         </div>
 
         {/* API Token */}
         <div>
-          <label className="block text-xs font-semibold text-surface-700 mb-1">{t.apiTokenLabel}</label>
-          <div className="relative">
+          <label className="block text-sm font-medium text-surface-700 mb-1">{t.apiTokenLabel || 'API Token'}</label>
+          <div className="relative flex items-center gap-2">
+            <Shield size={16} className="text-surface-400 flex-shrink-0" />
             <input
               type={showToken ? 'text' : 'password'}
               value={form.apiToken}
-              onChange={e => handleChange('apiToken', e.target.value)}
-              placeholder={hasToken ? '••••••••' : t.apiTokenPlaceholder}
-              autoComplete="current-password"
-              className="w-full px-3 py-2 pr-9 text-sm rounded-lg border border-surface-300 bg-white text-surface-700 placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent transition-all"
+              onChange={(e) => handleChange('apiToken', e.target.value)}
+              placeholder={hasToken ? '••••••••' : t.apiTokenPlaceholder || 'Your API token'}
+              className="flex-1 px-3 py-2 pr-10 rounded-lg border border-surface-200 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none"
             />
             <button
               type="button"
-              onClick={() => setShowToken(s => !s)}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-600"
+              onClick={() => setShowToken(!showToken)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-600"
             >
-              {showToken ? <EyeOff size={14} /> : <Eye size={14} />}
+              {showToken ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Test result */}
-      {testResult && (
-        <div className={`flex items-start gap-2 px-3 py-2.5 rounded-lg border text-xs ${
-          testResult.success
-            ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-            : 'bg-rose-50 border-rose-200 text-rose-700'
+      {/* Result Messages */}
+      {saveResult && (
+        <div className={`p-3 rounded-lg text-sm ${
+          saveResult.success ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'
         }`}>
-          {testResult.success
-            ? <CheckCircle2 size={13} className="flex-shrink-0 mt-0.5" />
-            : <AlertCircle  size={13} className="flex-shrink-0 mt-0.5" />
-          }
-          <div>
-            <span className="font-semibold">{testResult.success ? t.testSuccess : t.testFailed}</span>
-            {testResult.latencyMs != null && (
-              <span className="ml-2 text-[10px] opacity-70">{t.latency}: {testResult.latencyMs}ms</span>
-            )}
-            {testResult.error && <p className="mt-0.5 opacity-80">{testResult.error}</p>}
-          </div>
+          {saveResult.message}
+        </div>
+      )}
+      {syncResult && (
+        <div className={`p-3 rounded-lg text-sm ${
+          syncResult.success ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'
+        }`}>
+          {syncResult.message}
         </div>
       )}
 
-      {/* Actions */}
-      <div className="flex items-center gap-2 pt-2">
+      {/* Action Buttons */}
+      <div className="flex items-center gap-3 pt-2">
         <button
-          onClick={handleTest}
-          disabled={!canTest}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-brand-300 text-brand-700 bg-brand-50 hover:bg-brand-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          onClick={handleTestConnection}
+          disabled={connecting || !form.instanceUrl}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-brand-300 text-brand-700 bg-brand-50 hover:bg-brand-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
-          {testing ? <Loader2 size={13} className="animate-spin" /> : <Wifi size={13} />}
-          {testing ? t.testing : t.testButton}
+          {connecting ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+          {connecting ? 'Testing...' : (t.testConnection || 'Test Connection')}
         </button>
         <button
-          onClick={() => setShowConfirm(true)}
-          disabled={!canSave}
-          className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          onClick={handleSave}
+          disabled={saving || !form.instanceUrl || !form.username}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
-          {t.saveButton}
+          {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+          {saving ? 'Saving...' : (t.saveConfig || 'Save Config')}
+        </button>
+        <button
+          onClick={handleSyncData}
+          disabled={syncing || !isConnected}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+          {syncing ? 'Syncing...' : (t.syncData || 'Sync Data')}
         </button>
       </div>
-
-      {/* Save confirmation modal */}
-      <ConfirmationModal
-        isOpen={showConfirm}
-        onClose={() => setShowConfirm(false)}
-        title={t.confirmTitle}
-        actionDescription={t.confirmDescription}
-        actionTarget={t.confirmTarget}
-        actionDetails={[
-          { label: t.instanceUrlLabel, value: form.instanceUrl || uiText.common.na },
-          { label: t.usernameLabel,    value: form.username    || uiText.common.na },
-          { label: t.statusLabel,      value: isConfigured ? t.configuredBadge : t.notConfiguredBadge },
-        ]}
-        confirmLabel={uiText.common.save}
-        variant="info"
-        action={handleSave}
-        onSuccess={() => setShowConfirm(false)}
-        buildSummary={() => [
-          { label: t.instanceUrlLabel,   value: form.instanceUrl },
-          { label: t.confirmSummaryStatus, value: t.confirmSummarySuccess },
-        ]}
-      />
     </div>
   );
 }

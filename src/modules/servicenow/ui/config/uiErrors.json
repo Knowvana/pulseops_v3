@@ -7,7 +7,16 @@
   },
   "incidents": {
     "fetchFailed": "Failed to load incidents from the server.",
-    "searchFailed": "Search request failed. Please try again."
+    "searchFailed": "Search request failed. Please try again.",
+    "createFailed": "Failed to create incident.",
+    "updateFailed": "Failed to update incident.",
+    "closeFailed": "Failed to close incident."
+  },
+  "ritms": {
+    "fetchFailed": "Failed to load RITMs from the server.",
+    "createFailed": "Failed to create RITM.",
+    "updateFailed": "Failed to update RITM.",
+    "closeFailed": "Failed to close RITM."
   },
   "reports": {
     "fetchFailed": "Failed to load reports data from the server."
@@ -16,7 +25,25 @@
     "syncFailed": "Data synchronization failed. Check the connection.",
     "saveFailed": "Failed to save sync settings."
   },
+  "syncSchedule": {
+    "fetchFailed": "Failed to load sync schedule.",
+    "saveFailed": "Failed to save sync schedule."
+  },
   "sla": {
-    "saveFailed": "Failed to save SLA thresholds."
+    "saveFailed": "Failed to save SLA thresholds.",
+    "loadFailed": "Failed to load SLA configuration."
+  },
+  "businessHours": {
+    "loadFailed": "Failed to load business hours.",
+    "saveFailed": "Failed to save business hours."
+  },
+  "configSettings": {
+    "loadFailed": "Failed to load settings.",
+    "saveFailed": "Failed to save settings."
+  },
+  "dataManagement": {
+    "schemaFailed": "Failed to load schema status.",
+    "loadDefaultsFailed": "Failed to load default data.",
+    "resetFailed": "Failed to reset module data."
   }
 }

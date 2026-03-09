@@ -1,5 +1,5 @@
 // ============================================================================
-// ServiceNowSyncTab — PulseOps V2 ServiceNow Module Config
+// ServiceNowSyncTab — PulseOps V3 ServiceNow Module Config
 //
 // PURPOSE: Configuration tab for ServiceNow data synchronization settings.
 // Controls auto-sync enabled/disabled, sync interval (minutes), max incidents

@@ -1,6 +1,6 @@
 {
-  "appName": "PulseOps V2",
-  "appVersion": "2.0.0",
+  "appName": "PulseOps V3",
+  "appVersion": "3.0.0",
   "coreModuleIds": ["platform_admin", "auth"],
   "defaultModule": "platform_admin",
   "defaultView": "dashboard"

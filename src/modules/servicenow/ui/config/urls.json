@@ -1,11 +1,31 @@
 {
   "_description": "ServiceNow module API endpoints. Self-contained — no dependency on platform urls.json.",
   "api": {
-    "config":     "/api/servicenow/config",
-    "configTest": "/api/servicenow/config/test",
-    "stats":      "/api/servicenow/stats",
-    "incidents":  "/api/servicenow/incidents",
-    "reports":    "/api/servicenow/reports",
-    "sync":       "/api/servicenow/sync"
+    "config":            "/api/servicenow/config",
+    "configTest":        "/api/servicenow/config/test",
+    "stats":             "/api/servicenow/stats",
+    "sync":              "/api/servicenow/sync",
+    "syncStatus":        "/api/servicenow/sync/status",
+    "syncSchedule":      "/api/servicenow/sync/schedule",
+
+    "incidents":         "/api/servicenow/incidents",
+    "incidentById":      "/api/servicenow/incidents/{id}",
+    "incidentClose":     "/api/servicenow/incidents/{id}/close",
+
+    "ritms":             "/api/servicenow/ritms",
+    "ritmById":          "/api/servicenow/ritms/{id}",
+    "ritmClose":         "/api/servicenow/ritms/{id}/close",
+
+    "slaConfig":         "/api/servicenow/sla/config",
+    "businessHours":     "/api/servicenow/business-hours",
+    "configSettings":    "/api/servicenow/config/settings",
+    "schemaInfo":        "/api/servicenow/schema/info",
+    "demoData":          "/api/servicenow/data/demo",
+    "hardReset":         "/api/servicenow/data/reset",
+
+    "reports":           "/api/servicenow/reports",
+    "reportIncidents":   "/api/servicenow/reports/incidents",
+    "reportRitms":       "/api/servicenow/reports/ritms",
+    "reportSla":         "/api/servicenow/reports/sla"
   }
 }

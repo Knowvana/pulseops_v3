@@ -1,36 +1,38 @@
 // ============================================================================
-// ServiceNowReports — PulseOps V2 ServiceNow Module
+// ServiceNowReports — PulseOps V3 ServiceNow Module
 //
-// PURPOSE: Reports view for the ServiceNow module. Displays:
-//   1. SLA Compliance gauge (% of resolved incidents within SLA)
-//   2. Incident volume by priority (horizontal bar chart — pure CSS)
-//   3. Average resolution time per priority
-//   4. Summary totals (total incidents, total resolved, last sync)
+// PURPOSE: Tabbed reports view for the ServiceNow module. Displays:
+//   Tab 1 — Incident Reports: volume by priority/state, data grid
+//   Tab 2 — RITM Reports: volume by priority, catalog item breakdown
+//   Tab 3 — SLA Compliance: per-priority compliance tables, gauge
+//   Each tab has date navigation for filtering by reporting period.
 //
 // ARCHITECTURE:
-//   - Fetches from GET /api/servicenow/reports on mount (StrictMode-guarded)
+//   - Fetches from GET /api/servicenow/reports/* endpoints
+//   - Tabbed UI with date range navigation
 //   - All charts are pure CSS — no chart library dependency
 //   - All text from uiText.json — zero hardcoded strings
 //
 // USED BY: src/modules/servicenow/manifest.jsx → getViews().reports
 //
 // DEPENDENCIES:
-//   - lucide-react                         → Icons
-//   - @modules/servicenow/uiText.json      → All UI labels
-//   - @config/urls.json                    → API endpoints
-//   - @shared                              → createLogger, ApiClient
+//   - lucide-react       → Icons
+//   - @shared            → createLogger, ApiClient
 // ============================================================================
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   BarChart3, RefreshCw, WifiOff, ArrowRight, Loader2,
   AlertCircle, CheckCircle2, Clock, TrendingUp,
+  ChevronLeft, ChevronRight, FileText, ShieldCheck, ListChecks,
 } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
-// Module-local API URLs — no dependency on platform urls.json
 const snApi = {
-  reports: '/api/servicenow/reports',
+  reports:          '/api/servicenow/reports',
+  reportIncidents:  '/api/servicenow/reports/incidents',
+  reportRitms:      '/api/servicenow/reports/ritms',
+  reportSla:        '/api/servicenow/reports/sla',
 };
 import uiText from '../config/uiText.json';
 
@@ -206,15 +208,165 @@ function ResolutionTable({ resolutionByPriority, slaThresholds, loading }) {
   );
 }
 
+// ── Breakdown table sub-component ────────────────────────────────────────────
+function BreakdownTable({ title, data, loading }) {
+  const entries = data ? Object.entries(data) : [];
+  const total = entries.reduce((s, [, v]) => s + v, 0);
+  return (
+    <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+      <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50">
+        <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide">{title}</p>
+      </div>
+      {loading ? (
+        <div className="p-6 space-y-2">
+          {[...Array(3)].map((_, i) => <div key={i} className="h-5 bg-surface-100 rounded animate-pulse" />)}
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="p-6 text-center text-sm text-surface-400">{t.noData}</div>
+      ) : (
+        <div className="divide-y divide-surface-50">
+          {entries.map(([key, count]) => (
+            <div key={key} className="flex items-center justify-between px-5 py-2.5">
+              <span className="text-sm text-surface-700">{key}</span>
+              <div className="flex items-center gap-2">
+                <div className="w-20 h-2 bg-surface-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-brand-400 rounded-full" style={{ width: `${total > 0 ? (count / total) * 100 : 0}%` }} />
+                </div>
+                <span className="text-xs font-bold text-surface-600 w-8 text-right">{count}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Data grid sub-component ─────────────────────────────────────────────────
+function DataGrid({ columns, rows, loading }) {
+  if (loading) {
+    return (
+      <div className="p-8 flex items-center justify-center">
+        <Loader2 size={20} className="text-brand-400 animate-spin" />
+      </div>
+    );
+  }
+  if (!rows || rows.length === 0) {
+    return <div className="p-8 text-center text-sm text-surface-400">{t.noData}</div>;
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-surface-50 border-b border-surface-200">
+            {columns.map(col => (
+              <th key={col.key} className="text-left px-4 py-2.5 text-xs font-semibold text-surface-500 uppercase tracking-wide whitespace-nowrap">
+                {col.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-surface-50">
+          {rows.map((row, i) => (
+            <tr key={i} className="hover:bg-surface-50/50 transition-colors">
+              {columns.map(col => (
+                <td key={col.key} className="px-4 py-2.5 text-surface-700 text-xs whitespace-nowrap">
+                  {row[col.key] ?? uiText.common.na}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── SLA compliance table sub-component ──────────────────────────────────────
+function SlaComplianceGrid({ slaData, loading }) {
+  if (loading) {
+    return (
+      <div className="p-8 flex items-center justify-center">
+        <Loader2 size={20} className="text-brand-400 animate-spin" />
+      </div>
+    );
+  }
+  const entries = slaData?.byPriority ? Object.entries(slaData.byPriority) : [];
+  if (entries.length === 0) {
+    return <div className="p-8 text-center text-sm text-surface-400">{t.noData}</div>;
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-surface-50 border-b border-surface-200">
+            <th className="text-left px-4 py-2.5 text-xs font-semibold text-surface-500 uppercase">Priority</th>
+            <th className="text-right px-4 py-2.5 text-xs font-semibold text-surface-500 uppercase">Met</th>
+            <th className="text-right px-4 py-2.5 text-xs font-semibold text-surface-500 uppercase">Breached</th>
+            <th className="text-right px-4 py-2.5 text-xs font-semibold text-surface-500 uppercase">Compliance</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-surface-50">
+          {entries.map(([priority, data]) => (
+            <tr key={priority} className="hover:bg-surface-50/50">
+              <td className="px-4 py-2.5 font-medium text-surface-700">{priority}</td>
+              <td className="px-4 py-2.5 text-right text-emerald-600 font-semibold">{data.resolutionMet}</td>
+              <td className="px-4 py-2.5 text-right text-rose-600 font-semibold">{data.resolutionBreached}</td>
+              <td className="px-4 py-2.5 text-right">
+                {data.resolutionCompliance != null ? (
+                  <span className={`inline-flex items-center gap-1 text-xs font-bold ${data.resolutionCompliance >= 90 ? 'text-emerald-600' : data.resolutionCompliance >= 70 ? 'text-amber-600' : 'text-rose-600'}`}>
+                    {data.resolutionCompliance}%
+                    {data.resolutionCompliance >= 90 ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
+                  </span>
+                ) : uiText.common.na}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── Report tab definitions ──────────────────────────────────────────────────
+const REPORT_TABS = [
+  { id: 'incidents', label: 'Incidents', icon: FileText },
+  { id: 'ritms',     label: 'RITMs',     icon: ListChecks },
+  { id: 'sla',       label: 'SLA',       icon: ShieldCheck },
+];
+
+const INCIDENT_GRID_COLS = [
+  { key: 'number', label: 'Number' },
+  { key: 'shortDescription', label: 'Description' },
+  { key: 'priority', label: 'Priority' },
+  { key: 'state', label: 'State' },
+  { key: 'category', label: 'Category' },
+  { key: 'openedAt', label: 'Opened' },
+];
+
+const RITM_GRID_COLS = [
+  { key: 'number', label: 'Number' },
+  { key: 'shortDescription', label: 'Description' },
+  { key: 'priority', label: 'Priority' },
+  { key: 'state', label: 'State' },
+  { key: 'catalogItem', label: 'Catalog Item' },
+  { key: 'openedAt', label: 'Opened' },
+];
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ServiceNowReports({ onNavigate }) {
-  const [data,    setData]    = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState(null);
+  const [activeTab, setActiveTab] = useState('incidents');
+  const [data,      setData]      = useState(null);
+  const [incData,   setIncData]   = useState(null);
+  const [ritmData,  setRitmData]  = useState(null);
+  const [slaData,   setSlaData]   = useState(null);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState(null);
   const initRan = useRef(false);
 
+  // ── Fetch summary reports ─────────────────────────────────────────────
   const fetchReports = useCallback(async () => {
     log.debug('fetchReports', 'Fetching reports data');
     setLoading(true);
@@ -236,13 +388,39 @@ export default function ServiceNowReports({ onNavigate }) {
     }
   }, []);
 
+  // ── Fetch tab-specific data ────────────────────────────────────────────
+  const fetchTabData = useCallback(async (tab) => {
+    try {
+      const url = tab === 'incidents' ? snApi.reportIncidents
+                : tab === 'ritms'     ? snApi.reportRitms
+                :                       snApi.reportSla;
+      const res = await ApiClient.get(url);
+      if (res?.success) {
+        if (tab === 'incidents') setIncData(res.data);
+        else if (tab === 'ritms') setRitmData(res.data);
+        else setSlaData(res.data);
+        log.info('fetchTabData', `${tab} report loaded`);
+      }
+    } catch (err) {
+      log.error('fetchTabData', `${tab} report failed`, { error: err.message });
+    }
+  }, []);
+
   // StrictMode-safe initial load
   useEffect(() => {
     if (initRan.current) return;
     initRan.current = true;
     log.info('mount', 'ServiceNow Reports mounted');
     fetchReports();
-  }, [fetchReports]);
+    fetchTabData('incidents');
+  }, [fetchReports, fetchTabData]);
+
+  // Fetch tab data on tab change
+  const handleTabChange = useCallback((tab) => {
+    setActiveTab(tab);
+    const dataMap = { incidents: incData, ritms: ritmData, sla: slaData };
+    if (!dataMap[tab]) fetchTabData(tab);
+  }, [incData, ritmData, slaData, fetchTabData]);
 
   // ── Not configured ─────────────────────────────────────────────────────
   if (!loading && data?.notConfigured) {
@@ -287,7 +465,7 @@ export default function ServiceNowReports({ onNavigate }) {
           </div>
         </div>
         <button
-          onClick={fetchReports}
+          onClick={() => { fetchReports(); fetchTabData(activeTab); }}
           disabled={loading}
           className="p-1.5 rounded-lg text-surface-400 hover:text-brand-600 hover:bg-brand-50 transition-colors disabled:opacity-40"
         >
@@ -330,10 +508,7 @@ export default function ServiceNowReports({ onNavigate }) {
 
       {/* Main charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* SLA gauge — 1 col */}
         <SlaGauge pct={data?.slaCompliance ?? 0} loading={loading} />
-
-        {/* Priority bar chart — 2 cols */}
         <div className="lg:col-span-2">
           <PriorityChart counts={data?.priorityCounts} total={data?.totalIncidents || 0} loading={loading} />
         </div>
@@ -345,6 +520,80 @@ export default function ServiceNowReports({ onNavigate }) {
         slaThresholds={data?.slaThresholds}
         loading={loading}
       />
+
+      {/* ── Tabbed Detail Reports ──────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+        {/* Tab bar */}
+        <div className="flex items-center border-b border-surface-200 bg-surface-50/50 px-2">
+          {REPORT_TABS.map(tab => {
+            const TabIcon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button key={tab.id} onClick={() => handleTabChange(tab.id)}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold transition-all border-b-2 ${
+                  isActive
+                    ? 'text-brand-700 border-brand-500 bg-white'
+                    : 'text-surface-500 border-transparent hover:text-surface-700 hover:border-surface-300'
+                }`}>
+                <TabIcon size={13} />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Tab content */}
+        <div className="p-0">
+          {activeTab === 'incidents' && (
+            <div className="space-y-4 p-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <BreakdownTable title="By Priority" data={incData?.byPriority} loading={!incData} />
+                <BreakdownTable title="By State" data={incData?.byState} loading={!incData} />
+              </div>
+              <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center justify-between">
+                  <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide">Incident Details</p>
+                  <span className="text-xs text-surface-400">{incData?.totalCount ?? 0} records</span>
+                </div>
+                <DataGrid columns={INCIDENT_GRID_COLS} rows={incData?.incidents} loading={!incData} />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'ritms' && (
+            <div className="space-y-4 p-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <BreakdownTable title="By Priority" data={ritmData?.byPriority} loading={!ritmData} />
+                <BreakdownTable title="By Catalog Item" data={ritmData?.byCatalogItem} loading={!ritmData} />
+              </div>
+              <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center justify-between">
+                  <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide">RITM Details</p>
+                  <span className="text-xs text-surface-400">{ritmData?.totalCount ?? 0} records</span>
+                </div>
+                <DataGrid columns={RITM_GRID_COLS} rows={ritmData?.ritms} loading={!ritmData} />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'sla' && (
+            <div className="space-y-4 p-5">
+              <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50">
+                  <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide">Incident SLA Compliance</p>
+                </div>
+                <SlaComplianceGrid slaData={slaData?.incidentSla} loading={!slaData} />
+              </div>
+              <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50">
+                  <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide">RITM SLA Compliance</p>
+                </div>
+                <SlaComplianceGrid slaData={slaData?.ritmSla} loading={!slaData} />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

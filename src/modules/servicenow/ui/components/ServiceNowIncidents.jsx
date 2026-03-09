@@ -1,5 +1,5 @@
 // ============================================================================
-// ServiceNowIncidents — PulseOps V2 ServiceNow Module
+// ServiceNowIncidents — PulseOps V3 ServiceNow Module
 //
 // PURPOSE: Full incident list view with filtering (state, priority), free-text
 // search, and client-side pagination. Fetches from GET /api/servicenow/incidents

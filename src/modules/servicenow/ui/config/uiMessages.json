@@ -4,11 +4,34 @@
     "saveSuccess": "Connection configuration saved successfully.",
     "testSuccess": "Connection test passed — ServiceNow instance is reachable."
   },
+  "incidents": {
+    "createSuccess": "Incident created successfully.",
+    "updateSuccess": "Incident updated successfully.",
+    "closeSuccess": "Incident closed successfully."
+  },
+  "ritms": {
+    "createSuccess": "RITM created successfully.",
+    "updateSuccess": "RITM updated successfully.",
+    "closeSuccess": "RITM closed successfully."
+  },
   "sync": {
     "syncSuccess": "Data synchronization completed successfully.",
     "saveSuccess": "Sync settings saved successfully."
   },
+  "syncSchedule": {
+    "saveSuccess": "Sync schedule saved successfully."
+  },
   "sla": {
     "saveSuccess": "SLA thresholds saved successfully."
+  },
+  "businessHours": {
+    "saveSuccess": "Business hours saved successfully."
+  },
+  "configSettings": {
+    "saveSuccess": "Settings saved successfully."
+  },
+  "dataManagement": {
+    "loadDefaultsSuccess": "Default data loaded successfully.",
+    "resetSuccess": "Module data has been reset successfully."
   }
 }

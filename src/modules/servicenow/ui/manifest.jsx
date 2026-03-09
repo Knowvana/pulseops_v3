@@ -30,19 +30,23 @@
 // ============================================================================
 
 import React from 'react';
-import { Headset, LayoutDashboard, BarChart3, Sliders, Wifi, Clock, RefreshCw, ListFilter } from 'lucide-react';
+import { Headset, LayoutDashboard, BarChart3, Sliders, Wifi, Clock, RefreshCw, ListFilter, ClipboardList, CalendarClock, Settings, Database } from 'lucide-react';
 import moduleConstants from './config/constants.json';
 import uiText from './config/uiText.json';
 
 // ── View Component References (NOT instances — never call new or pass JSX) ────
-import ServiceNowDashboard  from './components/ServiceNowDashboard';
-import ServiceNowIncidents  from './components/ServiceNowIncidents';
-import ServiceNowReports    from './components/ServiceNowReports';
+import ServiceNowDashboard      from './components/ServiceNowDashboard';
+import ServiceNowIncidents      from './components/ServiceNowIncidents';
+import ServiceNowTestIncidents  from './components/ServiceNowTestIncidents';
+import ServiceNowReports        from './components/ServiceNowReports';
 
 // ── Config Tab Components (lazy-mounted via render functions) ─────────────────
-import ServiceNowConnectionTab from './components/settings/ServiceNowConnectionTab';
-import ServiceNowSlaTab        from './components/settings/ServiceNowSlaTab';
-import ServiceNowSyncTab       from './components/settings/ServiceNowSyncTab';
+import ServiceNowConnectionTab      from './components/settings/ServiceNowConnectionTab';
+import ServiceNowSlaTab             from './components/settings/ServiceNowSlaTab';
+import ServiceNowSyncTab            from './components/settings/ServiceNowSyncTab';
+import ServiceNowBusinessHoursTab   from './components/settings/ServiceNowBusinessHoursTab';
+import ServiceNowConfigSettingsTab  from './components/settings/ServiceNowConfigSettingsTab';
+import ServiceNowDataManagementTab  from './components/settings/ServiceNowDataManagementTab';
 
 const navText = uiText.navItems;
 const cfgText = uiText.config;
@@ -57,10 +61,11 @@ const servicenowManifest = {
 
   // ── Sidebar Navigation (MUST include dashboard, config, reports in this order)
   navItems: [
-    { id: 'dashboard', label: navText.dashboard, icon: LayoutDashboard },
-    { id: 'incidents', label: navText.incidents,  icon: ListFilter       },
-    { id: 'reports',   label: navText.reports,    icon: BarChart3        },
-    { id: 'config',    label: navText.config,     icon: Sliders          },
+    { id: 'dashboard',     label: navText.dashboard,      icon: LayoutDashboard },
+    { id: 'incidents',     label: navText.incidents,       icon: ListFilter       },
+    { id: 'testIncidents', label: navText.testIncidents,   icon: ClipboardList    },
+    { id: 'reports',       label: navText.reports,         icon: BarChart3        },
+    { id: 'config',        label: navText.config,          icon: Sliders          },
   ],
 
   /**
@@ -71,9 +76,10 @@ const servicenowManifest = {
    * @returns {{ [viewId: string]: React.ComponentType }}
    */
   getViews: () => ({
-    dashboard: ServiceNowDashboard,
-    incidents: ServiceNowIncidents,
-    reports:   ServiceNowReports,
+    dashboard:     ServiceNowDashboard,
+    incidents:     ServiceNowIncidents,
+    testIncidents: ServiceNowTestIncidents,
+    reports:       ServiceNowReports,
   }),
 
   /**
@@ -101,6 +107,24 @@ const servicenowManifest = {
       label:   cfgText.tabs.sync.label,
       icon:    RefreshCw,
       content: () => <ServiceNowSyncTab />,
+    },
+    {
+      id:      cfgText.tabs.businessHours.id,
+      label:   cfgText.tabs.businessHours.label,
+      icon:    CalendarClock,
+      content: () => <ServiceNowBusinessHoursTab />,
+    },
+    {
+      id:      cfgText.tabs.settings.id,
+      label:   cfgText.tabs.settings.label,
+      icon:    Settings,
+      content: () => <ServiceNowConfigSettingsTab />,
+    },
+    {
+      id:      cfgText.tabs.dataManagement.id,
+      label:   cfgText.tabs.dataManagement.label,
+      icon:    Database,
+      content: () => <ServiceNowDataManagementTab />,
     },
   ],
 

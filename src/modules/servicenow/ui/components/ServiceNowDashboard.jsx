@@ -1,5 +1,5 @@
 // ============================================================================
-// ServiceNowDashboard — PulseOps V2 ServiceNow Module
+// ServiceNowDashboard — PulseOps V3 ServiceNow Module
 //
 // PURPOSE: Main dashboard view for the ServiceNow module. Displays live
 // incident statistics, SLA breach count, connection status, and a recent
@@ -30,9 +30,11 @@ import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
 // Module-local API URLs — no dependency on platform urls.json
 const snApi = {
-  stats:     '/api/servicenow/stats',
-  incidents: '/api/servicenow/incidents',
-  sync:      '/api/servicenow/sync',
+  stats:      '/api/servicenow/stats',
+  incidents:  '/api/servicenow/incidents',
+  sync:       '/api/servicenow/sync',
+  syncStatus: '/api/servicenow/sync/status',
+  config:     '/api/servicenow/config',
 };
 import uiText from '../config/uiText.json';
 
@@ -114,6 +116,8 @@ function ConnectionBanner({ status, lastSync }) {
 export default function ServiceNowDashboard({ onNavigate }) {
   const [stats, setStats]           = useState(null);
   const [incidents, setIncidents]   = useState([]);
+  const [syncStatus, setSyncStatus] = useState(null);
+  const [configData, setConfigData] = useState(null);
   const [loading, setLoading]       = useState(true);
   const [syncing, setSyncing]       = useState(false);
   const [error, setError]           = useState(null);
@@ -125,9 +129,11 @@ export default function ServiceNowDashboard({ onNavigate }) {
     setLoading(true);
     setError(null);
     try {
-      const [statsRes, incRes] = await Promise.all([
+      const [statsRes, incRes, syncRes, cfgRes] = await Promise.all([
         ApiClient.get(snApi.stats),
         ApiClient.get(`${snApi.incidents}?limit=5`),
+        ApiClient.get(snApi.syncStatus).catch(() => null),
+        ApiClient.get(snApi.config).catch(() => null),
       ]);
 
       if (statsRes?.success) {
@@ -142,6 +148,8 @@ export default function ServiceNowDashboard({ onNavigate }) {
         log.debug('fetchStats', 'Recent incidents loaded', { count: incRes.data.incidents?.length });
         setIncidents(incRes.data.incidents || []);
       }
+      if (syncRes?.success) setSyncStatus(syncRes.data);
+      if (cfgRes?.success) setConfigData(cfgRes.data);
     } catch (err) {
       log.error('fetchStats', 'Unexpected error', { error: err.message });
       setError(uiText.common.fetchError);
@@ -261,6 +269,55 @@ export default function ServiceNowDashboard({ onNavigate }) {
         <StatCard label={t.stats.critical}     value={stats?.critical}     icon={AlertTriangle} color="text-rose-700"    bg="bg-rose-100"    loading={loading} />
         <StatCard label={t.stats.slaBreached}  value={stats?.slaBreached}  icon={AlertCircle}   color="text-amber-600"   bg="bg-amber-50"    loading={loading} />
         <StatCard label={t.stats.resolvedToday} value={stats?.resolvedToday} icon={CheckCircle2} color="text-emerald-600" bg="bg-emerald-50"  loading={loading} />
+      </div>
+
+      {/* Connection Health & Config Summary */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Connection Health */}
+        <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50">
+            <h3 className="text-sm font-bold text-surface-700">Connection Health</h3>
+          </div>
+          <div className="p-5 space-y-3">
+            {[
+              { label: 'Instance', value: configData?.connection?.instanceUrl || '—', ok: !!configData?.connection?.instanceUrl },
+              { label: 'Auth Method', value: configData?.connection?.authMethod || 'basic', ok: true },
+              { label: 'API Version', value: configData?.connection?.apiVersion || 'v2', ok: true },
+              { label: 'Status', value: stats?.connectionStatus === 'connected' ? 'Connected' : stats?.connectionStatus === 'error' ? 'Error' : 'Not Configured', ok: stats?.connectionStatus === 'connected' },
+            ].map(row => (
+              <div key={row.label} className="flex items-center justify-between">
+                <span className="text-xs font-medium text-surface-500">{row.label}</span>
+                <span className={`text-xs font-semibold flex items-center gap-1 ${row.ok ? 'text-emerald-600' : 'text-surface-400'}`}>
+                  {row.ok ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />}
+                  {row.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Config Summary */}
+        <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50">
+            <h3 className="text-sm font-bold text-surface-700">Configuration Summary</h3>
+          </div>
+          <div className="p-5 space-y-3">
+            {[
+              { label: 'Sync Scheduler', value: syncStatus?.running ? 'Running' : 'Stopped', ok: syncStatus?.running },
+              { label: 'Sync Interval', value: syncStatus?.syncIntervalMinutes ? `${syncStatus.syncIntervalMinutes} min` : '—', ok: !!syncStatus?.syncIntervalMinutes },
+              { label: 'Last Sync', value: syncStatus?.lastSyncTime ? new Date(syncStatus.lastSyncTime).toLocaleString() : 'Never', ok: !!syncStatus?.lastSyncTime },
+              { label: 'SLA Config', value: configData?.sla ? 'Configured' : 'Default', ok: !!configData?.sla },
+            ].map(row => (
+              <div key={row.label} className="flex items-center justify-between">
+                <span className="text-xs font-medium text-surface-500">{row.label}</span>
+                <span className={`text-xs font-semibold flex items-center gap-1 ${row.ok ? 'text-emerald-600' : 'text-surface-400'}`}>
+                  {row.ok ? <CheckCircle2 size={11} /> : <Clock size={11} />}
+                  {row.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Recent incidents */}

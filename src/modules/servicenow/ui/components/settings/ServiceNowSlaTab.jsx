@@ -1,15 +1,13 @@
 // ============================================================================
-// ServiceNowSlaTab — PulseOps V2 ServiceNow Module Config
+// ServiceNowSlaTab — PulseOps V3 ServiceNow Module Config
 //
-// PURPOSE: Configuration tab for SLA resolution time thresholds per priority.
-// Each priority (critical/high/medium/low) has a max resolution time in hours.
-// These thresholds are used for SLA breach detection in the Dashboard
-// and for compliance % in the Reports view.
+// PURPOSE: Configuration tab for SLA thresholds per priority and record type.
+// Supports per-priority response + resolution times for both Incidents and RITMs.
+// Also retains the simple hours-based thresholds for backward compatibility.
 //
 // ARCHITECTURE:
-//   - Loads config from GET /api/servicenow/config on mount (StrictMode-guarded)
+//   - Loads config from GET /api/servicenow/config + /sla/config on mount
 //   - Save uses ConfirmationModal (3-phase: Confirm → Progress → Summary)
-//   - Only updates the sla section; other config sections are preserved
 //   - All text from uiText.json — zero hardcoded strings
 //
 // USED BY: src/modules/servicenow/manifest.jsx → getConfigTabs()
@@ -27,7 +25,8 @@ import { createLogger, ConfirmationModal } from '@shared';
 import ApiClient from '@shared/services/apiClient';
 // Module-local API URLs — no dependency on platform urls.json
 const snApi = {
-  config: '/api/servicenow/config',
+  config:    '/api/servicenow/config',
+  slaConfig: '/api/servicenow/sla/config',
 };
 import uiText from '../../config/uiText.json';
 
@@ -80,6 +79,7 @@ const SLA_FIELDS = [
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ServiceNowSlaTab() {
   const [sla,         setSla]         = useState({ critical: 4, high: 8, medium: 24, low: 72 });
+  const [slaDetailed, setSlaDetailed] = useState([]);
   const [fullConfig,  setFullConfig]  = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [fetchError,  setFetchError]  = useState(null);
@@ -92,14 +92,20 @@ export default function ServiceNowSlaTab() {
     setLoading(true);
     setFetchError(null);
     try {
-      const res = await ApiClient.get(snApi.config);
-      if (res?.success) {
-        log.info('loadConfig', 'SLA config loaded', { sla: res.data.sla });
-        setFullConfig(res.data);
-        setSla({ ...res.data.sla });
+      const [cfgRes, slaRes] = await Promise.all([
+        ApiClient.get(snApi.config),
+        ApiClient.get(snApi.slaConfig).catch(() => null),
+      ]);
+      if (cfgRes?.success) {
+        log.info('loadConfig', 'SLA config loaded', { sla: cfgRes.data.sla });
+        setFullConfig(cfgRes.data);
+        setSla({ ...cfgRes.data.sla });
       } else {
-        log.warn('loadConfig', 'Failed', { error: res?.error?.message });
-        setFetchError(res?.error?.message || uiText.common.fetchError);
+        log.warn('loadConfig', 'Failed', { error: cfgRes?.error?.message });
+        setFetchError(cfgRes?.error?.message || uiText.common.fetchError);
+      }
+      if (slaRes?.success && Array.isArray(slaRes.data)) {
+        setSlaDetailed(slaRes.data);
       }
     } catch (err) {
       log.error('loadConfig', 'Unexpected error', { error: err.message });
@@ -124,21 +130,29 @@ export default function ServiceNowSlaTab() {
     }
   }, []);
 
+  // ── Update detailed SLA row ────────────────────────────────────────────
+  const handleDetailedChange = useCallback((idx, field, value) => {
+    setSlaDetailed(prev => prev.map((row, i) => i === idx ? { ...row, [field]: parseInt(value, 10) || 0 } : row));
+  }, []);
+
   // ── Save SLA config ─────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
     log.info('handleSave', 'Saving SLA thresholds', { sla });
-    const res = await ApiClient.put(snApi.config, {
-      connection: fullConfig?.connection,
-      sla,
-      sync: fullConfig?.sync,
-    });
-    if (!res?.success) {
-      throw new Error(res?.error?.message || uiText.common.fetchError);
+    const [res1, res2] = await Promise.all([
+      ApiClient.put(snApi.config, {
+        connection: fullConfig?.connection,
+        sla,
+        sync: fullConfig?.sync,
+      }),
+      slaDetailed.length > 0 ? ApiClient.put(snApi.slaConfig, slaDetailed) : Promise.resolve({ success: true }),
+    ]);
+    if (!res1?.success) {
+      throw new Error(res1?.error?.message || uiText.common.fetchError);
     }
     log.info('handleSave', 'SLA thresholds saved');
     await loadConfig();
     return { sla };
-  }, [sla, fullConfig, loadConfig]);
+  }, [sla, slaDetailed, fullConfig, loadConfig]);
 
   // ── Render ──────────────────────────────────────────────────────────────
   if (loading) {
@@ -194,6 +208,60 @@ export default function ServiceNowSlaTab() {
           </div>
         ))}
       </div>
+
+      {/* Detailed SLA tables (Incidents / RITMs) */}
+      {slaDetailed.length > 0 && (
+        <div className="space-y-4">
+          {['incident', 'ritm'].map(recordType => {
+            const rows = slaDetailed.filter(r => r.recordType === recordType);
+            if (rows.length === 0) return null;
+            return (
+              <div key={recordType} className="bg-white rounded-xl border border-surface-200 shadow-sm overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-surface-100 bg-surface-50/50">
+                  <p className="text-xs font-bold text-surface-600 uppercase tracking-wide">
+                    {recordType === 'incident' ? 'Incident' : 'RITM'} SLA Targets (minutes)
+                  </p>
+                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-surface-100">
+                      <th className="text-left px-4 py-2 text-xs font-semibold text-surface-500">Priority</th>
+                      <th className="text-center px-4 py-2 text-xs font-semibold text-surface-500">Response Time</th>
+                      <th className="text-center px-4 py-2 text-xs font-semibold text-surface-500">Resolution Time</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-surface-50">
+                    {rows.map((row) => {
+                      const idx = slaDetailed.indexOf(row);
+                      return (
+                        <tr key={row.priority} className="hover:bg-surface-50/50">
+                          <td className="px-4 py-2 text-surface-700 font-medium text-xs">{row.priority}</td>
+                          <td className="px-4 py-2 text-center">
+                            <input
+                              type="number" min={1}
+                              value={row.responseTimeMinutes || ''}
+                              onChange={e => handleDetailedChange(idx, 'responseTimeMinutes', e.target.value)}
+                              className="w-20 px-2 py-1 text-xs text-center rounded-lg border border-surface-200 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                            />
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            <input
+                              type="number" min={1}
+                              value={row.resolutionTimeMinutes || ''}
+                              onChange={e => handleDetailedChange(idx, 'resolutionTimeMinutes', e.target.value)}
+                              className="w-20 px-2 py-1 text-xs text-center rounded-lg border border-surface-200 focus:outline-none focus:ring-2 focus:ring-brand-300"
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Save button */}
       <div className="flex items-center gap-2 pt-1">

@@ -15,9 +15,10 @@
 // ============================================================================
 
 import React from 'react';
-import { Package, LayoutDashboard, BarChart3, Sliders } from 'lucide-react';
+import { Package, LayoutDashboard, BarChart3, Sliders, Blocks } from 'lucide-react';
 import moduleConstants from './config/constants.json';
 import uiText from './config/uiText.json';
+import ComponentShowcase from './components/ComponentShowcase';
 
 const navText = uiText.navItems;
 const cfgText = uiText.config;
@@ -45,14 +46,16 @@ const manifest = {
 
   // ── Navigation ────────────────────────────────────────────────────────────
   navItems: [
-    { id: 'dashboard', label: navText.dashboard, icon: LayoutDashboard },
-    { id: 'reports',   label: navText.reports,   icon: BarChart3 },
-    { id: 'config',    label: navText.config,    icon: Sliders },
+    { id: 'dashboard',  label: navText.dashboard,  icon: LayoutDashboard },
+    { id: 'reports',    label: navText.reports,     icon: BarChart3 },
+    { id: 'components', label: 'Components',        icon: Blocks },
+    { id: 'config',     label: navText.config,      icon: Sliders },
   ],
 
   getViews: () => ({
-    dashboard: DashboardView,
-    reports:   ReportsView,
+    dashboard:  DashboardView,
+    reports:    ReportsView,
+    components: ComponentShowcase,
   }),
 
   getConfigTabs: () => [

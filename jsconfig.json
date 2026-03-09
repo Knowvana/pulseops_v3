@@ -12,7 +12,9 @@
       "@shared/*":  ["src/client/shared/*"],
       "@shared":    ["src/client/shared/index.js"],
       "@layouts/*": ["src/client/layouts/*"],
-      "@layouts":   ["src/client/layouts/index.js"]
+      "@layouts":   ["src/client/layouts/index.js"],
+      "@components/*": ["src/ReusableComponents/*"],
+      "@components":   ["src/ReusableComponents/index.js"]
     }
   },
   "include": ["src/**/*"],

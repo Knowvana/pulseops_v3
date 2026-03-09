@@ -1,58 +1,49 @@
-# PulseOps V2
+# PulseOps V3
 
 Enterprise modular operations platform with plug-and-play module architecture, RBAC, and Kubernetes-ready stateless deployment.
 
 ## Architecture
 
-- **Microkernel + Micro-Frontend** — Core modules statically bundled, add-on modules hot-dropped at runtime
-- **Zero-Downtime Hot-Dropping** — Build, drop, discover, load — no restart required
-- **K8s-Ready** — Stateless API, horizontal scaling, health/readiness probes
-- **Dual-Auth** — SuperAdmin authenticates via JSON file; regular users authenticate against PostgreSQL with RBAC
+- **Unified Monorepo** — Single `package.json`, single `node_modules/` for both UI (React) and API (Express)
+- **Microkernel + Micro-Frontend** — Core platform statically bundled; add-on modules hot-dropped at runtime
+- **Zero-Downtime Hot-Dropping** — Build → drop into `dist-modules/` → auto-discover → load API routes + UI — no restart
+- **K8s-Ready** — Stateless API, horizontal scaling, health/readiness probes, Docker Compose for local dev
+- **Dual-Auth** — SuperAdmin authenticates via JSON file (no DB needed); regular users authenticate against PostgreSQL with RBAC
+- **Self-Contained Modules** — Each module packages its own UI, API, and config; communicates with the platform via a manifest contract
 
 ## Local Development URLs
 
-> **Note**: All URLs and ports are centralized in `src/config/urls.json` and `api/src/config/urls.json`
+> All URLs and ports are centralized in `src/client/config/urls.json` (UI) and `src/apiserver/config/urls.json` (API)
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| **Frontend** | http://localhost:1001 | - |
-| **API** | http://localhost:4001 | - |
-| **Swagger** | http://localhost:4001/api-docs | - |
+| **Frontend (Vite)** | http://localhost:1001 | — |
+| **API Server** | http://localhost:4001 | — |
+| **Swagger Docs** | http://localhost:4001/api-docs | — |
 | **PostgreSQL** | localhost:5432 | `postgres` / `Infosys@123` |
 | **pgAdmin** | http://localhost:5050 | `admin@domain.com` / `Infosys@123` |
 
 ## Authentication
 
-### SuperAdmin Login
-- **URL**: `http://localhost:1001/login/super-admin`
-- **Username**: `SuperAdmin` (prefilled, read-only)
-- **Default Password**: See `api/src/config/DefaultSuperAdmin.json`
-- Authenticates against JSON file — works without a database
-
-### Regular Users
-- **URL**: `http://localhost:1001` (standard login page)
-- **Default Dev Credentials**: `admin@test.com` / `Infosys@123`
-- Authenticates against PostgreSQL `system_users` table
-- Requires database to be initialized first (via Settings → Database Setup)
-
-### RBAC Roles
-`super_admin` → `admin` → `operator` → `user` → `viewer`
+| Type | URL | Credentials | Notes |
+|------|-----|-------------|--------|
+| **SuperAdmin Login** | http://localhost:1001/login/super-admin | `SuperAdmin` / `Infosys@123` | Authenticates against JSON file — works without a database |
+| **Regular Users** | http://localhost:1001 | `admin@test.com` / `Infosys@123` | Authenticates against PostgreSQL `system_users` table |
+| **RBAC Roles** | — | — | `super_admin` → `admin` → `operator` → `user` → `viewer` |
 
 ## Quick Start
 
 ```bash
-# Install frontend dependencies
+# Install all dependencies (UI + API in one package.json)
 npm install
 
-# Install API dependencies
-cd api && npm install && cd ..
-
-# Start both (frontend + API)
+# Start both frontend + API concurrently
 npm run dev
 
 # Or start separately
-npm run dev:ui    # Frontend on :1001
-npm run dev:api   # API on :4001
+npm run dev:ui          # Frontend on :1001
+npm run dev:api         # API on :4001
+npm run dev:api:watch   # API with file-watch auto-restart
 ```
 
 ## First-Time Setup
@@ -67,21 +58,35 @@ npm run dev:api   # API on :4001
 ## Project Structure
 
 ```
-pulseops_v2/
-├── api/                    # Backend (Node.js + Express)
-│   └── src/
-│       ├── config/         # Backend config (JSON files, Swagger)
-│       ├── core/           # Middleware, routes, database, services
-│       └── shared/         # Logger (Winston), utilities
-├── src/                    # Frontend (React + Vite + Tailwind)
-│   ├── config/             # Global frontend config (urls, text, app)
-│   ├── core/               # App bootstrap, platform dashboard, core views
-│   ├── layouts/            # App shell, navigation components
-│   ├── modules/            # Pluggable add-on modules
-│   └── shared/             # Design system, services, contexts, hooks
-├── dist-modules/           # Compiled hot-drop module bundles
-├── docs/                   # Architecture docs + development memory
-└── scripts/                # Build scripts
+pulseops_v3/
+├── package.json                # Unified — ALL deps (React + Express + pg)
+├── vite.config.js              # UI dev server + build + path aliases
+├── vite.module.config.js       # Module build config
+├── tailwind.config.js          # Design tokens (brand, surface, status colors)
+├── index.html                  # SPA entry
+├── src/
+│   ├── main.jsx                # React entry point
+│   ├── index.css               # Global styles + CSS custom properties
+│   ├── client/                 # ── Frontend (React + Vite + Tailwind) ──
+│   │   ├── config/             # UI config (urls.json, uiElementsText.json, app.json)
+│   │   ├── core/               # App.jsx, PlatformDashboard, core views (Settings, LogManager, ModuleManager)
+│   │   ├── layouts/            # AppShell, LeftSideNavBar, TopMenu, RightLogsView
+│   │   └── shared/             # Design system components, services, contexts, hooks
+│   ├── apiserver/              # ── Backend (Node.js + Express) ──
+│   │   ├── app.js              # Express factory
+│   │   ├── server.js           # HTTP server entry
+│   │   ├── config/             # API config (DatabaseConfig, auth-provider, Swagger, etc.)
+│   │   ├── core/               # Middleware, routes, database service, module gateway
+│   │   └── shared/             # Logger (Winston), loadJson utility
+│   ├── modules/                # ── Pluggable Modules (UI + API + Config) ──
+│   │   ├── moduleRegistry.js   # Frontend module loader/discovery
+│   │   ├── _template/          # Module template (copy to create new modules)
+│   │   └── servicenow/         # ServiceNow integration module
+│   └── ReusableComponents/     # ── Cross-cutting reusable components ──
+│       └── README.md           # Component catalog and usage guide
+├── dist-modules/               # Compiled hot-drop module bundles (K8s PV mount)
+├── docs/                       # Architecture docs (HLD, DLD, README)
+└── scripts/                    # Build scripts (build-module.js)
 ```
 
 ## Settings Tabs
@@ -103,4 +108,26 @@ pulseops_v2/
 | **Frontend** | React 19, Vite 7, TailwindCSS 3, Lucide Icons, react-router-dom 7 |
 | **Backend** | Node.js, Express 4, PostgreSQL (pg), Winston |
 | **Security** | Helmet.js, JWT (HttpOnly cookies + Bearer), bcrypt, rate limiting |
-| **Deployment** | Docker, Kubernetes |
+| **Deployment** | Docker, Docker Compose, Kubernetes |
+
+## Vite Path Aliases
+
+| Alias | Resolves To |
+|-------|-------------|
+| `@src` | `src/` |
+| `@config` | `src/client/config/` |
+| `@core` | `src/client/core/` |
+| `@shared` | `src/client/shared/` |
+| `@layouts` | `src/client/layouts/` |
+| `@modules` | `src/modules/` |
+| `@components` | `src/ReusableComponents/` |
+
+## Node.js Import Aliases (API)
+
+| Alias | Resolves To |
+|-------|-------------|
+| `#config/*` | `src/apiserver/config/*` |
+| `#shared/*` | `src/apiserver/shared/*` |
+| `#core/*` | `src/apiserver/core/*` |
+| `#root/*` | `src/apiserver/*` |
+| `#modules/*` | `src/modules/*` |

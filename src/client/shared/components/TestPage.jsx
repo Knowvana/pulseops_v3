@@ -1,8 +1,12 @@
 // ============================================================================
-// TestPage Component — PulseOps V2
+// TestPage Component — PulseOps V3
 //
-// PURPOSE: Central testing page for all UI components during development.
+// PURPOSE: Central testing page for all shared UI components during development.
 // All new components should be added here for visual verification.
+//
+// NOTE: For reusable cross-cutting components (@components), see
+//   src/ReusableComponents/README.md and the ComponentShowcase in
+//   src/modules/_template/ui/components/ComponentShowcase.jsx
 //
 // USAGE: Import in main.jsx for development testing.
 // ============================================================================
@@ -244,8 +248,8 @@ export default function TestPage() {
     <div className="min-h-screen bg-surface-50">
       {/* Header */}
       <div className="bg-white border-b border-surface-200 px-6 py-4">
-        <h1 className="text-2xl font-bold text-surface-800">PulseOps V2 — Component Test Page</h1>
-        <p className="text-sm text-surface-500 mt-1">Visual verification for all UI components</p>
+        <h1 className="text-2xl font-bold text-surface-800">PulseOps V3 — Component Test Page</h1>
+        <p className="text-sm text-surface-500 mt-1">Visual verification for all shared UI components. For reusable components, see the <code className="text-brand-600">ComponentShowcase</code> in the module template.</p>
       </div>
 
       <div className="p-8 space-y-8 max-w-7xl mx-auto">

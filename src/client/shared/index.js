@@ -38,3 +38,24 @@ export { createLogger } from '@shared/services/consoleLogger';
 
 // --- Contexts ---
 export { AuthProvider, useAuthContext } from '@shared/contexts/AuthContext';
+
+// --- ReusableComponents (re-exported for convenience) ---
+// Prefer importing directly from '@components' in new code.
+export {
+  ActionButton,
+  StatusBadge,
+  ProgressBar,
+  SetupRequiredOverlay,
+  ConfirmDialog,
+  StatCard,
+  ConnectionIndicator,
+  PageSpinner,
+  TabLayout,
+  FormField,
+  DataCard,
+  ToggleSwitch,
+  GradientSeparator,
+  theme,
+  gradients,
+  variants,
+} from '@components';

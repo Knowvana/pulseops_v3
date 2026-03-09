@@ -51,6 +51,7 @@ export default defineConfig({
       '@modules': path.resolve(__dirname, 'src/modules'),
       '@shared':  path.resolve(__dirname, 'src/client/shared'),
       '@layouts': path.resolve(__dirname, 'src/client/layouts'),
+      '@components': path.resolve(__dirname, 'src/ReusableComponents'),
     },
   },
 

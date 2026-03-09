@@ -67,6 +67,9 @@ const ModuleScanner = {
       const constantsPath = path.join(modulesDir, entry.name, 'constants.json');
       const manifestPath = path.join(modulesDir, entry.name, 'manifest.js');
       const apiIndexPath = path.join(modulesDir, entry.name, 'api', 'index.js');
+      const schemaPath   = path.join(modulesDir, entry.name, 'database', 'Schema.json');
+      // Also check src/modules/ for dev mode (Schema.json may not be built yet)
+      const srcSchemaPath = path.join(PROJECT_ROOT, 'src', 'modules', entry.name, 'database', 'Schema.json');
 
       // constants.json is required for discovery
       if (!fs.existsSync(constantsPath)) continue;
@@ -74,6 +77,7 @@ const ModuleScanner = {
       try {
         const raw = fs.readFileSync(constantsPath, 'utf8');
         const constants = JSON.parse(raw);
+        const hasSchema = fs.existsSync(schemaPath) || fs.existsSync(srcSchemaPath);
 
         results.push({
           id:          constants.id || entry.name,
@@ -86,6 +90,7 @@ const ModuleScanner = {
           order:       constants.order ?? 99,
           hasManifest: fs.existsSync(manifestPath),
           hasApi:      fs.existsSync(apiIndexPath),
+          hasSchema,
           source:      'hot-drop',
         });
 
@@ -93,6 +98,7 @@ const ModuleScanner = {
           version: constants.version,
           hasManifest: fs.existsSync(manifestPath),
           hasApi: fs.existsSync(apiIndexPath),
+          hasSchema,
         });
       } catch (err) {
         logger.warn(`[ModuleScanner] Failed to read module constants: ${entry.name}`, {

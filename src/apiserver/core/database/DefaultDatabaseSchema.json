@@ -1,7 +1,7 @@
 {
   "_meta": {
-    "version": "2.0.0",
-    "description": "PulseOps V2 — Default Database Schema Definition. All core tables are created from this file. Add new tables here; databaseService.js reads this to create/validate the schema.",
+    "version": "3.0.0",
+    "description": "PulseOps V3 — Default Database Schema Definition. Database is the source of truth for all platform state. All core tables are created from this file. databaseService.js reads this to create/validate the schema.",
     "schema": "pulseops"
   },
   "tables": [
@@ -101,23 +101,32 @@
     },
     {
       "name": "system_modules",
-      "description": "Module registry — hot-drop micro-frontend tracking.",
+      "description": "Module registry — DB is source of truth for module install/enable state. Hot-drop bundles still live in dist-modules/ but all state is persisted here.",
       "columns": [
         { "name": "id",                  "type": "SERIAL PRIMARY KEY" },
         { "name": "module_id",           "type": "VARCHAR(100) UNIQUE NOT NULL" },
         { "name": "name",                "type": "VARCHAR(255) NOT NULL" },
+        { "name": "short_name",          "type": "VARCHAR(50)" },
         { "name": "version",             "type": "VARCHAR(50) NOT NULL DEFAULT '1.0.0'" },
         { "name": "description",         "type": "TEXT" },
         { "name": "is_core",             "type": "BOOLEAN DEFAULT FALSE" },
+        { "name": "installed",           "type": "BOOLEAN DEFAULT FALSE" },
         { "name": "enabled",             "type": "BOOLEAN DEFAULT FALSE" },
+        { "name": "has_manifest",        "type": "BOOLEAN DEFAULT FALSE" },
+        { "name": "has_api",             "type": "BOOLEAN DEFAULT FALSE" },
+        { "name": "roles",               "type": "JSONB DEFAULT '[]'" },
+        { "name": "config",              "type": "JSONB DEFAULT '{}'" },
         { "name": "schema_initialized",  "type": "BOOLEAN DEFAULT FALSE" },
         { "name": "\"order\"",           "type": "INTEGER DEFAULT 99" },
-        { "name": "installed_at",        "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "installed_at",        "type": "TIMESTAMPTZ" },
+        { "name": "enabled_at",          "type": "TIMESTAMPTZ" },
+        { "name": "disabled_at",         "type": "TIMESTAMPTZ" },
         { "name": "updated_at",          "type": "TIMESTAMPTZ DEFAULT NOW()" }
       ],
       "indexes": [
         { "name": "idx_system_modules_module_id", "columns": ["module_id"], "unique": true },
-        { "name": "idx_system_modules_enabled",   "columns": ["enabled"],   "unique": false }
+        { "name": "idx_system_modules_enabled",   "columns": ["enabled"],   "unique": false },
+        { "name": "idx_system_modules_installed",  "columns": ["installed"], "unique": false }
       ]
     },
     {

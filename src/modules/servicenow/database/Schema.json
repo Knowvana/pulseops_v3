@@ -1,0 +1,89 @@
+{
+  "_meta": {
+    "moduleId": "servicenow",
+    "version": "1.0.0",
+    "description": "ServiceNow ITSM Integration — module database schema. Tables are provisioned when the module is enabled via Module Manager. Uses the same JSON format as DefaultDatabaseSchema.json."
+  },
+  "tables": [
+    {
+      "name": "sn_incidents",
+      "description": "Cached ServiceNow incidents — synced from the ServiceNow REST API.",
+      "columns": [
+        { "name": "id",                 "type": "BIGSERIAL PRIMARY KEY" },
+        { "name": "sys_id",             "type": "VARCHAR(64) UNIQUE NOT NULL" },
+        { "name": "number",             "type": "VARCHAR(40) NOT NULL" },
+        { "name": "short_description",  "type": "TEXT" },
+        { "name": "description",        "type": "TEXT" },
+        { "name": "priority",           "type": "VARCHAR(10)" },
+        { "name": "state",              "type": "VARCHAR(10)" },
+        { "name": "state_label",        "type": "VARCHAR(50)" },
+        { "name": "category",           "type": "VARCHAR(100)" },
+        { "name": "subcategory",        "type": "VARCHAR(100)" },
+        { "name": "assignment_group",   "type": "VARCHAR(255)" },
+        { "name": "assigned_to",        "type": "VARCHAR(255)" },
+        { "name": "caller_id",          "type": "VARCHAR(255)" },
+        { "name": "opened_at",          "type": "TIMESTAMPTZ" },
+        { "name": "resolved_at",        "type": "TIMESTAMPTZ" },
+        { "name": "closed_at",          "type": "TIMESTAMPTZ" },
+        { "name": "response_time_ms",   "type": "BIGINT" },
+        { "name": "resolution_time_ms", "type": "BIGINT" },
+        { "name": "sla_breached",       "type": "BOOLEAN DEFAULT FALSE" },
+        { "name": "raw_data",           "type": "JSONB" },
+        { "name": "synced_at",          "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "created_at",         "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "updated_at",         "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_sn_incidents_sys_id",     "columns": ["sys_id"],           "unique": true },
+        { "name": "idx_sn_incidents_number",     "columns": ["number"],           "unique": false },
+        { "name": "idx_sn_incidents_priority",   "columns": ["priority"],         "unique": false },
+        { "name": "idx_sn_incidents_state",      "columns": ["state"],            "unique": false },
+        { "name": "idx_sn_incidents_opened_at",  "columns": ["opened_at"],        "unique": false },
+        { "name": "idx_sn_incidents_group",      "columns": ["assignment_group"], "unique": false }
+      ]
+    },
+    {
+      "name": "sn_sync_history",
+      "description": "Sync audit trail — records each ServiceNow sync operation.",
+      "columns": [
+        { "name": "id",               "type": "BIGSERIAL PRIMARY KEY" },
+        { "name": "sync_type",        "type": "VARCHAR(50) NOT NULL DEFAULT 'incidents'" },
+        { "name": "status",           "type": "VARCHAR(20) NOT NULL DEFAULT 'running'" },
+        { "name": "records_fetched",  "type": "INTEGER DEFAULT 0" },
+        { "name": "records_created",  "type": "INTEGER DEFAULT 0" },
+        { "name": "records_updated",  "type": "INTEGER DEFAULT 0" },
+        { "name": "error_message",    "type": "TEXT" },
+        { "name": "started_at",       "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "completed_at",     "type": "TIMESTAMPTZ" },
+        { "name": "duration_ms",      "type": "INTEGER" }
+      ],
+      "indexes": [
+        { "name": "idx_sn_sync_history_status",     "columns": ["status"],     "unique": false },
+        { "name": "idx_sn_sync_history_started_at", "columns": ["started_at"], "unique": false }
+      ]
+    },
+    {
+      "name": "sn_sla_config",
+      "description": "SLA configuration per priority level.",
+      "columns": [
+        { "name": "id",             "type": "SERIAL PRIMARY KEY" },
+        { "name": "priority",       "type": "VARCHAR(20) UNIQUE NOT NULL" },
+        { "name": "response_hours", "type": "NUMERIC(6,2) NOT NULL" },
+        { "name": "resolve_hours",  "type": "NUMERIC(6,2) NOT NULL" },
+        { "name": "enabled",        "type": "BOOLEAN DEFAULT TRUE" },
+        { "name": "updated_at",     "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_sn_sla_config_priority", "columns": ["priority"], "unique": true }
+      ]
+    }
+  ],
+  "seedData": {
+    "sn_sla_config": [
+      { "priority": "critical", "response_hours": 1,  "resolve_hours": 4  },
+      { "priority": "high",     "response_hours": 2,  "resolve_hours": 8  },
+      { "priority": "medium",   "response_hours": 4,  "resolve_hours": 24 },
+      { "priority": "low",      "response_hours": 8,  "resolve_hours": 72 }
+    ]
+  }
+}

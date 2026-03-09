@@ -98,7 +98,7 @@
         "tags": ["Authentication"],
         "operationId": "login",
         "summary": "Login with email and password",
-        "description": "Authenticates the user against the active provider (json_file reads from DefaultAdminUser.json, database reads from system_users table with bcrypt). On success, returns JWT access token (24h) and refresh token (7d), and sets HttpOnly cookies (accessToken, refreshToken) for browser-based auth.",
+        "description": "Authenticates the user against the active provider (database reads from system_users table with bcrypt). On success, returns JWT access token (24h) and refresh token (7d), and sets HttpOnly cookies (accessToken, refreshToken) for browser-based auth.",
         "requestBody": {
           "required": true,
           "description": "User credentials. Both fields are required.",
@@ -354,7 +354,7 @@
         "tags": ["Database"],
         "operationId": "seedDefaultData",
         "summary": "Seed default data",
-        "description": "Seeds the default admin user (from DefaultAdminUser.json with bcrypt-hashed password) and registers core modules (platform_admin, auth). Skips if data already exists.",
+        "description": "Seeds the default admin user (from defaultDatabaseSchema/DefaultAdminUser.json with bcrypt-hashed password), general settings, logs config into system_config, and registers core modules (platform_admin, auth). Skips if data already exists.",
         "responses": {
           "200": { "description": "Default data loaded.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DefaultDataResult" } } } },
           "500": { "description": "Seeding failed.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }

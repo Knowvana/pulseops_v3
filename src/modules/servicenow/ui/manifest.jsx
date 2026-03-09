@@ -40,9 +40,9 @@ import ServiceNowIncidents  from './components/ServiceNowIncidents';
 import ServiceNowReports    from './components/ServiceNowReports';
 
 // ── Config Tab Components (lazy-mounted via render functions) ─────────────────
-import ServiceNowConnectionTab from './components/config/ServiceNowConnectionTab';
-import ServiceNowSlaTab        from './components/config/ServiceNowSlaTab';
-import ServiceNowSyncTab       from './components/config/ServiceNowSyncTab';
+import ServiceNowConnectionTab from './components/settings/ServiceNowConnectionTab';
+import ServiceNowSlaTab        from './components/settings/ServiceNowSlaTab';
+import ServiceNowSyncTab       from './components/settings/ServiceNowSyncTab';
 
 const navText = uiText.navItems;
 const cfgText = uiText.config;

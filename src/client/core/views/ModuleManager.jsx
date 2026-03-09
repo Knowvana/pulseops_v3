@@ -26,12 +26,14 @@
 //   - @shared                     → Design system components + logger
 // ============================================================================
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Package, Search, Download, Power, PowerOff, Trash2, RefreshCw,
-  CheckCircle2, XCircle, AlertCircle, Loader2, Server, Monitor,
-  ChevronRight, Info
+  CheckCircle2, XCircle, AlertCircle, AlertTriangle, Loader2, Server, Monitor,
+  ChevronRight, Info, Settings as SettingsIcon
 } from 'lucide-react';
-import { createLogger } from '@shared';
+import { createLogger, ConfigurationAlertModal } from '@shared';
+import ModuleSchemaSetup from '../components/ModuleSchemaSetup';
 import uiText from '@config/uiElementsText.json';
 import urls from '@config/urls.json';
 
@@ -51,15 +53,37 @@ async function apiFetch(url, options = {}) {
 }
 
 export default function ModuleManager({ onModulesChanged }) {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('available');
   const [availableModules, setAvailableModules] = useState([]);
   const [installedModules, setInstalledModules] = useState([]);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(null); // moduleId currently being acted on
   const [toast, setToast] = useState(null);
+  const [dbNotSetup, setDbNotSetup] = useState(false);
+  const [schemaSetup, setSchemaSetup] = useState(null); // { moduleId, moduleName, schemaPreview }
   const initRan = useRef(false);
+  const dbCheckRan = useRef(false);
 
   log.debug('render', 'Module Manager rendered', { activeTab });
+
+  // ── DB availability check on mount ──────────────────────────────────────
+  useEffect(() => {
+    if (dbCheckRan.current) return;
+    dbCheckRan.current = true;
+    (async () => {
+      try {
+        const res = await fetch(urls.database.status, { credentials: 'include' });
+        const json = await res.json();
+        if (json.success && json.data) {
+          setDbNotSetup(!json.data.dbAvailable || !json.data.schemaInitialized);
+        }
+      } catch {
+        log.warn('dbCheck', 'DB status check failed');
+        setDbNotSetup(true);
+      }
+    })();
+  }, []);
 
   // ── Toast auto-dismiss ────────────────────────────────────────────────────
   useEffect(() => {
@@ -116,6 +140,24 @@ export default function ModuleManager({ onModulesChanged }) {
     log.info('performAction', `${action} module '${moduleId}'`);
 
     try {
+      // ── Enable interceptor: check for module schema before enabling ────
+      if (action === 'enable') {
+        const schemaUrl = buildUrl(urls.modules.schema, moduleId);
+        const schemaRes = await apiFetch(schemaUrl);
+        if (schemaRes.success && schemaRes.data?.hasSchema && !schemaRes.data?.schemaInitialized) {
+          // Module has un-provisioned schema — show setup dialog
+          const modMeta = [...availableModules, ...installedModules].find(m => m.id === moduleId);
+          setSchemaSetup({
+            moduleId,
+            moduleName: modMeta?.name || moduleId,
+            schemaPreview: schemaRes.data,
+          });
+          setActionLoading(null);
+          log.info('performAction', `enable '${moduleId}' — schema required, showing setup dialog`);
+          return;
+        }
+      }
+
       let url;
       switch (action) {
         case 'install': url = buildUrl(urls.modules.install, moduleId); break;
@@ -149,7 +191,35 @@ export default function ModuleManager({ onModulesChanged }) {
     } finally {
       setActionLoading(null);
     }
-  }, [fetchAvailable, fetchInstalled, onModulesChanged]);
+  }, [fetchAvailable, fetchInstalled, onModulesChanged, availableModules, installedModules]);
+
+  // ── Schema setup complete handler ──────────────────────────────────────────
+  // After schema tables are created, proceed to enable the module.
+  const handleSchemaComplete = useCallback(async () => {
+    if (!schemaSetup) return;
+    const { moduleId } = schemaSetup;
+    setSchemaSetup(null);
+    log.info('handleSchemaComplete', `Schema created for '${moduleId}' — now enabling...`);
+
+    // Now enable the module (schema is already initialized, so the interceptor won't trigger again)
+    setActionLoading(moduleId);
+    try {
+      const url = buildUrl(urls.modules.enable, moduleId);
+      const result = await apiFetch(url, { method: 'POST' });
+      if (result.ok !== false && result.success) {
+        setToast({ type: 'success', message: viewText.toast.enableSuccess || result.message });
+        log.info('handleSchemaComplete', `enable '${moduleId}' — success`);
+        await Promise.all([fetchAvailable(), fetchInstalled()]);
+        if (typeof onModulesChanged === 'function') onModulesChanged();
+      } else {
+        setToast({ type: 'error', message: result.error?.message || viewText.toast.actionFailed });
+      }
+    } catch (err) {
+      setToast({ type: 'error', message: viewText.toast.actionFailed });
+    } finally {
+      setActionLoading(null);
+    }
+  }, [schemaSetup, fetchAvailable, fetchInstalled, onModulesChanged]);
 
   // ── Module Card Component ─────────────────────────────────────────────────
   const ModuleCard = ({ mod, mode }) => {
@@ -283,7 +353,29 @@ export default function ModuleManager({ onModulesChanged }) {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="relative space-y-6 animate-fade-in">
+      {/* Database Not Setup Alert */}
+      <ConfigurationAlertModal
+        isOpen={dbNotSetup}
+        icon={AlertTriangle}
+        header="Database Not Configured"
+        messageDetail="Module management requires a database connection. Please configure the database first from Platform Admin → Settings → Database Setup."
+        actionIcon={SettingsIcon}
+        actionText="Go to Database Setup"
+        onAction={() => navigate(urls.UIRoutes.platformAdmin.databaseSetup)}
+        variant="error"
+      />
+
+      {/* Module Schema Setup Dialog */}
+      <ModuleSchemaSetup
+        isOpen={!!schemaSetup}
+        moduleId={schemaSetup?.moduleId}
+        moduleName={schemaSetup?.moduleName}
+        schemaPreview={schemaSetup?.schemaPreview}
+        onComplete={handleSchemaComplete}
+        onClose={() => setSchemaSetup(null)}
+      />
+
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">

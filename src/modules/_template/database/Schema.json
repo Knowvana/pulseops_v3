@@ -1,0 +1,30 @@
+{
+  "_meta": {
+    "moduleId": "_template",
+    "version": "1.0.0",
+    "description": "Template module database schema — example tables for reference. Replace with your module's actual tables when creating a new module."
+  },
+  "tables": [
+    {
+      "name": "template_items",
+      "description": "Example table — replace with your module's primary data table.",
+      "columns": [
+        { "name": "id",          "type": "BIGSERIAL PRIMARY KEY" },
+        { "name": "name",        "type": "VARCHAR(255) NOT NULL" },
+        { "name": "description", "type": "TEXT" },
+        { "name": "status",      "type": "VARCHAR(20) NOT NULL DEFAULT 'active'" },
+        { "name": "config",      "type": "JSONB DEFAULT '{}'" },
+        { "name": "created_at",  "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "updated_at",  "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_template_items_status", "columns": ["status"], "unique": false }
+      ]
+    }
+  ],
+  "seedData": {
+    "template_items": [
+      { "name": "Example Item", "description": "This is a seed data example — remove or replace for your module." }
+    ]
+  }
+}

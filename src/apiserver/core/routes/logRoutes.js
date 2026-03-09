@@ -26,9 +26,9 @@ import { logger } from '#shared/logger.js';
 const router = Router();
 
 // ── GET /logs/config — Get current logging configuration ─────────────────────
-router.get('/config', (_req, res) => {
+router.get('/config', async (_req, res) => {
   try {
-    const cfg = LogService.getConfig();
+    const cfg = await LogService.getConfig();
     res.json({ success: true, data: cfg });
   } catch (err) {
     logger.error('GET /logs/config failed', { error: err.message });
@@ -53,7 +53,7 @@ router.put('/config', async (req, res) => {
 router.get('/config/status', async (_req, res) => {
   try {
     const available = await LogService.isDatabaseLoggingAvailable();
-    const cfg = LogService.getConfig();
+    const cfg = await LogService.getConfig();
     res.json({
       success: true,
       data: {

@@ -8,12 +8,13 @@
 //   import { LoginForm } from '@shared';
 //   <LoginForm onLogin={handleLogin} isLoading={false} />
 // ============================================================================
-import React, { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, LogIn, Loader, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Mail, Lock, Eye, EyeOff, LogIn, Loader, AlertCircle, Database } from 'lucide-react';
 import Button from '@shared/components/Button';
 import { createLogger } from '@shared/services/consoleLogger';
 import uiText from '@config/uiElementsText.json';
 import messages from '@config/UIMessages.json';
+import urls from '@config/urls.json';
 
 const log = createLogger('LoginForm.jsx');
 const loginText = uiText.login;
@@ -27,6 +28,26 @@ export default function LoginForm({ onLogin, isLoading = false, defaultUsername 
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [dbUnavailable, setDbUnavailable] = useState(false);
+  const dbCheckRan = useRef(false);
+
+  // Check DB availability on mount
+  useEffect(() => {
+    if (dbCheckRan.current) return;
+    dbCheckRan.current = true;
+    (async () => {
+      try {
+        const res = await fetch(urls.database.status);
+        const json = await res.json();
+        if (json.success && json.data) {
+          setDbUnavailable(!json.data.dbAvailable || !json.data.schemaInitialized);
+        }
+      } catch {
+        // API unreachable — don't block login (SuperAdmin may still work)
+        log.warn('dbCheck', 'DB status check failed — API may be unreachable');
+      }
+    })();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -79,6 +100,20 @@ export default function LoginForm({ onLogin, isLoading = false, defaultUsername 
 
         {/* Login Card */}
         <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl shadow-surface-200/50 border border-white/50 p-8">
+          {/* DB Unavailable Warning */}
+          {dbUnavailable && (
+            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+              <Database size={18} className="text-amber-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm text-amber-800 font-semibold">Database Not Available</p>
+                <p className="text-xs text-amber-600 mt-1">
+                  The database is not configured or unreachable. Only SuperAdmin login is available.
+                  Set up the database from Settings → Database Setup after logging in.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Error Message */}
           {error && (
             <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-3">

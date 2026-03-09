@@ -1,5 +1,5 @@
 // ============================================================================
-// LogService — PulseOps V2 API
+// LogService — PulseOps V3 API
 //
 // PURPOSE: Enterprise log management service that handles reading, writing,
 // and deleting logs from PostgreSQL database.
@@ -8,8 +8,8 @@
 //
 // STORAGE: Database-only (PostgreSQL). Storage mode is always "database".
 //
-// HOT-RELOAD: Configuration is read from LogsConfig.json on every operation
-// via getLogsConfig(). No API restart required when config changes.
+// HOT-RELOAD: Configuration is read from DB (system_config key='logs_config')
+// on every operation via getLogsConfig(). Falls back to seed file if DB unavailable.
 //
 // TABLE: pulseops.system_logs (from DefaultDatabaseSchema.json)
 //   Common:   id, transaction_id, correlation_id, session_id,
@@ -20,18 +20,18 @@
 //             request_body (JSONB), response_body (JSONB)
 //
 // ARCHITECTURE:
-//   - Hot-loads LogsConfig.json on every operation (no cached state)
+//   - Reads config from DB on every operation (honors changes without restart)
+//   - Falls back to seedData/LogsConfig.json if DB unavailable
 //   - All modules write logs with a `module` column for filtering
 //   - Core platform logs use "Core" as the module identifier
 //   - Supports batch inserts for performance
-//   - File-based fallback kept for backward compatibility
 //
 // DEPENDENCIES:
-//   - fs/path          → File-based log I/O (fallback)
-//   - DatabaseService   → Database-based log I/O
-//   - LogsConfig.json   → Storage configuration (hot-loaded)
-//   - APIMessages.json  → Response messages
-//   - APIErrors.json    → Error messages
+//   - fs/path               → File-based log I/O (fallback)
+//   - DatabaseService        → Database-based log I/O
+//   - SettingsService        → DB-backed config read/write
+//   - APIMessages.json       → Response messages
+//   - APIErrors.json         → Error messages
 // ============================================================================
 import fs from 'fs';
 import path from 'path';
@@ -39,29 +39,56 @@ import { fileURLToPath } from 'url';
 import { config } from '#config';
 import { logger } from '#shared/logger.js';
 import { loadJson, messages, errors } from '#shared/loadJson.js';
+import SettingsService from '#core/services/settingsService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const apiRoot = path.resolve(__dirname, '../../..');
 
+// In-memory cache for logs config (refreshed from DB on each call via async path)
+let _cachedLogsConfig = null;
+
+const DEFAULT_LOGS_CONFIG = {
+  enabled: true,
+  storage: 'database',
+  defaultLevel: 'info',
+  captureOptions: { uiLogs: true, apiLogs: true, consoleLogs: false, moduleLogs: true },
+  management: { maxUiEntries: 1000, maxApiEntries: 500, pushIntervalMs: 30000, notifyDebounceMs: 250, maxBodyBytes: 10000 },
+};
+
 /**
- * Get the current logs configuration from disk (hot-loaded).
- * This ensures configuration changes are honored immediately without restart.
+ * Get the current logs configuration (synchronous — uses cached value).
+ * The cache is refreshed from DB by refreshLogsConfig().
  * @returns {Object} Current LogsConfig
  */
 function getLogsConfig() {
-  try {
-    return loadJson('LogsConfig.json');
-  } catch (err) {
-    logger.warn('Failed to load LogsConfig.json, using defaults', { error: err.message });
-    return {
-      enabled: true,
-      storage: 'database',
-      defaultLevel: 'info',
-      captureOptions: { uiLogs: true, apiLogs: true, consoleLogs: false, moduleLogs: true },
-      management: { maxUiEntries: 1000, maxApiEntries: 500, pushIntervalMs: 30000 },
-    };
-  }
+  return _cachedLogsConfig || DEFAULT_LOGS_CONFIG;
 }
+
+/**
+ * Refresh logs config from DB asynchronously. Falls back to seed file.
+ * Called at service startup and before operations that need fresh config.
+ */
+async function refreshLogsConfig() {
+  try {
+    const cfg = await SettingsService.get('logs_config');
+    if (cfg) {
+      _cachedLogsConfig = cfg;
+      return cfg;
+    }
+  } catch (err) {
+    logger.warn('Failed to load logs config from DB, using fallback', { error: err.message });
+  }
+  // Fallback to seed file
+  try {
+    _cachedLogsConfig = loadJson('seedData/LogsConfig.json');
+  } catch {
+    _cachedLogsConfig = DEFAULT_LOGS_CONFIG;
+  }
+  return _cachedLogsConfig;
+}
+
+// Initialize cache on module load
+refreshLogsConfig().catch(() => {});
 
 /**
  * Get the current storage mode.
@@ -413,10 +440,11 @@ async function createLogTables() {
 
 const LogService = {
   /**
-   * Get the current logging configuration (hot-loaded from disk).
-   * @returns {Object} Current LogsConfig
+   * Get the current logging configuration.
+   * @returns {Promise<Object>} Current LogsConfig
    */
-  getConfig() {
+  async getConfig() {
+    await refreshLogsConfig();
     return getLogsConfig();
   },
 
@@ -430,14 +458,13 @@ const LogService = {
 
   /**
    * Update logging configuration fields (enabled, level, captureOptions, management).
-   * Merges provided fields into existing config and persists to LogsConfig.json.
+   * Merges provided fields into existing config and persists to DB.
    * Configuration changes are immediately honored without restart.
    * @param {Object} updates - Partial config to merge { enabled?, defaultLevel?, captureOptions?, management? }
    * @returns {Object} Updated config
    */
   async updateConfig(updates) {
-    const { saveJson } = await import('#shared/loadJson.js');
-    const logsConfig = getLogsConfig();
+    const logsConfig = { ...getLogsConfig() };
 
     // Allowed top-level fields that callers may update
     const allowed = ['enabled', 'defaultLevel', 'captureOptions', 'management'];
@@ -452,10 +479,10 @@ const LogService = {
     }
     // Storage is always 'database' — never override
     logsConfig.storage = 'database';
-    saveJson('LogsConfig.json', logsConfig);
-    logger.info('Log configuration updated and persisted', { enabled: logsConfig.enabled, level: logsConfig.defaultLevel });
-    // Return fresh config from disk to ensure consistency
-    return getLogsConfig();
+    await SettingsService.set('logs_config', logsConfig, 'Logging configuration (storage, levels, capture options, management)');
+    _cachedLogsConfig = logsConfig;
+    logger.info('Log configuration updated and persisted to DB', { enabled: logsConfig.enabled, level: logsConfig.defaultLevel });
+    return logsConfig;
   },
 
   /**
@@ -466,10 +493,9 @@ const LogService = {
     if (mode !== 'database') {
       throw new Error('Only database storage is supported. File-based logging has been removed.');
     }
-    const { saveJson } = await import('#shared/loadJson.js');
-    const cfg = getLogsConfig();
-    cfg.storage = 'database';
-    saveJson('LogsConfig.json', cfg);
+    const cfg = { ...getLogsConfig(), storage: 'database' };
+    await SettingsService.set('logs_config', cfg);
+    _cachedLogsConfig = cfg;
     logger.info('Storage mode set to database');
   },
 

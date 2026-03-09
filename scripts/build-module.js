@@ -137,12 +137,25 @@ if (fs.existsSync(apiDir) && fs.existsSync(path.join(apiDir, 'index.js'))) {
   console.log(`[build-module] No API directory found — UI-only module.`);
 }
 
+// ── Step 4: Copy database directory (Schema.json for module DB provisioning) ──
+const dbDir = path.join(moduleSrc, 'database');
+if (fs.existsSync(dbDir)) {
+  const outDbDir = path.join(outDir, 'database');
+  copyDirSync(dbDir, outDbDir);
+  console.log(`[build-module] Step 4/4: Database schema copied to output.`);
+} else {
+  console.log(`[build-module] Step 4/4: No database directory found — no module schema.`);
+}
+
 console.log(`\n[build-module] ✓ Module '${moduleId}' built successfully!`);
 console.log(`[build-module]   Output: ${outDir}`);
 console.log(`[build-module]   → manifest.js  (UI bundle)`);
 console.log(`[build-module]   → constants.json (metadata)`);
 if (fs.existsSync(path.join(outDir, 'api'))) {
   console.log(`[build-module]   → api/         (server routes)`);
+}
+if (fs.existsSync(path.join(outDir, 'database'))) {
+  console.log(`[build-module]   → database/    (DB schema)`);
 }
 
 // ── Utility: Recursive directory copy ────────────────────────────────────────

@@ -56,14 +56,7 @@ router.get('/config', async (_req, res) => {
   logger.info('API event: GET /database/config');
   try {
     const dbConfig = loadJson('DatabaseConfig.json');
-    let defaultAdmin = { email: '' };
     let tables = [];
-    try {
-      const adminData = loadJson('DefaultAdminUser.json');
-      if (adminData?.users?.[0]?.email) {
-        defaultAdmin = { email: adminData.users[0].email };
-      }
-    } catch { /* no admin file yet */ }
     try {
       const schemaData = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
       tables = schemaData.tables?.map(t => t.name) || [];
@@ -74,7 +67,6 @@ router.get('/config', async (_req, res) => {
       data: {
         ...safeConfig,
         tables,
-        defaultAdmin,
       },
     });
   } catch (err) {
@@ -129,6 +121,33 @@ router.get('/connection', async (_req, res) => {
       error: {
         message: err.message || errors.errors.dbConnectionFailed,
         code: isDbNotExist ? 'DB_NOT_EXIST' : 'CONNECTION_FAILED',
+      },
+    });
+  }
+});
+
+// ── GET /database/status (Public) ────────────────────────────────────────────
+// Returns DB availability and schema status. Used by UI to determine whether
+// to show ConfigurationAlertModal on Login, Logs, and ModuleManager views.
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/status', async (_req, res) => {
+  try {
+    const schemaStatus = await DatabaseService.getSchemaStatus();
+    res.json({
+      success: true,
+      data: {
+        dbAvailable: true,
+        schemaInitialized: schemaStatus.initialized || false,
+        hasDefaultData: schemaStatus.hasDefaultData || false,
+      },
+    });
+  } catch (err) {
+    res.json({
+      success: true,
+      data: {
+        dbAvailable: false,
+        schemaInitialized: false,
+        hasDefaultData: false,
       },
     });
   }

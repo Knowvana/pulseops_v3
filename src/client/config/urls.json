@@ -37,6 +37,7 @@
     "config": "/api/database/config",
     "testConfig": "/api/database/config/test",
     "connection": "/api/database/connection",
+    "status": "/api/database/status",
     "schema": "/api/database/schema",
     "schemaSeed": "/api/database/schema/seed",
     "instance": "/api/database/instance",
@@ -51,7 +52,9 @@
     "enable": "/api/modules/{id}/enable",
     "disable": "/api/modules/{id}/disable",
     "remove": "/api/modules/{id}",
-    "status": "/api/modules/{id}/status"
+    "status": "/api/modules/{id}/status",
+    "schema": "/api/modules/{id}/schema",
+    "schemaPreview": "/api/modules/{id}/schema"
   },
   "logs": {
     "stats": "/api/logs/stats",

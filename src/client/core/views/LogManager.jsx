@@ -61,6 +61,7 @@ export default function LogManager() {
   // ── StrictMode-safe refs ─────────────────────────────────────────────────
   const mountRan = useRef(false);    // Prevents double-mount fetch in React StrictMode
   const ready = useRef(false);       // True after initial fetch completes — gates Effects 2+
+  const dbCheckRan = useRef(false);  // Prevents double DB status check
 
   // ── State ────────────────────────────────────────────────────────────────
   // UI State - Controls what users see and interact with
@@ -81,6 +82,24 @@ export default function LogManager() {
   const [dbNotSetup, setDbNotSetup] = useState(false);     // True when database tables don't exist - shows setup alert
   // Search is pure client-side — LogViewer filters in-memory via useMemo.
   // No debounce or server-side search needed; eliminates per-keystroke API calls.
+
+  // ── DB availability check on mount ──────────────────────────────────────
+  useEffect(() => {
+    if (dbCheckRan.current) return;
+    dbCheckRan.current = true;
+    (async () => {
+      try {
+        const res = await fetch(urls.database.status, { credentials: 'include' });
+        const json = await res.json();
+        if (json.success && json.data) {
+          setDbNotSetup(!json.data.dbAvailable || !json.data.schemaInitialized);
+        }
+      } catch {
+        log.warn('dbCheck', 'DB status check failed');
+        setDbNotSetup(true);
+      }
+    })();
+  }, []);
 
   // ── Fetch functions (stable refs) ──────────────────────────────────────────
   const fetchLogs = useCallback(async (type, level) => {

@@ -398,41 +398,40 @@ const DatabaseService = {
         }
       }
 
-      // ── Load admin user from DefaultAdminUser.json ─────────────────────────
-      const adminConfig = loadJson('DefaultAdminUser.json');
-      const defaultAdmin = adminConfig.users[0];
-      const passwordHash = await bcrypt.hash(defaultAdmin.password, config.auth.bcryptRounds || 12);
-
-      const userResult = await client.query(`
-        INSERT INTO ${schema}.system_users (email, password_hash, name, role, status)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, updated_at = NOW()
-        RETURNING id
-      `, [defaultAdmin.email, passwordHash, defaultAdmin.name, defaultAdmin.role, defaultAdmin.status]);
-
-      // Assign admin role to the default admin user
-      const adminUserId = userResult.rows[0].id;
-      const adminRoleId = roleIdMap[defaultAdmin.role] || roleIdMap['admin'];
-      if (adminUserId && adminRoleId) {
-        await client.query(
-          `INSERT INTO ${schema}.system_user_roles (user_id, role_id)
-           VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-          [adminUserId, adminRoleId]
-        );
+      // ── Seed default settings into system_config ────────────────────────────
+      // GeneralSettings and LogsConfig are loaded from seedData/
+      // and stored in system_config table. These files are ONLY used for seeding.
+      const seedConfigs = [
+        { key: 'general_settings', file: 'seedData/GeneralSettings.json', desc: 'Platform general settings (timezone, date/time formats)' },
+        { key: 'logs_config',      file: 'seedData/LogsConfig.json',      desc: 'Logging configuration (storage, levels, capture options, management)' },
+      ];
+      for (const seed of seedConfigs) {
+        try {
+          const seedData = loadJson(seed.file);
+          await client.query(
+            `INSERT INTO ${schema}.system_config (key, value, description)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (key) DO NOTHING`,
+            [seed.key, JSON.stringify(seedData), seed.desc]
+          );
+          logger.info(`[databaseService:loadDefaultData] Seeded config: ${seed.key}`);
+        } catch (seedErr) {
+          logger.warn(`[databaseService:loadDefaultData] Failed to seed ${seed.key}`, { error: seedErr.message });
+        }
       }
 
       // ── Register core modules ──────────────────────────────────────────────
       await client.query(`
-        INSERT INTO ${schema}.system_modules (module_id, name, version, description, is_core, enabled, schema_initialized, "order")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO ${schema}.system_modules (module_id, name, short_name, version, description, is_core, installed, enabled, has_manifest, has_api, schema_initialized, "order")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         ON CONFLICT (module_id) DO NOTHING
-      `, ['platform_admin', 'Admin', '2.0.0', 'Platform dashboard, module management, and global settings', true, true, true, 0]);
+      `, ['platform_admin', 'Admin', 'Admin', '3.0.0', 'Platform dashboard, module management, and global settings', true, true, true, true, true, true, 0]);
 
       await client.query(`
-        INSERT INTO ${schema}.system_modules (module_id, name, version, description, is_core, enabled, schema_initialized, "order")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO ${schema}.system_modules (module_id, name, short_name, version, description, is_core, installed, enabled, has_manifest, has_api, schema_initialized, "order")
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         ON CONFLICT (module_id) DO NOTHING
-      `, ['auth', 'Authentication', '2.0.0', 'Authentication, authorization, RBAC, session control', true, true, true, 1]);
+      `, ['auth', 'Authentication', 'Auth', '3.0.0', 'Authentication, authorization, RBAC, session control', true, true, true, true, true, true, 1]);
 
       await client.query('COMMIT');
       logger.info(messages.success.defaultDataLoaded, { schema });
@@ -528,6 +527,12 @@ const DatabaseService = {
       client.release();
     }
   },
+
+  /**
+   * Get the underlying connection pool for advanced use (transactions).
+   * @returns {pg.Pool}
+   */
+  getPool,
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 

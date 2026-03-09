@@ -1,0 +1,35 @@
+{
+  "auth": {
+    "loginFailed": "Login failed. Please check your credentials.",
+    "networkError": "Unable to connect to the server. Please check if the API is running.",
+    "sessionExpired": "Your session has expired. Please sign in again.",
+    "unauthorized": "You are not authorized to perform this action.",
+    "accountInactive": "Account is not active. Contact administrator."
+  },
+  "database": {
+    "connectionFailed": "Database connection failed. Check your connection settings.",
+    "saveFailed": "Failed to save database configuration.",
+    "schemaFailed": "Schema creation failed. Check server logs.",
+    "defaultDataFailed": "Failed to load default data.",
+    "wipeFailed": "Database wipe failed.",
+    "createFailed": "Failed to create database.",
+    "deleteFailed": "Failed to delete database."
+  },
+  "config": {
+    "saveFailed": "Failed to save configuration.",
+    "loadFailed": "Failed to load configuration."
+  },
+  "validation": {
+    "required": "This field is required.",
+    "invalidEmail": "Please enter a valid email address.",
+    "invalidPort": "Port must be a number between 1 and 65535.",
+    "passwordTooShort": "Password must be at least 8 characters.",
+    "fieldRequired": "Both email and password are required."
+  },
+  "general": {
+    "networkError": "Unable to connect to the server. Please check your connection.",
+    "serverError": "An unexpected error occurred. Please try again.",
+    "notFound": "The requested resource was not found.",
+    "timeout": "Request timed out. Please try again."
+  }
+}

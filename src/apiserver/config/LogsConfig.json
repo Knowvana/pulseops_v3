@@ -1,0 +1,29 @@
+{
+  "enabled": true,
+  "storage": "database",
+  "database": {
+    "logsTable": "system_logs",
+    "retentionDays": 90,
+    "batchInsertSize": 50
+  },
+  "levels": [
+    "debug",
+    "info",
+    "warn",
+    "error"
+  ],
+  "defaultLevel": "info",
+  "captureOptions": {
+    "uiLogs": true,
+    "apiLogs": true,
+    "consoleLogs": false,
+    "moduleLogs": true
+  },
+  "management": {
+    "maxUiEntries": 1000,
+    "maxApiEntries": 500,
+    "pushIntervalMs": 30000,
+    "notifyDebounceMs": 250,
+    "maxBodyBytes": 10000
+  }
+}

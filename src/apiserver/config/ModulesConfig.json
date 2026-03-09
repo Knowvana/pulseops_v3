@@ -1,0 +1,24 @@
+{
+  "modules": [
+    {
+      "id": "servicenow",
+      "name": "ServiceNow",
+      "shortName": "SNOW",
+      "version": "1.0.0",
+      "description": "ServiceNow ITSM integration — incidents, SLA tracking, sync scheduling, and compliance reporting.",
+      "roles": [
+        "super_admin",
+        "admin",
+        "user"
+      ],
+      "isCore": false,
+      "order": 2,
+      "hasManifest": true,
+      "hasApi": true,
+      "installed": true,
+      "enabled": true,
+      "installedAt": "2026-03-09T05:11:02.394Z",
+      "enabledAt": "2026-03-09T05:11:04.302Z"
+    }
+  ]
+}

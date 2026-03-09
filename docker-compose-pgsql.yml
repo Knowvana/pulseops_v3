@@ -1,0 +1,40 @@
+services:
+  # PostgreSQL Database Service
+  postgres:
+    image: postgres:16
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Infosys@123
+      POSTGRES_DB: postgres_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/datageg
+
+  # pgAdmin Service
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin_ui
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@domain.com
+      PGADMIN_DEFAULT_PASSWORD: Infosys@123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+
+# Define named volumes for data persistence
+volumes:
+  pgdata:
+  pgadmin-data:
+
+#Run the commands:
+  ##1. podman compose -f docker-compose-pgsql.yml up -d
+#docker-compose -f docker-compose-pgsql.yml down
+#PGADMIn Connection - server:postgres, port: 5432
+#http://localhost:5050/browser/

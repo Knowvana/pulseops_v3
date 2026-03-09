@@ -1,0 +1,18 @@
+{
+  "superAdmin": {
+    "id": "superadmin_001",
+    "username": "SuperAdmin",
+    "email": "superadmin@pulseops.io",
+    "name": "Super Administrator",
+    "role": "super_admin",
+    "status": "active",
+    "authMethod": "json_file",
+    "passwordHash": "",
+    "defaultPassword": "Infosys@123",
+    "requirePasswordChange": true,
+    "passwordLastChangedAt": "2026-03-07T13:29:13.391Z",
+    "lastLoginAt": "2026-03-08T15:52:04.794Z",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "notes": "SuperAdmin authenticates against this JSON file only. Login compares against defaultPassword (plaintext) or passwordHash (bcrypt) — the file is NEVER modified at login time. Password hash is only set/updated via Settings → SuperAdmin Auth."
+  }
+}

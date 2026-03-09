@@ -1,0 +1,13 @@
+{
+  "users": [
+    {
+      "id": "json_admin_001",
+      "email": "admin@test.com",
+      "name": "Default Admin",
+      "role": "super_admin",
+      "password": "Infosys@123",
+      "status": "active",
+      "authMethod": "json_file"
+    }
+  ]
+}

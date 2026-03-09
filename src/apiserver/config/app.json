@@ -1,0 +1,11 @@
+{
+  "nodeEnv": "development",
+  "auth": {
+    "jwtSecret": "dev-secret-change-in-production",
+    "accessTokenExpiry": "24h",
+    "refreshTokenExpiry": "7d",
+    "bcryptRounds": 12,
+    "jwtExpiresInSeconds": 86400
+  },
+  "cdnBaseUrl": "/api/modules/bundle"
+}

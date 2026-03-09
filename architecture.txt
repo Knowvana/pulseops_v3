@@ -1,0 +1,53 @@
+pulseops_v2/
+├── package.json              ← ONE package.json, ALL deps (React + Express + pg)
+├── node_modules/             ← ONE node_modules
+├── vite.config.js            ← UI dev + build
+├── vite.module.config.js     ← Module build
+├── tailwind.config.js
+├── postcss.config.js
+├── index.html
+├── scripts/
+│   └── build-module.js       ← Build script
+├── dist/                     ← Vite UI build output
+├── dist-modules/             ← Module build output (K8s PV mount point)
+│
+├── src/
+│   ├── main.jsx              ← UI entry
+│   ├── index.css
+│   │
+│   ├── client/               ← Frontend (React)
+│   │   ├── core/             ← App.jsx, PlatformDashboard.jsx, views/
+│   │   ├── layouts/          ← AppShell, Nav, TopMenu
+│   │   ├── shared/           ← Components, services, contexts
+│   │   └── config/           ← UI config JSONs (uiElementsText, urls, etc.)
+│   │
+│   ├── server/               ← Backend (Express/Node.js)
+│   │   ├── app.js            ← Express factory
+│   │   ├── server.js         ← Entry point
+│   │   ├── core/             ← middleware/, routes/, modules/, database/
+│   │   ├── shared/           ← logger.js, loadJson.js
+│   │   └── config/           ← API config JSONs (app.json, urls.json, etc.)
+│   │
+│   └── modules/              ← ALL modules live here (UI + API + config)
+│       ├── moduleRegistry.js ← Frontend module loader
+│       ├── _template/        ← Module template
+│       │   ├── api/
+│       │   │   ├── index.js
+│       │   │   └── config/
+│       │   ├── ui/
+│       │   │   ├── manifest.jsx
+│       │   │   ├── config/   (constants.json, uiText.json, urls.json, uiErrors.json, uiMessages.json)
+│       │   │   ├── views/
+│       │   │   └── components/
+│       │   └── README.md
+│       │
+│       └── servicenow/       ← FULLY SELF-CONTAINED
+│           ├── api/
+│           │   ├── index.js
+│           │   └── config/
+│           ├── ui/
+│           │   ├── manifest.jsx
+│           │   ├── config/   (constants.json, uiText.json, urls.json, uiErrors.json, uiMessages.json)
+│           │   ├── views/    (currently: components/ — keep existing names)
+│           │   └── components/
+│           └── README.md

@@ -1,0 +1,568 @@
+{
+  "platform": {
+    "name": "PulseOps V2",
+    "tagline": "Enterprise Operations Platform",
+    "welcomeTitle": "Welcome to PulseOps V2",
+    "welcomeSubtitle": "Modular operations platform with hot-drop micro-frontends",
+    "noModuleSelected": "Select a module from the navigation to get started."
+  },
+  "common": {
+    "loading": "Loading...",
+    "saving": "Saving...",
+    "saved": "Saved!",
+    "refresh": "Refresh",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "save": "Save",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "search": "Search",
+    "filter": "Filter",
+    "noData": "No data available",
+    "yes": "Yes",
+    "no": "No",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "active": "Active",
+    "inactive": "Inactive",
+    "success": "Success",
+    "error": "Error",
+    "warning": "Warning",
+    "info": "Info"
+  },
+  "auth": {
+    "loginTitle": "Sign In",
+    "loginSubtitle": "Enter your credentials to access the platform",
+    "emailLabel": "Email",
+    "emailPlaceholder": "admin@test.com",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "Enter password",
+    "loginButton": "Sign In",
+    "loggingIn": "Signing in...",
+    "logoutButton": "Sign Out",
+    "sessionExpired": "Your session has expired. Please sign in again.",
+    "login": {
+      "success": "Login successful",
+      "failed": "Login failed. Please check your credentials.",
+      "networkError": "Unable to connect to the server. Please check if the API is running."
+    }
+  },
+  "login": {
+    "title": "Welcome Back",
+    "subtitle": "Sign in to your account",
+    "emailLabel": "Email or Username",
+    "emailPlaceholder": "admin@example.com or SuperAdmin",
+    "superAdminHint": "To access SuperAdmin, enter \"SuperAdmin\" as the username.",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "submitButton": "Sign In",
+    "loadingButton": "Signing in...",
+    "dividerLabel": "or continue with",
+    "poweredBy": "Powered by PulseOps",
+    "socialComingSoon": " login coming soon",
+    "validationError": "Both email/username and password are required",
+    "socialProviders": [
+      { "id": "google", "label": "Google" },
+      { "id": "microsoft", "label": "Microsoft" },
+      { "id": "github", "label": "GitHub" }
+    ]
+  },
+  "superAdminLogin": {
+    "title": "Super Administrator",
+    "subtitle": "Platform SuperAdmin — Restricted Access",
+    "notice": "This login is for the designated SuperAdmin only. All other users should use the standard login.",
+    "usernameLabel": "Username",
+    "lockedBadge": "Fixed",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "Enter SuperAdmin password",
+    "passwordRequired": "Password is required.",
+    "signInButton": "Sign In as SuperAdmin",
+    "signingIn": "Authenticating…",
+    "backText": "Not a SuperAdmin?",
+    "backLink": "Go to regular login"
+  },
+  "coreNav": {
+    "dashboard": "Dashboard",
+    "moduleManager": "Module Manager",
+    "logs": "Logs",
+    "settings": "Settings"
+  },
+  "coreViews": {
+    "dashboard": {
+      "title": "Platform Dashboard",
+      "subtitle": "System health, module status, and quick actions"
+    },
+    "moduleManager": {
+      "title": "Module Manager",
+      "subtitle": "Install, enable, disable, and manage platform modules",
+      "tabs": {
+        "available": "Available",
+        "installed": "Installed"
+      },
+      "available": {
+        "title": "Available Modules",
+        "subtitle": "Modules discovered in the hot-drop folder. Install to register.",
+        "empty": "No modules found in the hot-drop folder. Build a module first.",
+        "scanning": "Scanning for available modules...",
+        "scanButton": "Scan for Modules"
+      },
+      "installed": {
+        "title": "Installed Modules",
+        "subtitle": "Modules registered in the platform. Enable to activate.",
+        "empty": "No modules installed yet. Scan for available modules first."
+      },
+      "actions": {
+        "install": "Install",
+        "enable": "Enable",
+        "disable": "Disable",
+        "remove": "Remove",
+        "refresh": "Refresh"
+      },
+      "status": {
+        "installed": "Installed",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "notInstalled": "Not Installed",
+        "apiLoaded": "API Routes Loaded",
+        "apiNotLoaded": "API Routes Not Loaded",
+        "uiBundle": "UI Bundle Available",
+        "apiBundle": "API Bundle Available"
+      },
+      "confirm": {
+        "enableTitle": "Enable Module",
+        "enableMessage": "This will load the module's API routes and make it available in the platform.",
+        "disableTitle": "Disable Module",
+        "disableMessage": "This will unload the module's API routes. The module will no longer be accessible.",
+        "removeTitle": "Remove Module",
+        "removeMessage": "This will remove the module from the platform registry. The bundle files will remain in dist-modules/.",
+        "installTitle": "Install Module",
+        "installMessage": "This will register the module in the platform. You can enable it afterwards."
+      },
+      "toast": {
+        "installSuccess": "Module installed successfully.",
+        "enableSuccess": "Module enabled successfully. API routes loaded.",
+        "disableSuccess": "Module disabled successfully.",
+        "removeSuccess": "Module removed successfully.",
+        "scanComplete": "Module scan complete.",
+        "actionFailed": "Module action failed. Check API logs."
+      }
+    },
+    "logs": {
+      "title": "Platform Admin — Logs",
+      "subtitle": "View, search, and manage platform UI and API logs",
+      "logTypes": {
+        "ui": "UI Logs",
+        "api": "API Logs"
+      },
+      "filters": {
+        "all": "All",
+        "debug": "Debug",
+        "info": "Info",
+        "warn": "Warn",
+        "error": "Error"
+      },
+      "search": {
+        "placeholder": "Search logs..."
+      },
+      "stats": {
+        "logSource": "Log Source",
+        "file": "File",
+        "database": "Database",
+        "lastSync": "Last Sync",
+        "logEntries": "Log Entries",
+        "refreshNow": "Refresh",
+        "deleteLogs": "Delete Logs",
+        "deleteConfirm": "Are you sure you want to delete all logs from the configured source? This action cannot be undone.",
+        "deleteConfirmTitle": "Delete All Logs",
+        "deleteButton": "Delete",
+        "noLogs": "No logs found",
+        "noLogsHint": "Logs will appear here as the platform generates activity."
+      },
+      "grid": {
+        "transactionId": "Transaction ID",
+        "sessionId": "Session ID",
+        "correlationId": "Correlation ID",
+        "time": "Time (IST)",
+        "logLevel": "Level",
+        "source": "Source",
+        "event": "Event",
+        "fileName": "File:Function",
+        "user": "User",
+        "message": "Message",
+        "pageUrl": "Page URL",
+        "apiUrl": "API URL",
+        "method": "Method",
+        "statusCode": "Status",
+        "responseTime": "Response Time",
+        "error": "Error",
+        "module": "Module"
+      },
+      "detail": {
+        "title": "Log Details",
+        "url": "URL",
+        "method": "Method",
+        "statusCode": "Status Code",
+        "responseTime": "Response Time",
+        "timestamp": "Timestamp",
+        "user": "User",
+        "responseBody": "Response Body",
+        "requestBody": "Request Body",
+        "module": "Module",
+        "fileName": "File:Function",
+        "event": "Event",
+        "message": "Message",
+        "pageUrl": "Page URL",
+        "source": "Source",
+        "level": "Level",
+        "transactionId": "Transaction ID",
+        "sessionId": "Session ID",
+        "correlationId": "Correlation ID",
+        "context": "Context Data",
+        "noSelection": "Select a log entry to view details"
+      },
+      "pagination": {
+        "pageSize": "Page Size",
+        "of": "of",
+        "page": "Page"
+      }
+    },
+    "settings": {
+      "title": "Platform Settings",
+      "subtitle": "Global configuration — Admin only",
+      "tabs": {
+        "dbConnection": "Database Connection",
+        "dbConfig": "Database Configuration",
+        "logConfig": "Log Configuration",
+        "authSettings": "Authentication",
+        "superAdminSectionLabel": "SuperAdmin",
+        "superAdminAuth": "SuperAdmin Auth",
+        "databaseSetup": "Database Setup",
+        "generalSettings": "General Settings"
+      },
+      "dbConnection": {
+        "title": "Database Connection",
+        "subtitle": "Real-time connection status to the configured PostgreSQL database",
+        "autoCheckLabel": "Connection checked on open",
+        "recheckButton": "Re-check Connection"
+      },
+      "superAdminAuth": {
+        "title": "SuperAdmin Credentials",
+        "subtitle": "Update the SuperAdmin account password. Changes take effect on next login.",
+        "currentPasswordLabel": "Current Password",
+        "newPasswordLabel": "New Password",
+        "confirmPasswordLabel": "Confirm New Password",
+        "currentPasswordPlaceholder": "Enter current password",
+        "newPasswordPlaceholder": "Minimum 12 characters, mixed case, digit and special char",
+        "confirmPasswordPlaceholder": "Re-enter new password",
+        "saveButton": "Update Password",
+        "savingButton": "Updating…",
+        "passwordMismatch": "New password and confirmation do not match.",
+        "passwordWeak": "Password must be at least 12 characters with uppercase, lowercase, digit, and special character.",
+        "requirePasswordChangeNotice": "A password change is required. Please update your SuperAdmin password.",
+        "profileSection": "Account Profile",
+        "crud": {
+          "updatePassword": {
+            "confirmLabel": "Update SuperAdmin Password",
+            "summaryLabel": "Password Updated",
+            "summaryStatus": "Active",
+            "summarySuccess": "Password updated successfully"
+          }
+        }
+      },
+      "databaseSetup": {
+        "title": "Database Setup",
+        "subtitle": "Create database, initialize schema, manage default data and RBAC tables"
+      },
+      "logConfig": {
+        "title": "Log Configuration",
+        "subtitle": "Configure database logging settings, log level, capture options, and management",
+        "enabledLabel": "Enable Database Logging",
+        "enabledDesc": "When disabled, no logs are captured or persisted to the database.",
+        "logLevelLabel": "Log Level",
+        "logLevelDesc": "Only Logs at or above this level will be captured.",
+        "dbStatusLabel": "Database Connection",
+        "dbStatusDesc": "Verify that the database is ready to receive log entries.",
+        "testConnectionButton": "Test DB Connection",
+        "refreshConnectionButton": "Retest connection",
+        "captureOptionsLabel": "Capture Options",
+        "captureUiLogs": "UI Logs",
+        "captureUiLogsDesc": "Capture UI component log events",
+        "captureApiLogs": "API Logs",
+        "captureApiLogsDesc": "Capture API request and response logs",
+        "captureConsoleLogs": "Console Logs",
+        "captureConsoleLogsDesc": "Capture browser console output",
+        "captureModuleLogs": "Module Logs",
+        "captureModuleLogsDesc": "Capture module-specific log events",
+        "managementLabel": "Management Settings",
+        "maxUiLabel": "Max UI Entries (in-memory)",
+        "maxApiLabel": "Max API Entries (in-memory)",
+        "pushIntervalLabel": "Push Interval (ms)",
+        "saveButton": "Save Configuration",
+        "savingButton": "Saving…",
+        "dbNotReady": "Database logging cannot be enabled until database is reachable and database tables for logging are setup.",
+        "dbNotReadyDesc": "Database must be configured and initialized before enabling logging."
+      },
+      "logSettings": {
+        "title": "Log Storage Settings",
+        "subtitle": "Configure where platform logs are stored",
+        "fileMode": "File-based Logging",
+        "fileModeDesc": "Logs are written to JSON files in the API project's Logs folder. Default mode.",
+        "dbMode": "Database Logging",
+        "dbModeDesc": "Logs are persisted to the PostgreSQL database for centralized querying.",
+        "switchToDb": "Switch to Database Logging",
+        "switchToFile": "Switch to File Logging",
+        "dbNotReady": "Database logging cannot be enabled until database is reachable and database tables for logging are setup.",
+        "dbNotReadyDesc": "Database must be configured and initialized before enabling database logging.",
+        "currentMode": "Current Mode",
+        "fileActive": "File Logging Active",
+        "dbActive": "Database Logging Active"
+      },
+      "connectionStatus": {
+        "type": "Database Connection",
+        "testing": "Testing connection...",
+        "connected": "Connected to database successfully",
+        "failed": "Connection failed",
+        "lastTested": "Last tested:",
+        "responseTime": "Response:",
+        "dbType": "Type:",
+        "version": "Version:",
+        "metaSeparator": "•"
+      },
+      "authSettings": {
+        "title": "Authentication Settings",
+        "subtitle": "Configure the authentication provider for regular platform users. SuperAdmin always authenticates via JSON file.",
+        "providers": {
+          "database": {
+            "label": "Database",
+            "description": "Authenticate against the PostgreSQL system_users table with bcrypt hashing.",
+            "detail": "Requires the database to be initialized with default data. Switch here after setup."
+          },
+          "social": {
+            "label": "Social / OAuth2 / SAML",
+            "description": "Authenticate via Google, Microsoft, or other OAuth2/SAML providers.",
+            "detail": "Requires OAuth2/SAML provider configuration. Available in a future release."
+          }
+        },
+        "activeBadge": "Active",
+        "comingSoonBadge": "Coming Soon",
+        "switchButton": "Switch Provider",
+        "dbNotReadyWarning": "Database must be initialized before switching to Database authentication.",
+        "dbRequiredNote": "Set up the database in Settings → Database Objects first.",
+        "crud": {
+          "switchProvider": {
+            "confirmMessage": "This will change the authentication provider for the entire platform. All users will authenticate using the new provider.",
+            "confirmLabel": "Switch Provider",
+            "summaryProvider": "Provider",
+            "summaryPrevious": "Previous",
+            "summaryStatus": "Status",
+            "summarySuccess": "Provider Updated Successfully"
+          }
+        }
+      }
+    }
+  },
+  "topNav": {
+    "brand": {
+      "appName": "PulseOps",
+      "subtitle": "Enterprise"
+    },
+    "buttons": {
+      "settings": "Settings",
+      "signOut": "Sign Out",
+      "monitor": "Monitor"
+    },
+    "userMenu": {
+      "roleLabel": "Role",
+      "signOutLabel": "Sign Out",
+      "profileLabel": "Profile"
+    }
+  },
+  "sideNav": {
+    "collapseLabel": "Collapse",
+    "expandTooltip": "Expand sidebar",
+    "collapseTooltip": "Collapse sidebar"
+  },
+  "rightPanel": {
+    "tabs": {
+      "systemLogs": "UI Logs",
+      "apiCalls": "API Calls"
+    },
+    "logs": {
+      "filterAll": "all",
+      "filterDebug": "debug",
+      "filterInfo": "info",
+      "filterWarn": "warn",
+      "filterError": "error",
+      "clearTooltip": "Clear logs",
+      "emptyMessage": "No logs captured yet.",
+      "emptyHint": "Logs will appear here as you interact with the platform."
+    },
+    "apiCalls": {
+      "emptyMessage": "No API calls recorded.",
+      "emptyHint": "API requests and responses will appear here."
+    },
+    "deleteConfirm": {
+      "title": "Delete All Logs",
+      "actionDescription": "permanently delete all captured logs and API call records",
+      "actionTarget": "Platform Log Storage",
+      "detailUiLogs": "UI Logs (in session)",
+      "detailApiCalls": "API Calls (in session)",
+      "detailStored": "Total Stored",
+      "confirmLabel": "Delete All",
+      "summaryDeleted": "Entries Cleared",
+      "summaryStatus": "All logs cleared successfully"
+    }
+  },
+  "errors": {
+    "networkError": "Unable to connect to the server. Please check your connection.",
+    "unauthorized": "You are not authorized to perform this action.",
+    "notFound": "The requested resource was not found.",
+    "serverError": "An unexpected error occurred. Please try again.",
+    "moduleLoadFailed": "Failed to load module. Please try again or contact support."
+  },
+  "admin": {
+    "settings": {
+      "databaseConfiguration": {
+        "title": "Database Configuration",
+        "subtitle": "Configure and test PostgreSQL connection",
+        "fields": {
+          "host": { "label": "Host", "placeholder": "localhost" },
+          "port": { "label": "Port", "placeholder": "5432" },
+          "database": { "label": "Database", "placeholder": "pulseops_v2" },
+          "schema": { "label": "Schema", "placeholder": "pulseops" },
+          "username": { "label": "Username", "placeholder": "postgres" },
+          "password": { "label": "Password", "placeholder": "Enter password" }
+        },
+        "buttons": {
+          "testConnection": "Test Connection",
+          "saveConfig": "Save Configuration",
+          "testing": "Testing..."
+        }
+      },
+      "databaseObjects": {
+        "title": "Database Objects",
+        "subtitle": "Manage database, schema, and default data",
+        "sections": {
+          "database": {
+            "title": "Database",
+            "createButton": "Create Database",
+            "deleteButton": "Delete Database",
+            "createDesc": "Create the PostgreSQL database if it does not exist.",
+            "deleteDesc": "Drop the entire database. This is destructive and cannot be undone."
+          },
+          "schema": {
+            "title": "Schema & Tables",
+            "createButton": "Create Schema",
+            "wipeButton": "Wipe Schema",
+            "createDesc": "Create the core schema and tables (system_users, system_config, system_modules, system_logs).",
+            "wipeDesc": "Drop all tables in the schema. Data will be permanently lost."
+          },
+          "defaultData": {
+            "title": "Default Data",
+            "loadButton": "Load Default Data",
+            "cleanButton": "Clean Default Data"
+          }
+        },
+        "confirmations": {
+          "createDatabase": {
+            "title": "Create Database",
+            "confirmLabel": "Create"
+          },
+          "deleteDatabase": {
+            "title": "Delete Database",
+            "confirmLabel": "Delete",
+            "warningLabel": "Warning"
+          },
+          "initializeSchema": {
+            "title": "Initialize Schema",
+            "confirmLabel": "Initialize",
+            "tablesLabel": "Tables",
+            "summaryTablesLabel": "Tables Created"
+          },
+          "loadDefaultData": {
+            "title": "Load Default Data",
+            "confirmLabel": "Load Data",
+            "adminUserLabel": "Admin User",
+            "includesLabel": "Includes"
+          },
+          "cleanDefaultData": {
+            "title": "Clean Default Data",
+            "confirmLabel": "Clean",
+            "scopeLabel": "Scope",
+            "impactLabel": "Impact"
+          },
+          "wipeDatabase": {
+            "title": "Wipe Database",
+            "confirmLabel": "Wipe",
+            "impactLabel": "Impact"
+          }
+        },
+        "status": {
+          "checking": "Checking database status...",
+          "connected": "Connected",
+          "disconnected": "Not Connected",
+          "initialized": "Schema Initialized",
+          "notInitialized": "Schema Not Initialized",
+          "hasData": "Default Data Loaded",
+          "noData": "No Default Data"
+        }
+      },
+      "logSettings": {
+        "title": "Log Settings",
+        "subtitle": "Configure log storage mode"
+      },
+      "logConfiguration": {
+        "title": "Log Configuration",
+        "subtitle": "View and manage system logs"
+      },
+      "authentication": {
+        "title": "Authentication Settings",
+        "subtitle": "Configure authentication provider",
+        "providers": {
+          "jsonFile": { "label": "JSON File" },
+          "database": { "label": "Database" },
+          "social": { "label": "Social / OAuth2" }
+        },
+        "switchModal": {
+          "title": "Switch Authentication Provider",
+          "confirmButton": "Switch Provider",
+          "cancelButton": "Cancel"
+        },
+        "successModal": {
+          "title": "Provider Updated",
+          "closeButton": "Close"
+        }
+      }
+    }
+  },
+  "shared": {
+    "connectionStatus": {
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "testing": "Testing...",
+      "unknown": "Unknown"
+    },
+    "testConnection": {
+      "defaultTitle": "Connection Test",
+      "defaultDescription": "Configure and test connection",
+      "testButton": "Test Connection",
+      "saveButton": "Save Configuration"
+    },
+    "confirmationModal": {
+      "defaultTitle": "Confirm Action",
+      "confirmButton": "Confirm",
+      "cancelButton": "Cancel"
+    },
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next",
+      "showing": "Showing",
+      "of": "of",
+      "entries": "entries"
+    }
+  }
+}

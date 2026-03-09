@@ -1,0 +1,116 @@
+{
+  "auth": {
+    "loginSuccess": "Login successful. Welcome back!",
+    "loginFailed": "Login failed. Please try again.",
+    "logoutSuccess": "You have been logged out successfully.",
+    "providerSwitched": "Authentication provider has been updated successfully.",
+    "serverUnavailable": "Unable to connect to the server. Please ensure the API server is running and try again.",
+    "dbUnavailable": "Database is not available. Set up the database first in Settings → Database Setup.",
+    "networkError": "Network error occurred. Please check your connection and try again."
+  },
+  "database": {
+    "connectionSuccess": "Database connection successful.",
+    "configSaved": "Database configuration saved successfully.",
+    "schemaCreated": "Database schema created successfully.",
+    "defaultDataLoaded": "Default data loaded successfully.",
+    "defaultDataCleaned": "Default data cleaned successfully.",
+    "databaseCreated": "Database created successfully.",
+    "databaseDeleted": "Database deleted successfully.",
+    "databaseWiped": "All database tables dropped successfully.",
+    "confirmations": {
+      "createDatabase": {
+        "actionDescription": "create the Database instance",
+        "actionTarget": "Backend PostgreSQL"
+      },
+      "deleteDatabase": {
+        "actionDescription": "delete the Database instance",
+        "actionTarget": "Backend PostgreSQL",
+        "warningMessage": "All data will be permanently removed"
+      },
+      "initializeSchema": {
+        "actionDescription": "initialize the Database schema and create new Tables in Database",
+        "actionTarget": "PostgreSQL"
+      },
+      "loadDefaultData": {
+        "actionDescription": "load default data",
+        "actionTarget": "Backend PostgreSQL",
+        "includesMessage": "Users, Roles, Configuration"
+      },
+      "cleanDefaultData": {
+        "actionDescription": "remove all default data entries",
+        "actionTarget": "Backend PostgreSQL",
+        "scopeMessage": "Default Users, Roles, Configuration",
+        "impactMessage": "Default entries will be deleted"
+      },
+      "wipeDatabase": {
+        "actionDescription": "wipe the entire Database",
+        "actionTarget": "Backend PostgreSQL",
+        "impactMessage": "All tables and data will be permanently deleted"
+      }
+    }
+  },
+  "dbObjects": {
+    "connectionFailed": "Connection Failed",
+    "connectionFailedHint": "Fix the database connection configuration in the Database Configuration tab and try again.",
+    "dbNotFound": "Database Not Found",
+    "dbNotFoundHint": "The database instance does not exist. Create it to continue.",
+    "createDatabase": "Create Database",
+    "dbInstance": "Database Instance",
+    "dbReady": "Database is ready and connected",
+    "exists": "Exists"
+  },
+  "config": {
+    "saved": "Configuration saved successfully.",
+    "loaded": "Configuration loaded successfully."
+  },
+  "connection": {
+    "readyToTest": "Ready to test connection",
+    "testing": "Testing connection...",
+    "success": "Connection successful",
+    "failed": "Connection failed",
+    "testFailed": "Connection test failed",
+    "configSaved": "Configuration saved successfully",
+    "configSaveFailed": "Failed to save configuration",
+    "saveDescription": "save the database connection configuration",
+    "saveTarget": "Backend PostgreSQL",
+    "statusLabel": "Status",
+    "validationEmpty": "Required fields cannot be empty"
+  },
+  "logs": {
+    "fetchSuccess": "Logs loaded successfully.",
+    "fetchFailed": "Failed to load logs. Please try again.",
+    "deleteSuccess": "All logs deleted successfully.",
+    "deleteFailed": "Failed to delete logs.",
+    "pushSuccess": "Log entries pushed successfully.",
+    "pushFailed": "Failed to push log entries.",
+    "configSaved": "Log configuration saved successfully.",
+    "configFailed": "Failed to save log configuration.",
+    "switchedToFile": "Switched to file-based logging.",
+    "switchedToDb": "Switched to database logging.",
+    "tablesCreated": "Log tables created successfully.",
+    "tablesCreateFailed": "Failed to create log tables.",
+    "dbNotReady": "Database is not available. Set up the database first."
+  },
+  "generalSettings": {
+    "saved": "General settings saved successfully.",
+    "saveFailed": "Failed to save general settings.",
+    "subtitle": "Platform-wide general settings. Changes apply globally.",
+    "timezoneLabel": "Timezone",
+    "timezoneDescription": "All dates and timestamps across the platform will use this timezone.",
+    "confirmTitle": "Save General Settings",
+    "confirmDescription": "update the platform-wide general settings",
+    "confirmTarget": "Platform Configuration",
+    "summaryTimezone": "Timezone",
+    "summaryStatus": "Status",
+    "summarySuccess": "Settings saved successfully"
+  },
+  "general": {
+    "operationSuccess": "Operation completed successfully.",
+    "changesSaved": "Changes saved.",
+    "confirmAction": "Are you sure you want to proceed?",
+    "confirmDelete": "This action cannot be undone. Are you sure?",
+    "confirmWipe": "This will permanently delete all data. Are you sure?",
+    "processing": "Processing...",
+    "pleaseWait": "Please wait..."
+  }
+}

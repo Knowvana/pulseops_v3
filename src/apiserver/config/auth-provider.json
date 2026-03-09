@@ -1,0 +1,10 @@
+{
+  "provider": "database",
+  "availableProviders": [
+    "database",
+    "social"
+  ],
+  "social": {
+    "enabled": false
+  }
+}

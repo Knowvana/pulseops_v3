@@ -1,0 +1,12 @@
+{
+  "host": "localhost",
+  "port": 5432,
+  "database": "pulseops_v2",
+  "schema": "pulseops",
+  "user": "postgres",
+  "password": "Infosys@123",
+  "ssl": false,
+  "poolSize": 10,
+  "idleTimeoutMillis": 30000,
+  "connectionTimeoutMillis": 5000
+}

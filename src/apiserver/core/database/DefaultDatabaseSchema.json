@@ -1,0 +1,202 @@
+{
+  "_meta": {
+    "version": "2.0.0",
+    "description": "PulseOps V2 — Default Database Schema Definition. All core tables are created from this file. Add new tables here; databaseService.js reads this to create/validate the schema.",
+    "schema": "pulseops"
+  },
+  "tables": [
+    {
+      "name": "system_users",
+      "description": "Application users — authentication, authorization, profile.",
+      "columns": [
+        { "name": "id",            "type": "SERIAL PRIMARY KEY" },
+        { "name": "email",         "type": "VARCHAR(255) UNIQUE NOT NULL" },
+        { "name": "password_hash", "type": "VARCHAR(255)" },
+        { "name": "name",          "type": "VARCHAR(255) NOT NULL" },
+        { "name": "role",          "type": "VARCHAR(50) NOT NULL DEFAULT 'user'" },
+        { "name": "status",        "type": "VARCHAR(20) NOT NULL DEFAULT 'active'" },
+        { "name": "last_login",    "type": "TIMESTAMPTZ" },
+        { "name": "created_at",    "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "updated_at",    "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_system_users_email",  "columns": ["email"],  "unique": true },
+        { "name": "idx_system_users_role",   "columns": ["role"],   "unique": false },
+        { "name": "idx_system_users_status", "columns": ["status"], "unique": false }
+      ]
+    },
+    {
+      "name": "system_roles",
+      "description": "Role definitions for RBAC.",
+      "columns": [
+        { "name": "id",          "type": "SERIAL PRIMARY KEY" },
+        { "name": "name",        "type": "VARCHAR(100) UNIQUE NOT NULL" },
+        { "name": "description", "type": "TEXT" },
+        { "name": "is_system",   "type": "BOOLEAN DEFAULT FALSE" },
+        { "name": "created_at",  "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "updated_at",  "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_system_roles_name", "columns": ["name"], "unique": true }
+      ]
+    },
+    {
+      "name": "system_permissions",
+      "description": "Permission definitions — granular access control.",
+      "columns": [
+        { "name": "id",          "type": "SERIAL PRIMARY KEY" },
+        { "name": "name",        "type": "VARCHAR(100) UNIQUE NOT NULL" },
+        { "name": "resource",    "type": "VARCHAR(100) NOT NULL" },
+        { "name": "action",      "type": "VARCHAR(50) NOT NULL" },
+        { "name": "description", "type": "TEXT" },
+        { "name": "created_at",  "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_system_permissions_resource", "columns": ["resource"], "unique": false }
+      ]
+    },
+    {
+      "name": "system_role_permissions",
+      "description": "Many-to-many: roles ↔ permissions.",
+      "columns": [
+        { "name": "role_id",       "type": "INTEGER NOT NULL REFERENCES pulseops.system_roles(id) ON DELETE CASCADE" },
+        { "name": "permission_id", "type": "INTEGER NOT NULL REFERENCES pulseops.system_permissions(id) ON DELETE CASCADE" },
+        { "name": "granted_at",    "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "primaryKey": ["role_id", "permission_id"],
+      "indexes": [
+        { "name": "idx_srp_role_id",       "columns": ["role_id"],       "unique": false },
+        { "name": "idx_srp_permission_id", "columns": ["permission_id"], "unique": false }
+      ]
+    },
+    {
+      "name": "system_user_roles",
+      "description": "Many-to-many: users ↔ roles (users can have multiple roles).",
+      "columns": [
+        { "name": "user_id",    "type": "INTEGER NOT NULL REFERENCES pulseops.system_users(id) ON DELETE CASCADE" },
+        { "name": "role_id",    "type": "INTEGER NOT NULL REFERENCES pulseops.system_roles(id) ON DELETE CASCADE" },
+        { "name": "granted_by", "type": "INTEGER REFERENCES pulseops.system_users(id)" },
+        { "name": "granted_at", "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "primaryKey": ["user_id", "role_id"],
+      "indexes": [
+        { "name": "idx_sur_user_id", "columns": ["user_id"], "unique": false },
+        { "name": "idx_sur_role_id", "columns": ["role_id"], "unique": false }
+      ]
+    },
+    {
+      "name": "system_config",
+      "description": "Key-value configuration storage (JSONB values for flexibility).",
+      "columns": [
+        { "name": "id",          "type": "SERIAL PRIMARY KEY" },
+        { "name": "key",         "type": "VARCHAR(255) UNIQUE NOT NULL" },
+        { "name": "value",       "type": "JSONB NOT NULL DEFAULT '{}'" },
+        { "name": "description", "type": "TEXT" },
+        { "name": "created_at",  "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "updated_at",  "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_system_config_key", "columns": ["key"], "unique": true }
+      ]
+    },
+    {
+      "name": "system_modules",
+      "description": "Module registry — hot-drop micro-frontend tracking.",
+      "columns": [
+        { "name": "id",                  "type": "SERIAL PRIMARY KEY" },
+        { "name": "module_id",           "type": "VARCHAR(100) UNIQUE NOT NULL" },
+        { "name": "name",                "type": "VARCHAR(255) NOT NULL" },
+        { "name": "version",             "type": "VARCHAR(50) NOT NULL DEFAULT '1.0.0'" },
+        { "name": "description",         "type": "TEXT" },
+        { "name": "is_core",             "type": "BOOLEAN DEFAULT FALSE" },
+        { "name": "enabled",             "type": "BOOLEAN DEFAULT FALSE" },
+        { "name": "schema_initialized",  "type": "BOOLEAN DEFAULT FALSE" },
+        { "name": "\"order\"",           "type": "INTEGER DEFAULT 99" },
+        { "name": "installed_at",        "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "updated_at",          "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_system_modules_module_id", "columns": ["module_id"], "unique": true },
+        { "name": "idx_system_modules_enabled",   "columns": ["enabled"],   "unique": false }
+      ]
+    },
+    {
+      "name": "system_logs",
+      "description": "Centralized log storage — both UI and API logs. Unified table with log_type discriminator. Stores TransactionID, CorrelationID, SessionID for full distributed tracing. API-specific columns (http_method, api_url, request_body, response_body) are populated for API logs. UI-specific column (page_url) is populated for UI logs.",
+      "columns": [
+        { "name": "id",             "type": "BIGSERIAL PRIMARY KEY" },
+        { "name": "transaction_id", "type": "VARCHAR(100)" },
+        { "name": "correlation_id", "type": "VARCHAR(100)" },
+        { "name": "session_id",     "type": "VARCHAR(100)" },
+        { "name": "log_type",       "type": "VARCHAR(10) NOT NULL DEFAULT 'ui'" },
+        { "name": "level",          "type": "VARCHAR(10) NOT NULL" },
+        { "name": "source",         "type": "VARCHAR(255)" },
+        { "name": "event",          "type": "VARCHAR(255)" },
+        { "name": "message",        "type": "TEXT NOT NULL" },
+        { "name": "module",         "type": "VARCHAR(100)" },
+        { "name": "file_name",      "type": "VARCHAR(255)" },
+        { "name": "page_url",       "type": "VARCHAR(500)" },
+        { "name": "http_method",    "type": "VARCHAR(10)" },
+        { "name": "api_url",        "type": "TEXT" },
+        { "name": "status_code",    "type": "INTEGER" },
+        { "name": "duration_ms",    "type": "INTEGER" },
+        { "name": "request_body",   "type": "JSONB" },
+        { "name": "response_body",  "type": "JSONB" },
+        { "name": "data",           "type": "JSONB" },
+        { "name": "user_id",        "type": "INTEGER" },
+        { "name": "user_email",     "type": "VARCHAR(255)" },
+        { "name": "ip_address",     "type": "INET" },
+        { "name": "user_agent",     "type": "TEXT" },
+        { "name": "created_at",     "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_system_logs_level",          "columns": ["level"],          "unique": false },
+        { "name": "idx_system_logs_log_type",       "columns": ["log_type"],       "unique": false },
+        { "name": "idx_system_logs_created_at",     "columns": ["created_at"],     "unique": false },
+        { "name": "idx_system_logs_transaction_id", "columns": ["transaction_id"], "unique": false },
+        { "name": "idx_system_logs_correlation_id", "columns": ["correlation_id"], "unique": false },
+        { "name": "idx_system_logs_session_id",     "columns": ["session_id"],     "unique": false }
+      ]
+    },
+    {
+      "name": "system_sessions",
+      "description": "Active user sessions — for session management and K8s pod-safe invalidation.",
+      "columns": [
+        { "name": "id",         "type": "SERIAL PRIMARY KEY" },
+        { "name": "session_id", "type": "VARCHAR(100) UNIQUE NOT NULL" },
+        { "name": "user_id",    "type": "INTEGER NOT NULL REFERENCES pulseops.system_users(id) ON DELETE CASCADE" },
+        { "name": "token_hash", "type": "VARCHAR(255) NOT NULL" },
+        { "name": "ip_address", "type": "INET" },
+        { "name": "user_agent", "type": "TEXT" },
+        { "name": "is_active",  "type": "BOOLEAN DEFAULT TRUE" },
+        { "name": "expires_at", "type": "TIMESTAMPTZ NOT NULL" },
+        { "name": "created_at", "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "updated_at", "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_system_sessions_session_id", "columns": ["session_id"], "unique": true },
+        { "name": "idx_system_sessions_user_id",    "columns": ["user_id"],    "unique": false },
+        { "name": "idx_system_sessions_is_active",  "columns": ["is_active"],  "unique": false },
+        { "name": "idx_system_sessions_expires_at", "columns": ["expires_at"], "unique": false }
+      ]
+    }
+  ],
+  "defaultRoles": [
+    { "name": "super_admin",  "description": "Full system access — all operations on all resources",       "isSystem": true },
+    { "name": "admin",        "description": "Platform administration — modules, users, settings",        "isSystem": true },
+    { "name": "operator",     "description": "Operational access — monitoring, logs, read-only config",   "isSystem": true },
+    { "name": "user",         "description": "Standard application user — module-level access only",      "isSystem": true },
+    { "name": "viewer",       "description": "Read-only access — dashboards and reports only",            "isSystem": true }
+  ],
+  "corePermissions": [
+    { "name": "platform:admin",      "resource": "platform",    "action": "admin",   "description": "Full platform administration" },
+    { "name": "settings:read",       "resource": "settings",    "action": "read",    "description": "Read platform settings" },
+    { "name": "settings:write",      "resource": "settings",    "action": "write",   "description": "Modify platform settings" },
+    { "name": "database:manage",     "resource": "database",    "action": "manage",  "description": "Database operations (create/delete/schema)" },
+    { "name": "modules:manage",      "resource": "modules",     "action": "manage",  "description": "Install/enable/disable modules" },
+    { "name": "users:manage",        "resource": "users",       "action": "manage",  "description": "Create/update/delete users" },
+    { "name": "logs:read",           "resource": "logs",        "action": "read",    "description": "View logs and monitoring data" },
+    { "name": "logs:delete",         "resource": "logs",        "action": "delete",  "description": "Delete log entries" },
+    { "name": "reports:read",        "resource": "reports",     "action": "read",    "description": "View reports and analytics" }
+  ]
+}

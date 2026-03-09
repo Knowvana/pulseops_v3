@@ -1,0 +1,207 @@
+{
+  "sideNav": {
+    "title": "ServiceNow",
+    "subtitle": "ITSM Integration"
+  },
+  "navItems": {
+    "dashboard": "Dashboard",
+    "incidents": "Incidents",
+    "reports": "Reports",
+    "config": "Configuration"
+  },
+  "dashboard": {
+    "title": "ServiceNow Dashboard",
+    "subtitle": "Real-time incident overview and SLA compliance status.",
+    "notConfiguredTitle": "ServiceNow Not Connected",
+    "notConfiguredSubtitle": "Configure your ServiceNow instance to start viewing incidents and SLA data.",
+    "goToConfig": "Go to Configuration",
+    "lastSync": "Last Sync",
+    "never": "Never",
+    "refresh": "Refresh",
+    "sync": "Sync Now",
+    "syncTooltip": "Trigger a manual data sync from ServiceNow",
+    "stats": {
+      "total": "Total Incidents",
+      "open": "Open",
+      "inProgress": "In Progress",
+      "critical": "Critical (Active)",
+      "slaBreached": "SLA Breached",
+      "resolvedToday": "Resolved Today"
+    },
+    "connectionStatus": {
+      "connected": "Connected",
+      "error": "Connection Error",
+      "not_configured": "Not Configured"
+    },
+    "recentIncidents": "Recent Incidents",
+    "noIncidents": "No incidents to display",
+    "viewAll": "View All Incidents"
+  },
+  "incidents": {
+    "title": "Incidents",
+    "subtitle": "Browse and filter incidents fetched from ServiceNow.",
+    "searchPlaceholder": "Search by number, title or assignee...",
+    "filterState": "State",
+    "filterPriority": "Priority",
+    "filterAll": "All",
+    "columns": {
+      "number": "Number",
+      "title": "Title",
+      "priority": "Priority",
+      "state": "State",
+      "assignedTo": "Assigned To",
+      "slaDue": "SLA Due",
+      "createdAt": "Created"
+    },
+    "noIncidents": "No incidents match your filters.",
+    "noIncidentsHint": "Try adjusting the filters or sync data from ServiceNow.",
+    "notConfigured": "ServiceNow is not configured.",
+    "notConfiguredHint": "Set up the connection in Configuration → Connection to start fetching incidents.",
+    "showing": "Showing",
+    "of": "of",
+    "incidents": "incidents",
+    "prevPage": "Previous",
+    "nextPage": "Next",
+    "fromCache": "Cached",
+    "fromCacheTooltip": "Data is from local cache. Sync to refresh.",
+    "priority": {
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low",
+      "planning": "Planning"
+    },
+    "state": {
+      "open": "Open",
+      "in_progress": "In Progress",
+      "on_hold": "On Hold",
+      "resolved": "Resolved",
+      "closed": "Closed",
+      "cancelled": "Cancelled"
+    }
+  },
+  "reports": {
+    "title": "Reports",
+    "subtitle": "SLA compliance, incident volume, and resolution time analytics.",
+    "notConfigured": "ServiceNow is not configured.",
+    "notConfiguredHint": "Set up the connection in Configuration to view reports.",
+    "slaCompliance": "SLA Compliance",
+    "slaComplianceSubtitle": "Percentage of resolved incidents meeting SLA targets.",
+    "incidentsByPriority": "Incidents by Priority",
+    "incidentsByPrioritySubtitle": "Current active and historical incident distribution.",
+    "resolutionTime": "Avg. Resolution Time",
+    "resolutionTimeSubtitle": "Average time (hours) to resolve incidents per priority.",
+    "hours": "hrs",
+    "noData": "No data available",
+    "totalIncidents": "Total Incidents",
+    "totalResolved": "Total Resolved",
+    "lastSync": "Last Sync"
+  },
+  "config": {
+    "title": "ServiceNow Configuration",
+    "subtitle": "Manage connection, SLA thresholds, and synchronization settings.",
+    "tabs": {
+      "connection": {
+        "id": "sn_connection",
+        "label": "Connection",
+        "description": "Configure the ServiceNow API connection credentials."
+      },
+      "sla": {
+        "id": "sn_sla",
+        "label": "SLA Thresholds",
+        "description": "Define resolution time limits per incident priority."
+      },
+      "sync": {
+        "id": "sn_sync",
+        "label": "Sync Settings",
+        "description": "Configure automatic data synchronization schedule."
+      }
+    }
+  },
+  "connection": {
+    "title": "ServiceNow Connection",
+    "subtitle": "Enter your ServiceNow instance credentials. The API token is stored securely on the server.",
+    "instanceUrlLabel": "Instance URL",
+    "instanceUrlPlaceholder": "https://yourinstance.service-now.com",
+    "instanceUrlHint": "Your ServiceNow instance base URL (without trailing slash).",
+    "usernameLabel": "Username",
+    "usernamePlaceholder": "admin",
+    "usernameHint": "ServiceNow user with itil or admin role.",
+    "apiTokenLabel": "Password / API Token",
+    "apiTokenPlaceholder": "Enter API token or password",
+    "apiTokenHint": "Stored securely on the server — never sent to the browser.",
+    "testButton": "Test Connection",
+    "testing": "Testing...",
+    "testSuccess": "Connection successful",
+    "testFailed": "Connection failed",
+    "latency": "Latency",
+    "saveButton": "Save Configuration",
+    "saving": "Saving...",
+    "statusLabel": "Connection Status",
+    "configuredBadge": "Configured",
+    "notConfiguredBadge": "Not Configured",
+    "lastTested": "Last Tested",
+    "confirmTitle": "Save Connection Configuration",
+    "confirmDescription": "save the ServiceNow connection credentials",
+    "confirmTarget": "ServiceNow Instance",
+    "confirmSummaryStatus": "Configuration Saved",
+    "confirmSummarySuccess": "Connection settings updated successfully"
+  },
+  "sla": {
+    "title": "SLA Thresholds",
+    "subtitle": "Define maximum resolution time (in hours) for each incident priority. Used for SLA breach detection and compliance reporting.",
+    "criticalLabel": "Critical Priority",
+    "criticalDescription": "P1 — Business-critical, immediate response required.",
+    "highLabel": "High Priority",
+    "highDescription": "P2 — Significant impact, urgent resolution.",
+    "mediumLabel": "Medium Priority",
+    "mediumDescription": "P3 — Moderate impact, standard resolution.",
+    "lowLabel": "Low Priority",
+    "lowDescription": "P4/P5 — Minimal impact, best-effort resolution.",
+    "hoursLabel": "hours",
+    "saveButton": "Save SLA Thresholds",
+    "saving": "Saving...",
+    "confirmTitle": "Save SLA Thresholds",
+    "confirmDescription": "update the SLA resolution time thresholds",
+    "confirmTarget": "ServiceNow SLA Configuration",
+    "confirmSummaryStatus": "SLA Thresholds Updated",
+    "confirmSummarySuccess": "SLA thresholds saved successfully"
+  },
+  "sync": {
+    "title": "Sync Settings",
+    "subtitle": "Configure how often PulseOps synchronizes incident data from ServiceNow.",
+    "enabledLabel": "Automatic Sync",
+    "enabledDescription": "Automatically sync incident data at the configured interval.",
+    "intervalLabel": "Sync Interval",
+    "intervalPlaceholder": "30",
+    "intervalHint": "Minutes between automatic syncs (5–1440).",
+    "maxIncidentsLabel": "Max Incidents",
+    "maxIncidentsPlaceholder": "500",
+    "maxIncidentsHint": "Maximum incidents to fetch per sync (1–1000).",
+    "lastSyncLabel": "Last Synchronized",
+    "never": "Never",
+    "manualSyncButton": "Sync Now",
+    "syncing": "Syncing...",
+    "saveButton": "Save Sync Settings",
+    "saving": "Saving...",
+    "syncSuccess": "Sync complete",
+    "syncFailed": "Sync failed",
+    "confirmTitle": "Save Sync Settings",
+    "confirmDescription": "update the data synchronization settings",
+    "confirmTarget": "ServiceNow Sync Configuration",
+    "confirmSummaryStatus": "Sync Settings Updated",
+    "confirmSummarySuccess": "Sync settings saved successfully"
+  },
+  "common": {
+    "save": "Save Changes",
+    "cancel": "Cancel",
+    "loading": "Loading ServiceNow data...",
+    "fetchError": "Failed to load data from the server.",
+    "retry": "Retry",
+    "na": "—",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "yes": "Yes",
+    "no": "No"
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "server": {
+    "ui": {
+      "protocol": "http",
+      "host": "localhost",
+      "port": 1001,
+      "url": "http://localhost:1001"
+    },
+    "api": {
+      "protocol": "http",
+      "host": "localhost",
+      "port": 4001,
+      "url": "http://localhost:4001"
+    }
+  },
+  "apiPrefix": "/api",
+  "swagger": {
+    "ui": "/swagger-ui",
+    "json": "/api-docs/swagger.json"
+  },
+  "health": {
+    "base": "/health",
+    "readiness": "/health/readiness"
+  },
+  "auth": {
+    "base": "/auth",
+    "login": "/auth/login",
+    "logout": "/auth/logout",
+    "refresh": "/auth/refresh",
+    "me": "/auth/me",
+    "provider": "/auth/provider"
+  },
+  "superAdmin": {
+    "base": "/auth/superadmin",
+    "login": "/auth/superadmin/login",
+    "profile": "/auth/superadmin/profile",
+    "password": "/auth/superadmin/password"
+  },
+  "database": {
+    "base": "/database",
+    "config": "/database/config",
+    "testConfig": "/database/config/test",
+    "connection": "/database/connection",
+    "schema": "/database/schema",
+    "schemaSeed": "/database/schema/seed",
+    "instance": "/database/instance",
+    "stats": "/database/stats"
+  },
+  "modules": {
+    "base": "/modules",
+    "list": "/modules",
+    "available": "/modules/available",
+    "scan": "/modules/scan",
+    "bundle": "/modules/bundle",
+    "install": "/modules/:id/install",
+    "enable": "/modules/:id/enable",
+    "disable": "/modules/:id/disable",
+    "remove": "/modules/:id",
+    "status": "/modules/:id/status"
+  },
+  "logs": {
+    "base": "/logs",
+    "stats": "/logs/stats",
+    "config": "/logs/config",
+    "configStatus": "/logs/config/status",
+    "ui": "/logs/ui",
+    "api": "/logs/api",
+    "uiStats": "/logs/ui/stats",
+    "apiStats": "/logs/api/stats"
+  },
+  "systemConfig": {
+    "base": "/system/config",
+    "list": "/system/config",
+    "byKey": "/system/config/:key"
+  },
+  "settings": {
+    "base": "/settings",
+    "get": "/settings",
+    "save": "/settings"
+  },
+  "_note_modules": "Module-specific routes (e.g. /api/servicenow/*) are loaded dynamically at runtime via dynamicRouteLoader.js when modules are enabled. No hardcoded module sections needed here."
+}

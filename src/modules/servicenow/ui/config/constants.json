@@ -1,0 +1,26 @@
+{
+  "id": "servicenow",
+  "name": "ServiceNow",
+  "shortName": "SNOW",
+  "version": "1.0.0",
+  "description": "ServiceNow ITSM integration — incidents, SLA tracking, sync scheduling, and compliance reporting.",
+  "roles": ["super_admin", "admin", "user"],
+  "isCore": false,
+  "order": 2,
+  "defaultView": "dashboard",
+  "configDefaultTab": "sn_connection",
+  "moduleDetails": {
+    "features": [
+      "Dashboard with live incident stats and SLA breach alerts",
+      "Incident list with priority/state filtering and search",
+      "SLA compliance reports and incident volume analytics",
+      "Connection configuration for ServiceNow Table API",
+      "SLA threshold configuration per priority level",
+      "Sync schedule configuration with manual trigger",
+      "In-memory incident cache with configurable TTL"
+    ],
+    "author": "PulseOps Team",
+    "license": "Proprietary",
+    "dependencies": []
+  }
+}

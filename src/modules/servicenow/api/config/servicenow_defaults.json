@@ -1,0 +1,39 @@
+{
+  "sla": {
+    "critical": 4,
+    "high": 8,
+    "medium": 24,
+    "low": 72
+  },
+  "sync": {
+    "enabled": false,
+    "intervalMinutes": 30,
+    "maxIncidents": 500,
+    "lastSync": null
+  },
+  "stateMapping": {
+    "incident": {
+      "1": "New",
+      "2": "In Progress",
+      "3": "On Hold",
+      "4": "Awaiting Info",
+      "5": "Awaiting Problem",
+      "6": "Resolved",
+      "7": "Closed",
+      "8": "Cancelled"
+    }
+  },
+  "columnLabels": {
+    "number": "Number",
+    "short_description": "Short Description",
+    "priority": "Priority",
+    "state": "State",
+    "category": "Category",
+    "assignment_group": "Assignment Group",
+    "assigned_to": "Assigned To",
+    "opened_at": "Opened At",
+    "resolved_at": "Resolved At",
+    "response_time": "Response Time",
+    "resolution_time": "Resolution Time"
+  }
+}

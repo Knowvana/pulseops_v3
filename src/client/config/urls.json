@@ -1,0 +1,89 @@
+{
+  "server": {
+    "ui": {
+      "protocol": "http",
+      "host": "localhost",
+      "port": 1001,
+      "url": "http://localhost:1001"
+    },
+    "api": {
+      "protocol": "http",
+      "host": "localhost",
+      "port": 4001,
+      "url": "http://localhost:4001"
+    }
+  },
+  "apiBaseUrl": "/api",
+  "apiPrefix": "/api",
+  "api": {
+    "base": "/api",
+    "health": "/api/health",
+    "healthReadiness": "/api/health/readiness"
+  },
+  "auth": {
+    "login": "/api/auth/login",
+    "logout": "/api/auth/logout",
+    "refresh": "/api/auth/refresh",
+    "me": "/api/auth/me",
+    "provider": "/api/auth/provider"
+  },
+  "superAdmin": {
+    "login": "/api/auth/superadmin/login",
+    "info": "/api/auth/superadmin/info",
+    "profile": "/api/auth/superadmin/profile",
+    "password": "/api/auth/superadmin/password"
+  },
+  "database": {
+    "config": "/api/database/config",
+    "testConfig": "/api/database/config/test",
+    "connection": "/api/database/connection",
+    "schema": "/api/database/schema",
+    "schemaSeed": "/api/database/schema/seed",
+    "instance": "/api/database/instance",
+    "stats": "/api/database/stats"
+  },
+  "modules": {
+    "list": "/api/modules",
+    "available": "/api/modules/available",
+    "scan": "/api/modules/scan",
+    "bundle": "/api/modules/bundle",
+    "install": "/api/modules/{id}/install",
+    "enable": "/api/modules/{id}/enable",
+    "disable": "/api/modules/{id}/disable",
+    "remove": "/api/modules/{id}",
+    "status": "/api/modules/{id}/status"
+  },
+  "logs": {
+    "stats": "/api/logs/stats",
+    "deleteAll": "/api/logs",
+    "config": "/api/logs/config",
+    "configStatus": "/api/logs/config/status",
+    "ui": "/api/logs/ui",
+    "api": "/api/logs/api",
+    "uiStats": "/api/logs/ui/stats",
+    "apiStats": "/api/logs/api/stats"
+  },
+  "systemConfig": {
+    "list": "/api/system/config",
+    "save": "/api/system/config"
+  },
+  "settings": {
+    "get": "/api/settings",
+    "save": "/api/settings"
+  },
+  "UIRoutes": {
+    "platformAdmin": {
+      "dashboard": "/platform_admin",
+      "settings": "/platform_admin/Settings",
+      "databaseSetup": "/platform_admin/Settings?tab=databaseSetup"
+    },
+    "auth": {
+      "login": "/login",
+      "superAdmin": "/login/super-admin"
+    },
+    "core": {
+      "logs": "/logs",
+      "dashboard": "/"
+    }
+  }
+}

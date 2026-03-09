@@ -1,0 +1,22 @@
+{
+  "id": "_template",
+  "name": "Module Template",
+  "shortName": "TMPL",
+  "version": "1.0.0",
+  "description": "Template module — copy this directory and rename to create a new module.",
+  "roles": ["super_admin", "admin"],
+  "isCore": false,
+  "order": 99,
+  "defaultView": "dashboard",
+  "configDefaultTab": "general",
+  "moduleDetails": {
+    "features": [
+      "Placeholder dashboard view",
+      "Placeholder reports view",
+      "Placeholder configuration tab"
+    ],
+    "author": "PulseOps Team",
+    "license": "Proprietary",
+    "dependencies": []
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "_description": "ServiceNow module UI success/info messages. Self-contained — no dependency on platform UIMessages.json.",
+  "connection": {
+    "saveSuccess": "Connection configuration saved successfully.",
+    "testSuccess": "Connection test passed — ServiceNow instance is reachable."
+  },
+  "sync": {
+    "syncSuccess": "Data synchronization completed successfully.",
+    "saveSuccess": "Sync settings saved successfully."
+  },
+  "sla": {
+    "saveSuccess": "SLA thresholds saved successfully."
+  }
+}

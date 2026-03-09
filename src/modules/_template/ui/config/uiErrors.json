@@ -1,0 +1,7 @@
+{
+  "_description": "Module error messages. Self-contained — no dependency on platform UIErrors.json.",
+  "config": {
+    "loadFailed": "Failed to load module configuration.",
+    "saveFailed": "Failed to save module configuration."
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "_description": "Module API endpoints. Self-contained — no dependency on platform urls.json.",
+  "api": {
+    "config": "/api/_template/config",
+    "status": "/api/_template/status"
+  }
+}

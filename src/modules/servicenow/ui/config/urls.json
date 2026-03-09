@@ -1,0 +1,11 @@
+{
+  "_description": "ServiceNow module API endpoints. Self-contained — no dependency on platform urls.json.",
+  "api": {
+    "config":     "/api/servicenow/config",
+    "configTest": "/api/servicenow/config/test",
+    "stats":      "/api/servicenow/stats",
+    "incidents":  "/api/servicenow/incidents",
+    "reports":    "/api/servicenow/reports",
+    "sync":       "/api/servicenow/sync"
+  }
+}

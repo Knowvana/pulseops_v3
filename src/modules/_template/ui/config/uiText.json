@@ -1,0 +1,26 @@
+{
+  "navItems": {
+    "dashboard": "Dashboard",
+    "reports": "Reports",
+    "config": "Configuration"
+  },
+  "config": {
+    "title": "Module Configuration",
+    "subtitle": "Manage module settings.",
+    "tabs": {
+      "general": {
+        "id": "general",
+        "label": "General",
+        "description": "General module settings."
+      }
+    }
+  },
+  "common": {
+    "save": "Save Changes",
+    "cancel": "Cancel",
+    "loading": "Loading...",
+    "fetchError": "Failed to load data from the server.",
+    "retry": "Retry",
+    "na": "—"
+  }
+}

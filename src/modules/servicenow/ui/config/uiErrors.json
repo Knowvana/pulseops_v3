@@ -1,0 +1,22 @@
+{
+  "_description": "ServiceNow module UI error messages. Self-contained — no dependency on platform UIErrors.json.",
+  "connection": {
+    "testFailed": "Connection test failed. Check your credentials and instance URL.",
+    "saveFailed": "Failed to save connection configuration.",
+    "loadFailed": "Failed to load connection configuration."
+  },
+  "incidents": {
+    "fetchFailed": "Failed to load incidents from the server.",
+    "searchFailed": "Search request failed. Please try again."
+  },
+  "reports": {
+    "fetchFailed": "Failed to load reports data from the server."
+  },
+  "sync": {
+    "syncFailed": "Data synchronization failed. Check the connection.",
+    "saveFailed": "Failed to save sync settings."
+  },
+  "sla": {
+    "saveFailed": "Failed to save SLA thresholds."
+  }
+}

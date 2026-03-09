@@ -1,0 +1,6 @@
+{
+  "_description": "Module success/info messages. Self-contained — no dependency on platform UIMessages.json.",
+  "config": {
+    "saveSuccess": "Module configuration saved successfully."
+  }
+}

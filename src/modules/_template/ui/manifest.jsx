@@ -15,10 +15,11 @@
 // ============================================================================
 
 import React from 'react';
-import { Package, LayoutDashboard, BarChart3, Sliders, Blocks } from 'lucide-react';
+import { Package, LayoutDashboard, BarChart3, Sliders, Blocks, Database } from 'lucide-react';
 import moduleConstants from './config/constants.json';
 import uiText from './config/uiText.json';
 import ComponentShowcase from './components/ComponentShowcase';
+import DataManagementTab from './components/settings/DataManagementTab';
 
 const navText = uiText.navItems;
 const cfgText = uiText.config;
@@ -64,6 +65,12 @@ const manifest = {
       label:   cfgText.tabs.general.label,
       icon:    Sliders,
       content: () => <PlaceholderView viewName="General Configuration" />,
+    },
+    {
+      id:      cfgText.tabs.dataManagement.id,
+      label:   cfgText.tabs.dataManagement.label,
+      icon:    Database,
+      content: () => <DataManagementTab />,
     },
   ],
 

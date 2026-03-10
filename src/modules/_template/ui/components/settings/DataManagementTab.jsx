@@ -1,17 +1,33 @@
 // ============================================================================
-// ServiceNowDataManagementTab — PulseOps V3 ServiceNow Module
+// DataManagementTab — PulseOps V3 Module Template
 //
-// PURPOSE: Configuration tab for managing the ServiceNow module's data.
-// Displays schema status with actual DB tables, row counts, and init date.
-// Allows loading default data from DefaultData.json and deleting all module
-// database objects dynamically from Schema.json.
+// PURPOSE: Settings tab for managing a module's database tables and seed data.
+// Works out-of-the-box with ANY module that has database/Schema.json and
+// database/DefaultData.json — no customisation needed.
 //
-// USED BY: manifest.jsx → getConfigTabs() → sn_data_management
+// FEATURES:
+//   - Displays live DB table status (exists, row count, columns, indexes)
+//   - Shows schema initialization date and version from system_modules
+//   - "Load Default Data" button seeds rows from DefaultData.json
+//   - "Delete Module Data" button drops all tables defined in Schema.json
+//
+// HOW IT WORKS:
+//   1. On mount, calls GET /api/<moduleId>/schema/info
+//   2. Renders a table grid showing each DB table's status
+//   3. "Load Default Data" calls POST /api/<moduleId>/data/defaults
+//   4. "Delete Module Data" calls DELETE /api/<moduleId>/data/reset
+//
+// CUSTOMISATION:
+//   - Replace '_template' in the API URLs below with your module ID.
+//   - All UI text comes from uiText.json → dataManagement section.
+//   - Styling uses Tailwind CSS classes consistent with the platform theme.
+//
+// USED BY: manifest.jsx → getConfigTabs() → data_management
 //
 // DEPENDENCIES:
-//   - lucide-react       → Icons
-//   - @shared            → createLogger, ApiClient
-//   - @components        → ConfirmDialog
+//   - lucide-react   → Icons
+//   - @shared        → createLogger, ApiClient
+//   - @components    → ConfirmDialog (for delete confirmation)
 // ============================================================================
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -24,33 +40,47 @@ import ApiClient from '@shared/services/apiClient';
 import { ConfirmDialog } from '@components';
 import uiText from '../../config/uiText.json';
 
-const log = createLogger('ServiceNowDataManagementTab.jsx');
+// ── Logger for this component ───────────────────────────────────────────────
+// createLogger(<filename>) produces structured log entries tagged with the file.
+const log = createLogger('DataManagementTab.jsx');
+
+// ── UI text shorthand ───────────────────────────────────────────────────────
+// All user-visible strings live in uiText.json → dataManagement section.
+// This keeps the component free of hardcoded strings.
 const t = uiText.dataManagement;
 
-const snApi = {
-  schemaInfo:    '/api/servicenow/schema/info',
-  loadDefaults:  '/api/servicenow/data/defaults',
-  deleteData:    '/api/servicenow/data/reset',
+// ── API endpoints ───────────────────────────────────────────────────────────
+// CHANGE '_template' to your module ID (must match the route prefix in api/index.js).
+const moduleApi = {
+  schemaInfo:   '/api/_template/schema/info',
+  loadDefaults: '/api/_template/data/defaults',
+  deleteData:   '/api/_template/data/reset',
 };
 
-export default function ServiceNowDataManagementTab() {
-  const [schema, setSchema]       = useState(null);
-  const [loading, setLoading]     = useState(true);
-  const [loadingDefaults, setLoadingDefaults] = useState(false);
-  const [resetting, setResetting] = useState(false);
-  const [error, setError]         = useState(null);
-  const [success, setSuccess]     = useState(null);
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const initRan = useRef(false);
+// ═════════════════════════════════════════════════════════════════════════════
+// COMPONENT
+// ═════════════════════════════════════════════════════════════════════════════
 
-  // ── Load schema status ────────────────────────────────────────────────
+export default function DataManagementTab() {
+  // ── State ─────────────────────────────────────────────────────────────────
+  const [schema, setSchema]                   = useState(null);   // schema/info response
+  const [loading, setLoading]                 = useState(true);   // initial load spinner
+  const [loadingDefaults, setLoadingDefaults] = useState(false);  // "Load Default Data" spinner
+  const [resetting, setResetting]             = useState(false);  // "Delete Module Data" spinner
+  const [error, setError]                     = useState(null);   // error banner text
+  const [success, setSuccess]                 = useState(null);   // success banner text
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const initRan = useRef(false); // prevents double-fetch in React strict mode
+
+  // ── Fetch schema info ─────────────────────────────────────────────────────
+  // Called on mount and after load-defaults / delete operations to refresh.
   const loadSchema = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       log.info('loadSchema', 'Fetching schema info...');
-      const res = await ApiClient.get(snApi.schemaInfo);
-      
+      const res = await ApiClient.get(moduleApi.schemaInfo);
+
       if (res?.success) {
         setSchema(res.data);
         log.info('loadSchema', 'Schema info loaded', {
@@ -70,23 +100,25 @@ export default function ServiceNowDataManagementTab() {
     }
   }, []);
 
+  // Run once on mount
   useEffect(() => {
     if (initRan.current) return;
     initRan.current = true;
-    log.info('mount', 'ServiceNowDataManagementTab mounted');
+    log.info('mount', 'DataManagementTab mounted');
     loadSchema();
   }, [loadSchema]);
 
-  // ── Load default data ─────────────────────────────────────────────────
+  // ── Load default data ─────────────────────────────────────────────────────
+  // Calls POST /data/defaults → inserts rows from DefaultData.json.
   const handleLoadDefaults = useCallback(async () => {
     setLoadingDefaults(true);
     setError(null);
     setSuccess(null);
-    
+
     try {
       log.info('handleLoadDefaults', 'Loading default data...');
-      const res = await ApiClient.post(snApi.loadDefaults, {});
-      
+      const res = await ApiClient.post(moduleApi.loadDefaults, {});
+
       if (res?.success) {
         const message = res.data?.message || 'Default data loaded successfully.';
         setSuccess(message);
@@ -94,6 +126,7 @@ export default function ServiceNowDataManagementTab() {
           tablesSeeded: res.data?.tablesSeeded?.length,
           totalRowsInserted: res.data?.totalRowsInserted,
         });
+        // Refresh schema info to show updated row counts
         setTimeout(() => loadSchema(), 500);
         setTimeout(() => setSuccess(null), 5000);
       } else {
@@ -109,17 +142,18 @@ export default function ServiceNowDataManagementTab() {
     }
   }, [loadSchema]);
 
-  // ── Delete module data ────────────────────────────────────────────────
+  // ── Delete all module data ────────────────────────────────────────────────
+  // Calls DELETE /data/reset → drops all tables in Schema.json.
   const handleDeleteData = useCallback(async () => {
     setShowResetConfirm(false);
     setResetting(true);
     setError(null);
     setSuccess(null);
-    
+
     try {
       log.warn('handleDeleteData', 'Deleting all module database objects...');
-      const res = await ApiClient.delete(snApi.deleteData);
-      
+      const res = await ApiClient.delete(moduleApi.deleteData);
+
       if (res?.success) {
         const message = res.data?.message || 'Module data deleted successfully.';
         setSuccess(message);
@@ -143,12 +177,16 @@ export default function ServiceNowDataManagementTab() {
     }
   }, [loadSchema]);
 
-  // ── Total row count helper ────────────────────────────────────────────
-  const totalRows = schema?.tables?.reduce((sum, t) => sum + (t.rowCount || 0), 0) || 0;
+  // ── Computed: total row count across all tables ───────────────────────────
+  const totalRows = schema?.tables?.reduce((sum, tbl) => sum + (tbl.rowCount || 0), 0) || 0;
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════════════════════
 
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* Header */}
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-3">
         <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center">
           <Database size={18} className="text-brand-600" />
@@ -159,7 +197,7 @@ export default function ServiceNowDataManagementTab() {
         </div>
       </div>
 
-      {/* Status banners */}
+      {/* ── Status banners ─────────────────────────────────────────────────── */}
       {error && (
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-sm">
           <AlertCircle size={14} /><span>{error}</span>
@@ -171,14 +209,16 @@ export default function ServiceNowDataManagementTab() {
         </div>
       )}
 
+      {/* ── Loading spinner ────────────────────────────────────────────────── */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 size={22} className="text-brand-400 animate-spin" />
         </div>
       ) : (
         <>
-          {/* Schema Status */}
+          {/* ── Schema Status Card ───────────────────────────────────────── */}
           <div className="bg-white rounded-2xl border border-surface-200 shadow-sm p-5 space-y-4">
+            {/* Card header with initialized badge */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Shield size={15} className="text-surface-500" />
@@ -197,7 +237,7 @@ export default function ServiceNowDataManagementTab() {
             </div>
             <p className="text-xs text-surface-400">{t.schemaStatusSubtitle}</p>
 
-            {/* Schema init date + version */}
+            {/* Init date + schema version */}
             {schema?.schemaInitializedAt && (
               <div className="flex items-center gap-4 text-xs text-surface-500">
                 <div className="flex items-center gap-1.5">
@@ -210,7 +250,7 @@ export default function ServiceNowDataManagementTab() {
               </div>
             )}
 
-            {/* Tables grid */}
+            {/* ── Tables grid ──────────────────────────────────────────── */}
             {schema?.tables?.length > 0 && (
               <div className="overflow-hidden rounded-xl border border-surface-200">
                 <table className="w-full text-sm">
@@ -264,6 +304,7 @@ export default function ServiceNowDataManagementTab() {
               </div>
             )}
 
+            {/* No Schema.json warning */}
             {!schema?.hasSchema && (
               <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs">
                 <AlertTriangle size={13} />
@@ -272,7 +313,7 @@ export default function ServiceNowDataManagementTab() {
             )}
           </div>
 
-          {/* Default Data */}
+          {/* ── Default Data Card ────────────────────────────────────────── */}
           <div className="bg-white rounded-2xl border border-surface-200 shadow-sm p-5 space-y-3">
             <div className="flex items-center justify-between">
               <div>
@@ -301,7 +342,7 @@ export default function ServiceNowDataManagementTab() {
             )}
           </div>
 
-          {/* Danger Zone — Delete Module Data */}
+          {/* ── Danger Zone — Delete Module Data ─────────────────────────── */}
           <div className="bg-white rounded-2xl border-2 border-rose-200 shadow-sm p-5 space-y-3">
             <div className="flex items-center gap-2">
               <AlertTriangle size={15} className="text-rose-500" />
@@ -324,7 +365,7 @@ export default function ServiceNowDataManagementTab() {
         </>
       )}
 
-      {/* Delete confirm dialog */}
+      {/* ── Delete confirmation dialog ───────────────────────────────────── */}
       {showResetConfirm && (
         <ConfirmDialog
           title={t.confirmDeleteTitle}

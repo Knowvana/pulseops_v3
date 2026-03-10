@@ -1,0 +1,22 @@
+{
+  "_meta": {
+    "moduleId": "servicenow",
+    "version": "2.0.0",
+    "description": "Default / seed data for the ServiceNow module. Loaded into database tables defined in Schema.json via the Data Management → Load Default Data action. Each key maps to a table name in Schema.json."
+  },
+  "sn_sla_config": [
+    { "priority": "1 - Critical", "response_minutes": 15,  "resolution_minutes": 120,  "enabled": true },
+    { "priority": "2 - High",     "response_minutes": 30,  "resolution_minutes": 360,  "enabled": true },
+    { "priority": "3 - Medium",   "response_minutes": 120, "resolution_minutes": 960,  "enabled": true },
+    { "priority": "4 - Low",      "response_minutes": 480, "resolution_minutes": 2400, "enabled": true }
+  ],
+  "sn_incident_config": [
+    {
+      "id": 1,
+      "selected_columns": ["number", "short_description", "priority", "state", "assigned_to", "assignment_group", "opened_at", "resolved_at", "closed_at"],
+      "created_column": "opened_at",
+      "closed_column": "closed_at",
+      "assignment_group": ""
+    }
+  ]
+}

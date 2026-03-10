@@ -12,8 +12,34 @@
         "id": "general",
         "label": "General",
         "description": "General module settings."
+      },
+      "dataManagement": {
+        "id": "data_management",
+        "label": "Data Management",
+        "description": "Manage database tables, default data, and module schema."
       }
     }
+  },
+  "dataManagement": {
+    "title": "Data Management",
+    "subtitle": "Manage the module's database tables, default data, and schema objects.",
+    "schemaStatusTitle": "Schema Status",
+    "schemaStatusSubtitle": "Database tables defined in Schema.json with live row counts and status.",
+    "initialized": "Initialized",
+    "notInitialized": "Not Initialized",
+    "existingTables": "Existing Tables",
+    "missingTables": "Missing Tables",
+    "defaultDataTitle": "Default Data",
+    "defaultDataSubtitle": "Seed default configuration from DefaultData.json into the database.",
+    "loadDefaultsButton": "Load Default Data",
+    "loading": "Loading...",
+    "dangerZoneTitle": "Danger Zone",
+    "dangerZoneSubtitle": "Irreversible actions — proceed with extreme caution.",
+    "deleteDataButton": "Delete Module Data",
+    "deleteDataDescription": "Drop all database tables defined in Schema.json. All rows will be permanently deleted.",
+    "confirmDeleteTitle": "Delete Module Data",
+    "confirmDeleteDescription": "permanently drop all module database tables and their data",
+    "confirmDeleteTarget": "Module Database Tables"
   },
   "common": {
     "save": "Save Changes",

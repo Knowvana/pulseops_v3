@@ -30,7 +30,7 @@
 // ============================================================================
 
 import React from 'react';
-import { Headset, LayoutDashboard, BarChart3, Sliders, Wifi, Clock, RefreshCw, ListFilter, ClipboardList, CalendarClock, Settings, Database } from 'lucide-react';
+import { Headset, LayoutDashboard, BarChart3, Sliders, Wifi, Clock, RefreshCw, ListFilter, ClipboardList, CalendarClock, Settings, Database, Columns } from 'lucide-react';
 import moduleConstants from './config/constants.json';
 import uiText from './config/uiText.json';
 
@@ -41,9 +41,10 @@ import ServiceNowTestIncidents  from './components/ServiceNowTestIncidents';
 import ServiceNowReports        from './components/ServiceNowReports';
 
 // ── Config Tab Components (lazy-mounted via render functions) ─────────────────
-import ServiceNowConnectionTab      from './components/settings/ServiceNowConnectionTab';
-import ServiceNowSlaTab             from './components/settings/ServiceNowSlaTab';
-import ServiceNowSyncTab            from './components/settings/ServiceNowSyncTab';
+import ServiceNowConnectionTab         from './components/settings/ServiceNowConnectionTab';
+import ServiceNowIncidentConfigTab     from './components/settings/ServiceNowIncidentConfigTab';
+import ServiceNowSlaTab                from './components/settings/ServiceNowSlaTab';
+import ServiceNowSyncTab               from './components/settings/ServiceNowSyncTab';
 import ServiceNowBusinessHoursTab   from './components/settings/ServiceNowBusinessHoursTab';
 import ServiceNowConfigSettingsTab  from './components/settings/ServiceNowConfigSettingsTab';
 import ServiceNowDataManagementTab  from './components/settings/ServiceNowDataManagementTab';
@@ -95,6 +96,12 @@ const servicenowManifest = {
       label:   cfgText.tabs.connection.label,
       icon:    Wifi,
       content: () => <ServiceNowConnectionTab />,
+    },
+    {
+      id:      cfgText.tabs.incidentConfig.id,
+      label:   cfgText.tabs.incidentConfig.label,
+      icon:    Columns,
+      content: () => <ServiceNowIncidentConfigTab />,
     },
     {
       id:      cfgText.tabs.sla.id,

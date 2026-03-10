@@ -24,13 +24,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ListFilter, Search, RefreshCw, ChevronLeft, ChevronRight,
-  WifiOff, ArrowRight, Loader2, AlertCircle, Database,
+  WifiOff, ArrowRight, Loader2, AlertCircle,
 } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
 // Module-local API URLs — no dependency on platform urls.json
 const snApi = {
   incidents: '/api/servicenow/incidents',
+  incidentConfig: '/api/servicenow/config/incidents',
 };
 import uiText from '../config/uiText.json';
 
@@ -77,8 +78,10 @@ export default function ServiceNowIncidents({ onNavigate }) {
   const [total,     setTotal]     = useState(0);
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState(null);
-  const [fromCache, setFromCache] = useState(false);
   const [notConfigured, setNotConfigured] = useState(false);
+  const [incidentConfig, setIncidentConfig] = useState(null);
+  const [sortField, setSortField] = useState('number');
+  const [sortOrder, setSortOrder] = useState('desc');
 
   // Filters
   const [search,   setSearch]   = useState('');
@@ -89,22 +92,34 @@ export default function ServiceNowIncidents({ onNavigate }) {
   const initRan   = useRef(false);
   const searchRef = useRef(null);
 
-  // ── Fetch incidents ─────────────────────────────────────────────────────
+  // ── Fetch incident config ─────────────────────────────────────────────
+  const fetchIncidentConfig = useCallback(async () => {
+    try {
+      const res = await ApiClient.get(snApi.incidentConfig);
+      if (res?.success) setIncidentConfig(res.data);
+    } catch { /* use defaults */ }
+  }, []);
+
+  // ── Fetch incidents (always live from SNOW) ────────────────────────────
   const fetchIncidents = useCallback(async (opts = {}) => {
     const {
       searchVal   = search,
       stateVal    = state,
       priorityVal = priority,
       pageVal     = page,
+      sort        = sortField,
+      order       = sortOrder,
     } = opts;
 
-    log.debug('fetchIncidents', 'Fetching', { state: stateVal, priority: priorityVal, page: pageVal, search: searchVal });
+    log.debug('fetchIncidents', 'Fetching', { state: stateVal, priority: priorityVal, page: pageVal, search: searchVal, sort, order });
     setLoading(true);
     setError(null);
 
     const params = new URLSearchParams({
       limit:  String(PAGE_SIZE),
       offset: String(pageVal * PAGE_SIZE),
+      sort,
+      order,
     });
     if (stateVal    !== 'all') params.set('state',    stateVal);
     if (priorityVal !== 'all') params.set('priority', priorityVal);
@@ -113,11 +128,32 @@ export default function ServiceNowIncidents({ onNavigate }) {
     try {
       const res = await ApiClient.get(`${snApi.incidents}?${params}`);
       if (res?.success) {
-        log.info('fetchIncidents', 'Loaded', { count: res.data.incidents.length, total: res.data.total });
-        setIncidents(res.data.incidents || []);
+        log.info('fetchIncidents', 'Incidents loaded', { count: res.data.incidents?.length, total: res.data.total });
+        
+        // Map ServiceNow fields to component properties and extract from {link, value} objects
+        const mappedIncidents = (res.data.incidents || []).map(inc => {
+          const getValue = (field) => typeof field === 'object' && field?.value ? field.value : field;
+          const mapped = {
+            id: getValue(inc.sys_id) || getValue(inc.number),
+            number: getValue(inc.number),
+            title: getValue(inc.short_description) || getValue(inc.title) || '—',
+            priority: getValue(inc.priority),
+            state: getValue(inc.state),
+            assignedTo: getValue(inc.assigned_to) || getValue(inc.assignedTo),
+            slaDue: getValue(inc.sla_due) || getValue(inc.slaDue),
+            createdAt: getValue(inc.opened_at) || getValue(inc.sys_created_on) || getValue(inc.createdAt),
+          };
+          // Also store raw values for dynamic column display
+          mapped._raw = {};
+          for (const key of Object.keys(inc)) {
+            mapped._raw[key] = getValue(inc[key]);
+          }
+          return mapped;
+        });
+        
+        setIncidents(mappedIncidents);
         setTotal(res.data.total || 0);
-        setFromCache(res.data.fromCache || false);
-        setNotConfigured(res.data.notConfigured || false);
+        setNotConfigured(false);
       } else {
         log.warn('fetchIncidents', 'Failed', { error: res?.error?.message });
         setError(res?.error?.message || uiText.common.fetchError);
@@ -128,15 +164,25 @@ export default function ServiceNowIncidents({ onNavigate }) {
     } finally {
       setLoading(false);
     }
-  }, [search, state, priority, page]);
+  }, [search, state, priority, page, sortField, sortOrder]);
 
   // StrictMode-safe initial load
   useEffect(() => {
     if (initRan.current) return;
     initRan.current = true;
     log.info('mount', 'ServiceNow Incidents mounted');
+    fetchIncidentConfig();
     fetchIncidents();
-  }, [fetchIncidents]);
+  }, [fetchIncidents, fetchIncidentConfig]);
+
+  // ── Column sort handler ─────────────────────────────────────────────────
+  const handleSort = useCallback((field) => {
+    const newOrder = sortField === field && sortOrder === 'desc' ? 'asc' : 'desc';
+    setSortField(field);
+    setSortOrder(newOrder);
+    setPage(0);
+    fetchIncidents({ sort: field, order: newOrder, pageVal: 0 });
+  }, [sortField, sortOrder, fetchIncidents]);
 
   // Debounced search — avoid hammering API on every keystroke
   useEffect(() => {
@@ -211,11 +257,6 @@ export default function ServiceNowIncidents({ onNavigate }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {fromCache && (
-            <span title={t.fromCacheTooltip} className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-600 border border-amber-200 flex items-center gap-1">
-              <Database size={10} />{t.fromCache}
-            </span>
-          )}
           <button
             onClick={() => fetchIncidents()}
             disabled={loading}
@@ -306,9 +347,23 @@ export default function ServiceNowIncidents({ onNavigate }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-surface-50 border-b border-surface-200">
-                  {[t.columns.number, t.columns.title, t.columns.priority, t.columns.state, t.columns.assignedTo, t.columns.slaDue, t.columns.createdAt].map(col => (
-                    <th key={col} className="text-left px-4 py-2.5 text-xs font-semibold text-surface-500 uppercase tracking-wide whitespace-nowrap">
-                      {col}
+                  {[
+                    { key: 'number', label: t.columns.number },
+                    { key: 'short_description', label: t.columns.title },
+                    { key: 'priority', label: t.columns.priority },
+                    { key: 'state', label: t.columns.state },
+                    { key: 'assigned_to', label: t.columns.assignedTo },
+                    { key: 'opened_at', label: t.columns.createdAt },
+                  ].map(col => (
+                    <th
+                      key={col.key}
+                      onClick={() => handleSort(col.key)}
+                      className="text-left px-4 py-2.5 text-xs font-semibold text-surface-500 uppercase tracking-wide whitespace-nowrap cursor-pointer hover:text-brand-600 select-none"
+                    >
+                      {col.label}
+                      {sortField === col.key && (
+                        <span className="ml-1 text-brand-500">{sortOrder === 'asc' ? '▲' : '▼'}</span>
+                      )}
                     </th>
                   ))}
                 </tr>
@@ -332,16 +387,8 @@ export default function ServiceNowIncidents({ onNavigate }) {
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-surface-500 text-xs whitespace-nowrap">{inc.assignedTo || uiText.common.na}</td>
-                    <td className="px-4 py-2.5 text-xs whitespace-nowrap">
-                      {inc.slaDue
-                        ? <span className={new Date(inc.slaDue) < new Date() && !['resolved','closed'].includes(inc.state) ? 'text-rose-600 font-semibold' : 'text-surface-500'}>
-                            {new Date(inc.slaDue).toLocaleDateString()}
-                          </span>
-                        : <span className="text-surface-300">{uiText.common.na}</span>
-                      }
-                    </td>
                     <td className="px-4 py-2.5 text-surface-400 text-xs whitespace-nowrap">
-                      {inc.createdAt ? new Date(inc.createdAt).toLocaleDateString() : uiText.common.na}
+                      {inc.createdAt ? new Date(inc.createdAt).toLocaleString() : uiText.common.na}
                     </td>
                   </tr>
                 ))}

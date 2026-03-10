@@ -32,15 +32,32 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import https from 'https';
 import http from 'http';
+import DatabaseService from '#core/database/databaseService.js';
+import { config as appConfig } from '#config';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const router = Router();
+const dbSchema = appConfig.db.schema || 'pulseops';
 
 // ── Config file paths ────────────────────────────────────────────────────────
 // Config files live alongside the API entry point in dist-modules/servicenow/api/config/
 const CONFIG_DIR = path.resolve(__dirname, 'config');
 const CONNECTION_CONFIG = path.join(CONFIG_DIR, 'servicenow_connection.json');
 const DEFAULTS_CONFIG = path.join(CONFIG_DIR, 'servicenow_defaults.json');
+
+// ── Database-related paths ───────────────────────────────────────────────────
+// Schema.json and DefaultData.json live in the module's database/ folder.
+// Resolve from dist-modules first (prod), then src/modules (dev).
+function resolveModuleDbFile(filename) {
+  const distPath = path.resolve(__dirname, '..', 'database', filename);
+  if (fs.existsSync(distPath)) return distPath;
+  // Dev fallback — walk up from dist-modules/servicenow/api → project root → src/modules/servicenow/database
+  const srcPath = path.resolve(__dirname, '..', '..', '..', 'src', 'modules', 'servicenow', 'database', filename);
+  if (fs.existsSync(srcPath)) return srcPath;
+  return null;
+}
+const SCHEMA_JSON_FILE = 'Schema.json';
+const DEFAULT_DATA_FILE = 'DefaultData.json';
 
 // ── Helper: read/write JSON config ──────────────────────────────────────────
 function readJsonFile(filePath) {
@@ -78,8 +95,41 @@ function loadDefaultsConfig() {
   return readJsonFile(DEFAULTS_CONFIG) || { sla: { critical: 4, high: 8, medium: 24, low: 72 }, sync: { enabled: false, intervalMinutes: 30, maxIncidents: 500, lastSync: null } };
 }
 
-// ── In-memory incident cache (survives between requests, cleared on disable) ─
-let _incidentCache = { data: null, fetchedAt: null };
+// ── Helper: load incident config from database ────────────────────────────
+async function loadIncidentConfig() {
+  try {
+    const result = await DatabaseService.query(
+      `SELECT * FROM ${dbSchema}.sn_incident_config WHERE id = 1`
+    );
+    if (result.rows.length > 0) {
+      const row = result.rows[0];
+      return {
+        selectedColumns: row.selected_columns || ['number','short_description','priority','state','assigned_to','opened_at'],
+        createdColumn: row.created_column || 'opened_at',
+        closedColumn: row.closed_column || 'closed_at',
+        assignmentGroup: row.assignment_group || '',
+      };
+    }
+  } catch { /* table may not exist yet */ }
+  return {
+    selectedColumns: ['number','short_description','priority','state','assigned_to','opened_at'],
+    createdColumn: 'opened_at',
+    closedColumn: 'closed_at',
+    assignmentGroup: '',
+  };
+}
+
+// ── Helper: build sysparm_query for assignment group filtering ──────────────
+function buildAssignmentGroupQuery(assignmentGroup) {
+  if (!assignmentGroup) return '';
+  return `assignment_group=${encodeURIComponent(assignmentGroup)}`;
+}
+
+// ── Helper: extract primitive value from SNOW {link,value} objects ──────────
+function snowVal(field) {
+  if (!field) return field;
+  return typeof field === 'object' && field?.value !== undefined ? field.value : field;
+}
 
 // ── Helper: make HTTPS request to ServiceNow Table API ──────────────────────
 function snowRequest(config, tablePath, query = '') {
@@ -286,7 +336,7 @@ router.post('/config/test', async (req, res) => {
   }
 });
 
-// ── GET /stats — Dashboard statistics ───────────────────────────────────────
+// ── GET /stats — Dashboard statistics (always fetches live from SNOW) ────────
 router.get('/stats', async (req, res) => {
   try {
     const conn = loadConnectionConfig();
@@ -296,51 +346,59 @@ router.get('/stats', async (req, res) => {
       return res.json({
         success: true,
         data: {
+          notConfigured: true,
           connectionStatus: 'not_configured',
-          totalIncidents: 0, openIncidents: 0, criticalIncidents: 0, slaBreaches: 0,
+          total: 0, open: 0, inProgress: 0, critical: 0, slaBreached: 0, resolvedToday: 0,
           lastSync: defaults.sync?.lastSync || null,
         },
       });
     }
 
-    // Use cached incidents if available and fresh (< intervalMinutes)
-    const cacheAge = _incidentCache.fetchedAt
-      ? (Date.now() - _incidentCache.fetchedAt) / 60000
-      : Infinity;
-    const cacheTtl = defaults.sync?.intervalMinutes || 30;
+    const incidentConfig = await loadIncidentConfig();
+    const agQuery = buildAssignmentGroupQuery(incidentConfig.assignmentGroup);
+    const queryParts = [`sysparm_limit=${defaults.sync?.maxIncidents || 500}`, 'sysparm_fields=number,short_description,priority,state,opened_at,resolved_at,closed_at,assigned_to'];
+    if (agQuery) queryParts.push(`sysparm_query=${agQuery}`);
 
-    let incidents = _incidentCache.data;
-    if (!incidents || cacheAge > cacheTtl) {
-      try {
-        const result = await snowRequest(conn, 'table/incident',
-          `sysparm_limit=${defaults.sync?.maxIncidents || 500}&sysparm_fields=number,short_description,priority,state,opened_at,resolved_at`
-        );
-        if (result.statusCode >= 200 && result.statusCode < 300 && result.data?.result) {
-          incidents = result.data.result;
-          _incidentCache = { data: incidents, fetchedAt: Date.now() };
-        }
-      } catch {
-        incidents = _incidentCache.data || [];
+    let incidents = [];
+    try {
+      const result = await snowRequest(conn, 'table/incident', queryParts.join('&'));
+      if (result.statusCode >= 200 && result.statusCode < 300 && result.data?.result) {
+        incidents = result.data.result;
       }
-    }
+    } catch { /* SNOW unreachable — return zeros */ }
 
-    if (!incidents) incidents = [];
+    // Load SLA thresholds from DB
+    let slaThresholds = {};
+    try {
+      const slaResult = await DatabaseService.query(`SELECT * FROM ${dbSchema}.sn_sla_config WHERE enabled = true`);
+      for (const row of slaResult.rows) {
+        slaThresholds[row.priority] = { responseMinutes: Number(row.response_minutes || 0), resolutionMinutes: Number(row.resolution_minutes || 0) };
+      }
+    } catch { /* use empty */ }
 
-    const slaThresholds = defaults.sla || { critical: 4, high: 8, medium: 24, low: 72 };
-    const openStates = ['1', '2', '3', '4', '5'];
+    const total = incidents.length;
+    const open = incidents.filter(i => String(snowVal(i.state)) === '1').length;
+    const inProgress = incidents.filter(i => ['2', '3'].includes(String(snowVal(i.state)))).length;
+    const critical = incidents.filter(i => String(snowVal(i.priority)) === '1' && !['6', '7', '8'].includes(String(snowVal(i.state)))).length;
 
-    const totalIncidents = incidents.length;
-    const openIncidents = incidents.filter(i => openStates.includes(String(i.priority || i.state))).length;
-    const criticalIncidents = incidents.filter(i => String(i.priority) === '1').length;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const resolvedToday = incidents.filter(i => {
+      if (!['6', '7'].includes(String(snowVal(i.state)))) return false;
+      const resolvedDate = snowVal(i.resolved_at) || snowVal(i.closed_at);
+      return resolvedDate && String(resolvedDate).slice(0, 10) === todayStr;
+    }).length;
 
-    // SLA breach calculation (simplified)
-    let slaBreaches = 0;
+    let slaBreached = 0;
     for (const inc of incidents) {
-      if (inc.opened_at && !inc.resolved_at) {
-        const openedHoursAgo = (Date.now() - new Date(inc.opened_at).getTime()) / 3600000;
-        const priority = String(inc.priority);
-        const threshold = slaThresholds[priority === '1' ? 'critical' : priority === '2' ? 'high' : priority === '3' ? 'medium' : 'low'];
-        if (openedHoursAgo > threshold) slaBreaches++;
+      const openedAt = snowVal(inc.opened_at);
+      const resolvedAt = snowVal(inc.resolved_at);
+      const st = String(snowVal(inc.state));
+      if (openedAt && !resolvedAt && !['6', '7', '8'].includes(st)) {
+        const openedMinutesAgo = (Date.now() - new Date(openedAt).getTime()) / 60000;
+        const p = String(snowVal(inc.priority));
+        const pKey = p === '1' ? '1 - Critical' : p === '2' ? '2 - High' : p === '3' ? '3 - Medium' : '4 - Low';
+        const threshold = slaThresholds[pKey]?.resolutionMinutes || (p === '1' ? 120 : p === '2' ? 360 : p === '3' ? 960 : 2400);
+        if (openedMinutesAgo > threshold) slaBreached++;
       }
     }
 
@@ -348,8 +406,8 @@ router.get('/stats', async (req, res) => {
       success: true,
       data: {
         connectionStatus: 'connected',
-        totalIncidents, openIncidents, criticalIncidents, slaBreaches,
-        lastSync: defaults.sync?.lastSync || _incidentCache.fetchedAt ? new Date(_incidentCache.fetchedAt).toISOString() : null,
+        total, open, inProgress, critical, slaBreached, resolvedToday,
+        lastSync: defaults.sync?.lastSync || null,
       },
     });
   } catch (err) {
@@ -357,7 +415,7 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-// ── GET /incidents — Paginated + filtered incident list ─────────────────────
+// ── GET /incidents — Paginated + filtered incident list (always live from SNOW)
 router.get('/incidents', async (req, res) => {
   try {
     const conn = loadConnectionConfig();
@@ -366,66 +424,60 @@ router.get('/incidents', async (req, res) => {
     if (!conn.isConfigured) {
       return res.json({
         success: true,
-        data: { incidents: [], total: 0, fromCache: false },
+        data: { incidents: [], total: 0 },
       });
     }
 
-    const { state, priority, search, limit = '50', offset = '0' } = req.query;
+    const { state, priority, search, limit = '50', offset = '0', sort = 'number', order = 'desc' } = req.query;
+    const incidentConfig = await loadIncidentConfig();
 
-    // Fetch or use cache
-    const cacheAge = _incidentCache.fetchedAt
-      ? (Date.now() - _incidentCache.fetchedAt) / 60000
-      : Infinity;
-    const cacheTtl = defaults.sync?.intervalMinutes || 30;
+    // Build sysparm_query
+    const queryParts = [];
+    const agQuery = buildAssignmentGroupQuery(incidentConfig.assignmentGroup);
+    if (agQuery) queryParts.push(agQuery);
+    if (state) queryParts.push(`state=${state}`);
+    if (priority) queryParts.push(`priority=${priority}`);
+    if (search) queryParts.push(`numberLIKE${search}^ORshort_descriptionLIKE${search}`);
 
-    let allIncidents = _incidentCache.data;
-    let fromCache = true;
+    // Sort — SNOW uses ORDERBYDESCfield or ORDERBYfield
+    const sortField = sort || 'number';
+    const sortOrder = order === 'asc' ? `ORDERBY${sortField}` : `ORDERBYDESC${sortField}`;
+    queryParts.push(sortOrder);
 
-    if (!allIncidents || cacheAge > cacheTtl) {
-      try {
-        const result = await snowRequest(conn, 'table/incident',
-          `sysparm_limit=${defaults.sync?.maxIncidents || 500}`
-        );
-        if (result.statusCode >= 200 && result.statusCode < 300 && result.data?.result) {
-          allIncidents = result.data.result;
-          _incidentCache = { data: allIncidents, fetchedAt: Date.now() };
-          fromCache = false;
-        }
-      } catch {
-        allIncidents = _incidentCache.data || [];
-      }
-    }
+    // Build fields list from incident config
+    const defaultFields = ['sys_id','number','short_description','priority','state','assigned_to','opened_at','resolved_at','closed_at','sys_created_on'];
+    const fields = [...new Set([...defaultFields, ...incidentConfig.selectedColumns, incidentConfig.createdColumn, incidentConfig.closedColumn])];
 
-    if (!allIncidents) allIncidents = [];
-
-    // Apply filters
-    let filtered = [...allIncidents];
-    if (state) filtered = filtered.filter(i => String(i.state) === state);
-    if (priority) filtered = filtered.filter(i => String(i.priority) === priority);
-    if (search) {
-      const q = search.toLowerCase();
-      filtered = filtered.filter(i =>
-        (i.number || '').toLowerCase().includes(q) ||
-        (i.short_description || '').toLowerCase().includes(q)
-      );
-    }
-
-    const total = filtered.length;
-    const pageOffset = parseInt(offset, 10) || 0;
     const pageLimit = parseInt(limit, 10) || 50;
-    const paged = filtered.slice(pageOffset, pageOffset + pageLimit);
+    const pageOffset = parseInt(offset, 10) || 0;
 
-    return res.json({
-      success: true,
-      data: { incidents: paged, total, fromCache },
-    });
+    const params = [
+      `sysparm_limit=${pageLimit}`,
+      `sysparm_offset=${pageOffset}`,
+      `sysparm_fields=${fields.join(',')}`,
+    ];
+    if (queryParts.length > 0) params.push(`sysparm_query=${queryParts.join('^')}`);
+
+    const result = await snowRequest(conn, 'table/incident', params.join('&'));
+
+    if (result.statusCode >= 200 && result.statusCode < 300 && result.data?.result) {
+      // Get total count from SNOW response header (X-Total-Count) — not available via our helper,
+      // so estimate from result length
+      const incidents = result.data.result;
+      return res.json({
+        success: true,
+        data: { incidents, total: incidents.length < pageLimit ? pageOffset + incidents.length : pageOffset + incidents.length + 1 },
+      });
+    }
+    return res.json({ success: true, data: { incidents: [], total: 0 } });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: `Incidents failed: ${err.message}` } });
   }
 });
 
-// ── POST /sync — Trigger manual sync ────────────────────────────────────────
+// ── POST /sync — Trigger manual sync with detailed summary ──────────────────
 router.post('/sync', async (req, res) => {
+  const startTime = Date.now();
   try {
     const conn = loadConnectionConfig();
     const defaults = loadDefaultsConfig();
@@ -437,29 +489,43 @@ router.post('/sync', async (req, res) => {
       });
     }
 
-    const result = await snowRequest(conn, 'table/incident',
-      `sysparm_limit=${defaults.sync?.maxIncidents || 500}`
+    const incidentConfig = await loadIncidentConfig();
+    const agQuery = buildAssignmentGroupQuery(incidentConfig.assignmentGroup);
+
+    // Fetch incidents from SNOW
+    const queryParts = ['ORDERBYDESCnumber'];
+    if (agQuery) queryParts.unshift(agQuery);
+    const incidentResult = await snowRequest(conn, 'table/incident',
+      `sysparm_limit=${defaults.sync?.maxIncidents || 500}&sysparm_query=${queryParts.join('^')}`
     );
 
-    if (result.statusCode >= 200 && result.statusCode < 300 && result.data?.result) {
-      _incidentCache = { data: result.data.result, fetchedAt: Date.now() };
+    const summary = { tables: [], totalFetched: 0, errors: [] };
 
-      // Update last sync time
-      defaults.sync = defaults.sync || {};
-      defaults.sync.lastSync = new Date().toISOString();
-      writeJsonFile(DEFAULTS_CONFIG, defaults);
-
-      return res.json({
-        success: true,
-        data: { count: result.data.result.length, syncedAt: defaults.sync.lastSync },
-        message: 'ServiceNow data synchronization completed successfully.',
-      });
+    if (incidentResult.statusCode >= 200 && incidentResult.statusCode < 300 && incidentResult.data?.result) {
+      summary.tables.push({ name: 'incident', recordsFetched: incidentResult.data.result.length });
+      summary.totalFetched += incidentResult.data.result.length;
     } else {
-      return res.status(502).json({
-        success: false,
-        error: { message: `ServiceNow returned HTTP ${result.statusCode}` },
-      });
+      summary.errors.push({ table: 'incident', status: incidentResult.statusCode, message: `HTTP ${incidentResult.statusCode}` });
     }
+
+    // Update last sync time
+    defaults.sync = defaults.sync || {};
+    defaults.sync.lastSync = new Date().toISOString();
+    writeJsonFile(DEFAULTS_CONFIG, defaults);
+
+    const durationMs = Date.now() - startTime;
+
+    return res.json({
+      success: summary.errors.length === 0,
+      data: {
+        summary,
+        syncedAt: defaults.sync.lastSync,
+        durationMs,
+      },
+      message: summary.errors.length === 0
+        ? `Sync completed successfully. Fetched ${summary.totalFetched} record(s) from ${summary.tables.length} table(s) in ${durationMs}ms.`
+        : `Sync completed with ${summary.errors.length} error(s).`,
+    });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: `Sync failed: ${err.message}` } });
   }
@@ -490,7 +556,6 @@ router.post('/incidents', async (req, res) => {
     });
     const result = await snowRequestWrite(conn, 'table/incident', 'POST', payload);
     if (result.statusCode >= 200 && result.statusCode < 300) {
-      _incidentCache = { data: null, fetchedAt: null };
       return res.json({ success: true, data: result.data?.result || result.data, message: 'Incident created successfully.' });
     }
     return res.status(result.statusCode || 502).json({ success: false, error: { message: `ServiceNow returned HTTP ${result.statusCode}` } });
@@ -515,7 +580,6 @@ router.put('/incidents/:id', async (req, res) => {
     if (comment !== undefined) payload.comments = comment;
     const result = await snowRequestWrite(conn, `table/incident/${id}`, 'PATCH', JSON.stringify(payload));
     if (result.statusCode >= 200 && result.statusCode < 300) {
-      _incidentCache = { data: null, fetchedAt: null };
       return res.json({ success: true, data: result.data?.result || result.data, message: 'Incident updated successfully.' });
     }
     return res.status(result.statusCode || 502).json({ success: false, error: { message: `ServiceNow returned HTTP ${result.statusCode}` } });
@@ -540,7 +604,6 @@ router.post('/incidents/:id/close', async (req, res) => {
     });
     const result = await snowRequestWrite(conn, `table/incident/${id}`, 'PATCH', payload);
     if (result.statusCode >= 200 && result.statusCode < 300) {
-      _incidentCache = { data: null, fetchedAt: null };
       return res.json({ success: true, data: result.data?.result || result.data, message: 'Incident closed successfully.' });
     }
     return res.status(result.statusCode || 502).json({ success: false, error: { message: `ServiceNow returned HTTP ${result.statusCode}` } });
@@ -657,22 +720,291 @@ router.post('/ritms/:id/close', async (req, res) => {
 // SLA CONFIG / BUSINESS HOURS / SETTINGS / DATA MANAGEMENT
 // ═════════════════════════════════════════════════════════════════════════════
 
-// ── GET/PUT /sla/config ──────────────────────────────────────────────────
-router.get('/sla/config', (req, res) => {
+// ═════════════════════════════════════════════════════════════════════════════
+// INCIDENT CONFIGURATION (DB-backed)
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ── GET /config/incidents — Read incident configuration ──────────────────
+router.get('/config/incidents', async (req, res) => {
   try {
-    const slaConfig = readJsonFile(path.join(CONFIG_DIR, 'servicenow_sla.json')) || [];
-    return res.json({ success: true, data: slaConfig });
+    const config = await loadIncidentConfig();
+    return res.json({ success: true, data: config });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { message: `Failed to load incident config: ${err.message}` } });
+  }
+});
+
+// ── PUT /config/incidents — Save incident configuration ──────────────────
+router.put('/config/incidents', async (req, res) => {
+  try {
+    const { selectedColumns, createdColumn, closedColumn, assignmentGroup } = req.body;
+    if (!selectedColumns || !Array.isArray(selectedColumns)) {
+      return res.status(400).json({ success: false, error: { message: 'selectedColumns must be an array.' } });
+    }
+    if (!selectedColumns.includes('number')) {
+      return res.status(400).json({ success: false, error: { message: 'Incident number column is mandatory.' } });
+    }
+
+    // Upsert into DB (id=1 is the singleton config row)
+    await DatabaseService.query(
+      `INSERT INTO ${dbSchema}.sn_incident_config (id, selected_columns, created_column, closed_column, assignment_group, updated_at)
+       VALUES (1, $1, $2, $3, $4, NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         selected_columns = $1, created_column = $2, closed_column = $3, assignment_group = $4, updated_at = NOW()`,
+      [JSON.stringify(selectedColumns), createdColumn || 'opened_at', closedColumn || 'closed_at', assignmentGroup || '']
+    );
+
+    return res.json({ success: true, message: 'Incident configuration saved successfully.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { message: `Failed to save incident config: ${err.message}` } });
+  }
+});
+
+// ── GET /schema/columns — Fetch available SNOW incident columns ──────────
+router.get('/schema/columns', async (req, res) => {
+  try {
+    const conn = loadConnectionConfig();
+    if (!conn.isConfigured) {
+      return res.status(400).json({ success: false, error: { message: 'ServiceNow connection is not configured.' } });
+    }
+
+    // Use SNOW Table API to get column metadata for incident table
+    const result = await snowRequest(conn, 'table/incident', 'sysparm_limit=1');
+    if (result.statusCode >= 200 && result.statusCode < 300 && result.data?.result) {
+      // Extract column names from the first record
+      const sampleRecord = result.data.result[0] || {};
+      const columns = Object.keys(sampleRecord).sort().map(col => ({
+        name: col,
+        label: col.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      }));
+      return res.json({ success: true, data: { columns } });
+    }
+    return res.status(502).json({ success: false, error: { message: `ServiceNow returned HTTP ${result.statusCode}` } });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { message: `Failed to fetch SNOW columns: ${err.message}` } });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SLA CONFIGURATION (DB-backed CRUD)
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ── GET /config/sla — List all SLA configurations ────────────────────────
+router.get('/config/sla', async (req, res) => {
+  try {
+    const result = await DatabaseService.query(
+      `SELECT * FROM ${dbSchema}.sn_sla_config ORDER BY id`
+    );
+    return res.json({ success: true, data: result.rows });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: `Failed to load SLA config: ${err.message}` } });
   }
 });
 
-router.put('/sla/config', (req, res) => {
+// ── POST /config/sla — Create a new SLA row ─────────────────────────────
+router.post('/config/sla', async (req, res) => {
   try {
-    writeJsonFile(path.join(CONFIG_DIR, 'servicenow_sla.json'), req.body);
-    return res.json({ success: true, message: 'SLA configuration saved successfully.' });
+    const { priority, responseMinutes, resolutionMinutes, enabled = true } = req.body;
+    if (!priority) {
+      return res.status(400).json({ success: false, error: { message: 'priority is required.' } });
+    }
+    const result = await DatabaseService.query(
+      `INSERT INTO ${dbSchema}.sn_sla_config (priority, response_minutes, resolution_minutes, enabled, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING *`,
+      [priority, Number(responseMinutes) || 60, Number(resolutionMinutes) || 480, Boolean(enabled)]
+    );
+    return res.json({ success: true, data: result.rows[0], message: 'SLA configuration created.' });
   } catch (err) {
-    return res.status(500).json({ success: false, error: { message: `Failed to save SLA config: ${err.message}` } });
+    if (err.code === '23505') {
+      return res.status(409).json({ success: false, error: { message: `SLA for priority "${req.body.priority}" already exists.` } });
+    }
+    return res.status(500).json({ success: false, error: { message: `Failed to create SLA config: ${err.message}` } });
+  }
+});
+
+// ── PUT /config/sla/:id — Update an SLA row ─────────────────────────────
+router.put('/config/sla/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { priority, responseMinutes, resolutionMinutes, enabled } = req.body;
+    const result = await DatabaseService.query(
+      `UPDATE ${dbSchema}.sn_sla_config
+       SET priority = COALESCE($2, priority),
+           response_minutes = COALESCE($3, response_minutes),
+           resolution_minutes = COALESCE($4, resolution_minutes),
+           enabled = COALESCE($5, enabled),
+           updated_at = NOW()
+       WHERE id = $1 RETURNING *`,
+      [id, priority, responseMinutes != null ? Number(responseMinutes) : null, resolutionMinutes != null ? Number(resolutionMinutes) : null, enabled != null ? Boolean(enabled) : null]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: { message: 'SLA config not found.' } });
+    }
+    return res.json({ success: true, data: result.rows[0], message: 'SLA configuration updated.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { message: `Failed to update SLA config: ${err.message}` } });
+  }
+});
+
+// ── DELETE /config/sla/:id — Delete an SLA row ──────────────────────────
+router.delete('/config/sla/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await DatabaseService.query(
+      `DELETE FROM ${dbSchema}.sn_sla_config WHERE id = $1 RETURNING *`,
+      [id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: { message: 'SLA config not found.' } });
+    }
+    return res.json({ success: true, message: 'SLA configuration deleted.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { message: `Failed to delete SLA config: ${err.message}` } });
+  }
+});
+
+// ── GET /reports/sla/incidents — Incident SLA report with time filter ────
+router.get('/reports/sla/incidents', async (req, res) => {
+  try {
+    const conn = loadConnectionConfig();
+    if (!conn.isConfigured) {
+      return res.status(400).json({ success: false, error: { message: 'ServiceNow connection is not configured.' } });
+    }
+
+    const { period = 'monthly' } = req.query; // daily, weekly, monthly
+    const incidentConfig = await loadIncidentConfig();
+
+    // Calculate date range based on period
+    const now = new Date();
+    let startDate;
+    if (period === 'daily') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().slice(0, 10);
+    } else if (period === 'weekly') {
+      const weekAgo = new Date(now);
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      startDate = weekAgo.toISOString().slice(0, 10);
+    } else {
+      const monthAgo = new Date(now);
+      monthAgo.setMonth(monthAgo.getMonth() - 1);
+      startDate = monthAgo.toISOString().slice(0, 10);
+    }
+
+    // Build SNOW query
+    const queryParts = [`${incidentConfig.createdColumn}>=${startDate}`, 'ORDERBYDESCnumber'];
+    const agQuery = buildAssignmentGroupQuery(incidentConfig.assignmentGroup);
+    if (agQuery) queryParts.unshift(agQuery);
+
+    const fields = ['sys_id','number','short_description','priority','state','assigned_to',
+      incidentConfig.createdColumn, incidentConfig.closedColumn, 'resolved_at'].filter(Boolean);
+
+    const result = await snowRequest(conn, 'table/incident',
+      `sysparm_limit=500&sysparm_fields=${[...new Set(fields)].join(',')}&sysparm_query=${queryParts.join('^')}`
+    );
+
+    let incidents = [];
+    if (result.statusCode >= 200 && result.statusCode < 300 && result.data?.result) {
+      incidents = result.data.result;
+    }
+
+    // Load SLA thresholds from DB
+    let slaThresholds = {};
+    try {
+      const slaResult = await DatabaseService.query(`SELECT * FROM ${dbSchema}.sn_sla_config WHERE enabled = true`);
+      for (const row of slaResult.rows) {
+        slaThresholds[row.priority] = { responseMinutes: Number(row.response_minutes), resolutionMinutes: Number(row.resolution_minutes) };
+      }
+    } catch { /* use empty */ }
+
+    // Load business hours config
+    let businessHours = null;
+    try {
+      businessHours = readJsonFile(path.join(CONFIG_DIR, 'servicenow_business_hours.json'));
+    } catch { /* ignore */ }
+
+    // Calculate SLA for each incident
+    const incidentSlaData = incidents.map(inc => {
+      const p = String(snowVal(inc.priority));
+      const pKey = p === '1' ? '1 - Critical' : p === '2' ? '2 - High' : p === '3' ? '3 - Medium' : '4 - Low';
+      const createdAt = snowVal(inc[incidentConfig.createdColumn]);
+      const closedAt = snowVal(inc[incidentConfig.closedColumn]) || snowVal(inc.resolved_at);
+      const threshold = slaThresholds[pKey] || { responseMinutes: 60, resolutionMinutes: 480 };
+
+      let resolutionMinutes = null;
+      let slaMet = null;
+      if (createdAt && closedAt) {
+        // Calculate resolution time considering business hours if configured
+        const created = new Date(createdAt);
+        const closed = new Date(closedAt);
+        resolutionMinutes = Math.round((closed - created) / 60000);
+
+        // Business hours calculation
+        if (businessHours && Array.isArray(businessHours) && businessHours.length > 0) {
+          let bizMinutes = 0;
+          const cursor = new Date(created);
+          while (cursor < closed) {
+            const dayOfWeek = cursor.getDay();
+            const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dayOfWeek];
+            const dayConfig = businessHours.find(d => d.day === dayName);
+            if (dayConfig?.isBusinessDay && dayConfig.startTime && dayConfig.endTime) {
+              const [sh, sm] = dayConfig.startTime.split(':').map(Number);
+              const [eh, em] = dayConfig.endTime.split(':').map(Number);
+              const dayStart = new Date(cursor); dayStart.setHours(sh, sm, 0, 0);
+              const dayEnd = new Date(cursor); dayEnd.setHours(eh, em, 0, 0);
+              const effectiveStart = cursor > dayStart ? cursor : dayStart;
+              const effectiveEnd = closed < dayEnd ? closed : dayEnd;
+              if (effectiveStart < effectiveEnd) {
+                bizMinutes += (effectiveEnd - effectiveStart) / 60000;
+              }
+            }
+            cursor.setDate(cursor.getDate() + 1);
+            cursor.setHours(0, 0, 0, 0);
+          }
+          resolutionMinutes = Math.round(bizMinutes);
+        }
+
+        slaMet = resolutionMinutes <= threshold.resolutionMinutes;
+      }
+
+      return {
+        number: snowVal(inc.number),
+        shortDescription: snowVal(inc.short_description),
+        priority: pKey,
+        state: snowVal(inc.state),
+        assignedTo: snowVal(inc.assigned_to),
+        createdAt,
+        closedAt,
+        resolutionMinutes,
+        targetMinutes: threshold.resolutionMinutes,
+        slaMet,
+      };
+    });
+
+    // Summary by priority
+    const summaryByPriority = {};
+    for (const inc of incidentSlaData) {
+      if (!summaryByPriority[inc.priority]) {
+        summaryByPriority[inc.priority] = { total: 0, met: 0, breached: 0, pending: 0, targetMinutes: inc.targetMinutes };
+      }
+      summaryByPriority[inc.priority].total++;
+      if (inc.slaMet === true) summaryByPriority[inc.priority].met++;
+      else if (inc.slaMet === false) summaryByPriority[inc.priority].breached++;
+      else summaryByPriority[inc.priority].pending++;
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        period,
+        startDate,
+        endDate: now.toISOString().slice(0, 10),
+        totalIncidents: incidents.length,
+        summaryByPriority,
+        incidents: incidentSlaData,
+        incidentConfig: { createdColumn: incidentConfig.createdColumn, closedColumn: incidentConfig.closedColumn },
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { message: `SLA report failed: ${err.message}` } });
   }
 });
 
@@ -770,69 +1102,402 @@ router.put('/sync/schedule', (req, res) => {
 });
 
 // ── GET /schema/info ─────────────────────────────────────────────────────
-router.get('/schema/info', (req, res) => {
+// Returns dynamic schema status by reading Schema.json and checking actual DB tables.
+// Includes table row counts and schema initialization date.
+router.get('/schema/info', async (req, res) => {
+  const startTime = Date.now();
+  const logContext = { endpoint: 'GET /schema/info', requestId: req.headers['x-request-id'] };
+  
   try {
-    return res.json({ success: true, data: { initialized: true, existing: ['servicenow_config'], missing: [] } });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: { message: `Schema info failed: ${err.message}` } });
-  }
-});
-
-// ── POST /data/demo — Load demo/default data ────────────────────────────
-router.post('/data/demo', (req, res) => {
-  try {
-    const slaPath = path.join(CONFIG_DIR, 'servicenow_sla.json');
-    if (!fs.existsSync(slaPath)) {
-      writeJsonFile(slaPath, [
-        { priority: '1 - Critical', recordType: 'incident', responseTimeMinutes: 15, resolutionTimeMinutes: 120 },
-        { priority: '2 - High', recordType: 'incident', responseTimeMinutes: 30, resolutionTimeMinutes: 360 },
-        { priority: '3 - Medium', recordType: 'incident', responseTimeMinutes: 120, resolutionTimeMinutes: 960 },
-        { priority: '4 - Low', recordType: 'incident', responseTimeMinutes: 480, resolutionTimeMinutes: 2400 },
-        { priority: '1 - Critical', recordType: 'ritm', responseTimeMinutes: 30, resolutionTimeMinutes: 240 },
-        { priority: '2 - High', recordType: 'ritm', responseTimeMinutes: 60, resolutionTimeMinutes: 960 },
-        { priority: '3 - Medium', recordType: 'ritm', responseTimeMinutes: 240, resolutionTimeMinutes: 2400 },
-        { priority: '4 - Low', recordType: 'ritm', responseTimeMinutes: 480, resolutionTimeMinutes: 4800 },
-      ]);
+    console.log('[ServiceNow API] Schema info request started', logContext);
+    
+    // 1. Read Schema.json to know what tables are expected
+    const schemaPath = resolveModuleDbFile(SCHEMA_JSON_FILE);
+    if (!schemaPath) {
+      return res.json({
+        success: true,
+        data: {
+          initialized: false,
+          hasSchema: false,
+          tables: [],
+          message: 'No Schema.json found for this module.',
+          checkedAt: new Date().toISOString(),
+        },
+      });
     }
-    const bhPath = path.join(CONFIG_DIR, 'servicenow_business_hours.json');
-    if (!fs.existsSync(bhPath)) {
-      writeJsonFile(bhPath, [
-        { dayOfWeek: 0, dayName: 'Sunday', isBusinessDay: false, startTime: '00:00', endTime: '00:00' },
-        { dayOfWeek: 1, dayName: 'Monday', isBusinessDay: true, startTime: '09:00', endTime: '17:00' },
-        { dayOfWeek: 2, dayName: 'Tuesday', isBusinessDay: true, startTime: '09:00', endTime: '17:00' },
-        { dayOfWeek: 3, dayName: 'Wednesday', isBusinessDay: true, startTime: '09:00', endTime: '17:00' },
-        { dayOfWeek: 4, dayName: 'Thursday', isBusinessDay: true, startTime: '09:00', endTime: '17:00' },
-        { dayOfWeek: 5, dayName: 'Friday', isBusinessDay: true, startTime: '09:00', endTime: '17:00' },
-        { dayOfWeek: 6, dayName: 'Saturday', isBusinessDay: false, startTime: '00:00', endTime: '00:00' },
-      ]);
-    }
-    return res.json({ success: true, data: { message: 'Default data loaded successfully.' } });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: { message: `Demo data load failed: ${err.message}` } });
-  }
-});
-
-// ── DELETE /data/reset — Hard reset all module data ──────────────────────
-router.delete('/data/reset', (req, res) => {
-  try {
-    const filesToDelete = [
-      'servicenow_sla.json', 'servicenow_business_hours.json',
-      'servicenow_settings.json', 'servicenow_connection.json', 'servicenow_defaults.json',
-    ];
-    const droppedTables = [];
-    for (const file of filesToDelete) {
-      const fp = path.join(CONFIG_DIR, file);
-      if (fs.existsSync(fp)) {
-        fs.unlinkSync(fp);
-        droppedTables.push({ name: file, status: 'dropped' });
-      } else {
-        droppedTables.push({ name: file, status: 'not_found' });
+    
+    const schemaDef = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
+    const tableDefs = schemaDef.tables || [];
+    
+    // 2. Check each table in the database: existence + row count
+    const tables = [];
+    let allExist = true;
+    
+    for (const tableDef of tableDefs) {
+      const tableName = tableDef.name;
+      let exists = false;
+      let rowCount = 0;
+      
+      try {
+        // Check if table exists in the schema
+        const existsResult = await DatabaseService.query(
+          `SELECT EXISTS (
+            SELECT 1 FROM information_schema.tables
+            WHERE table_schema = $1 AND table_name = $2
+          ) AS "exists"`,
+          [dbSchema, tableName]
+        );
+        exists = existsResult.rows[0]?.exists === true;
+        
+        if (exists) {
+          // Get row count
+          const countResult = await DatabaseService.query(
+            `SELECT COUNT(*) AS count FROM ${dbSchema}.${tableName}`
+          );
+          rowCount = parseInt(countResult.rows[0]?.count || '0', 10);
+        }
+      } catch (dbErr) {
+        console.warn('[ServiceNow API] Table check failed', { table: tableName, error: dbErr.message });
+        exists = false;
       }
+      
+      if (!exists) allExist = false;
+      
+      tables.push({
+        name: tableName,
+        description: tableDef.description || '',
+        exists,
+        rowCount,
+        columnCount: (tableDef.columns || []).length,
+        indexCount: (tableDef.indexes || []).length,
+      });
     }
-    _incidentCache = { data: null, fetchedAt: null };
-    return res.json({ success: true, data: { droppedTables, message: 'All ServiceNow module data deleted.' } });
+    
+    // 3. Get schema initialization date from system_modules
+    let schemaInitializedAt = null;
+    let schemaInitialized = false;
+    try {
+      const modResult = await DatabaseService.query(
+        `SELECT schema_initialized, updated_at FROM ${dbSchema}.system_modules WHERE module_id = $1`,
+        ['servicenow']
+      );
+      if (modResult.rows.length > 0) {
+        schemaInitialized = modResult.rows[0].schema_initialized === true;
+        if (schemaInitialized) {
+          schemaInitializedAt = modResult.rows[0].updated_at;
+        }
+      }
+    } catch { /* DB may not be available */ }
+    
+    // 4. Check for default data availability
+    const defaultDataPath = resolveModuleDbFile(DEFAULT_DATA_FILE);
+    const hasDefaultData = !!defaultDataPath;
+    
+    // 5. Check if default data is loaded (e.g., sn_sla_config has rows)
+    let defaultDataLoaded = false;
+    if (hasDefaultData && allExist) {
+      try {
+        const defaultDataDef = JSON.parse(fs.readFileSync(defaultDataPath, 'utf8'));
+        const seedTables = Object.keys(defaultDataDef).filter(k => k !== '_meta');
+        if (seedTables.length > 0) {
+          const firstTable = seedTables[0];
+          const checkResult = await DatabaseService.query(
+            `SELECT COUNT(*) AS count FROM ${dbSchema}.${firstTable}`
+          );
+          defaultDataLoaded = parseInt(checkResult.rows[0]?.count || '0', 10) > 0;
+        }
+      } catch { /* ignore */ }
+    }
+    
+    const initialized = schemaInitialized && allExist;
+    const duration = Date.now() - startTime;
+    
+    console.log('[ServiceNow API] Schema info retrieved', {
+      ...logContext,
+      initialized,
+      tableCount: tables.length,
+      allTablesExist: allExist,
+      duration,
+    });
+    
+    return res.json({
+      success: true,
+      data: {
+        initialized,
+        schemaInitialized,
+        schemaInitializedAt,
+        hasSchema: true,
+        moduleId: schemaDef._meta?.moduleId || 'servicenow',
+        schemaVersion: schemaDef._meta?.version || '1.0.0',
+        tables,
+        hasDefaultData,
+        defaultDataLoaded,
+        checkedAt: new Date().toISOString(),
+      },
+    });
   } catch (err) {
-    return res.status(500).json({ success: false, error: { message: `Hard reset failed: ${err.message}` } });
+    const duration = Date.now() - startTime;
+    console.error('[ServiceNow API] Schema info failed', {
+      ...logContext,
+      error: err.message,
+      stack: err.stack,
+      duration,
+    });
+    return res.status(500).json({
+      success: false,
+      error: { message: `Schema info failed: ${err.message}` },
+    });
+  }
+});
+
+// ── POST /data/defaults — Load default data into database tables ─────────
+// Reads database/DefaultData.json and inserts seed rows into the corresponding
+// tables defined in Schema.json. Uses ON CONFLICT DO NOTHING to be idempotent.
+router.post('/data/defaults', async (req, res) => {
+  const startTime = Date.now();
+  const logContext = { endpoint: 'POST /data/defaults', requestId: req.headers['x-request-id'] };
+  
+  try {
+    console.log('[ServiceNow API] Default data load started', logContext);
+    
+    // 1. Locate DefaultData.json
+    const defaultDataPath = resolveModuleDbFile(DEFAULT_DATA_FILE);
+    if (!defaultDataPath) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'DefaultData.json not found for this module.' },
+      });
+    }
+    
+    const defaultDataDef = JSON.parse(fs.readFileSync(defaultDataPath, 'utf8'));
+    const seedEntries = Object.entries(defaultDataDef).filter(([k]) => k !== '_meta');
+    
+    if (seedEntries.length === 0) {
+      return res.json({
+        success: true,
+        data: { message: 'DefaultData.json has no seed data entries.', tablesSeeded: 0, rowsInserted: 0 },
+      });
+    }
+    
+    // 2. Insert seed data in a transaction
+    const client = await DatabaseService.getPool().connect();
+    const tablesSeeded = [];
+    let totalRowsInserted = 0;
+    
+    try {
+      await client.query('BEGIN');
+      
+      for (const [tableName, rows] of seedEntries) {
+        if (!Array.isArray(rows) || rows.length === 0) continue;
+        
+        let tableRowsInserted = 0;
+        let tableRowsSkipped = 0;
+        
+        for (const row of rows) {
+          const cols = Object.keys(row);
+          const vals = Object.values(row);
+          const placeholders = cols.map((_, i) => `$${i + 1}`);
+          const insertSQL = `INSERT INTO ${dbSchema}.${tableName} (${cols.join(', ')}) VALUES (${placeholders.join(', ')}) ON CONFLICT DO NOTHING`;
+          const result = await client.query(insertSQL, vals);
+          if (result.rowCount > 0) {
+            tableRowsInserted += result.rowCount;
+          } else {
+            tableRowsSkipped++;
+          }
+        }
+        
+        totalRowsInserted += tableRowsInserted;
+        tablesSeeded.push({
+          table: tableName,
+          rowsInserted: tableRowsInserted,
+          rowsSkipped: tableRowsSkipped,
+          totalRows: rows.length,
+        });
+        
+        console.log('[ServiceNow API] Seeded table', {
+          ...logContext,
+          table: tableName,
+          inserted: tableRowsInserted,
+          skipped: tableRowsSkipped,
+        });
+      }
+      
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+    
+    const duration = Date.now() - startTime;
+    
+    console.log('[ServiceNow API] Default data load completed', {
+      ...logContext,
+      tablesSeeded: tablesSeeded.length,
+      totalRowsInserted,
+      duration,
+    });
+    
+    return res.json({
+      success: true,
+      data: {
+        message: `Default data loaded successfully. Seeded ${tablesSeeded.length} table(s), inserted ${totalRowsInserted} row(s).`,
+        tablesSeeded,
+        totalRowsInserted,
+        completedAt: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    const duration = Date.now() - startTime;
+    console.error('[ServiceNow API] Default data load failed', {
+      ...logContext,
+      error: err.message,
+      stack: err.stack,
+      duration,
+    });
+    return res.status(500).json({
+      success: false,
+      error: { message: `Default data load failed: ${err.message}` },
+    });
+  }
+});
+
+// ── POST /data/demo — Backward-compatible alias for /data/defaults ───────
+router.post('/data/demo', async (req, res) => {
+  // Forward to /data/defaults handler
+  req.url = '/data/defaults';
+  router.handle(req, res);
+});
+
+// ── DELETE /data/reset — Delete Module Data (Tables and Objects) ──────────
+// Dynamically reads Schema.json and drops ALL database tables + indexes defined
+// in it. Also clears in-memory caches. This is irreversible.
+router.delete('/data/reset', async (req, res) => {
+  const startTime = Date.now();
+  const logContext = { endpoint: 'DELETE /data/reset', requestId: req.headers['x-request-id'] };
+  
+  try {
+    console.log('[ServiceNow API] Delete module data started', logContext);
+    console.warn('[ServiceNow API] ⚠️  DANGER ZONE: Dropping all module database objects', logContext);
+    
+    // 1. Read Schema.json to know what tables to drop
+    const schemaPath = resolveModuleDbFile(SCHEMA_JSON_FILE);
+    if (!schemaPath) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Schema.json not found — no database objects to delete.' },
+      });
+    }
+    
+    const schemaDef = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
+    const tableDefs = schemaDef.tables || [];
+    
+    if (tableDefs.length === 0) {
+      return res.json({
+        success: true,
+        data: { message: 'Schema.json has no table definitions.', tablesDropped: 0 },
+      });
+    }
+    
+    // 2. Drop tables in a transaction (reverse order for FK dependencies)
+    const client = await DatabaseService.getPool().connect();
+    const droppedTables = [];
+    const skippedTables = [];
+    const errors = [];
+    
+    try {
+      await client.query('BEGIN');
+      
+      for (let i = tableDefs.length - 1; i >= 0; i--) {
+        const tableName = tableDefs[i].name;
+        try {
+          // Check if table exists first
+          const existsResult = await client.query(
+            `SELECT EXISTS (
+              SELECT 1 FROM information_schema.tables
+              WHERE table_schema = $1 AND table_name = $2
+            ) AS "exists"`,
+            [dbSchema, tableName]
+          );
+          
+          if (existsResult.rows[0]?.exists) {
+            // Get row count before dropping
+            const countResult = await client.query(`SELECT COUNT(*) AS count FROM ${dbSchema}.${tableName}`);
+            const rowCount = parseInt(countResult.rows[0]?.count || '0', 10);
+            
+            await client.query(`DROP TABLE IF EXISTS ${dbSchema}.${tableName} CASCADE`);
+            droppedTables.push({
+              name: tableName,
+              description: tableDefs[i].description || '',
+              rowsDeleted: rowCount,
+              status: 'dropped',
+            });
+            console.log('[ServiceNow API] Dropped table', { ...logContext, table: tableName, rows: rowCount });
+          } else {
+            skippedTables.push({ name: tableName, status: 'not_found' });
+            console.log('[ServiceNow API] Table not found (skip)', { ...logContext, table: tableName });
+          }
+        } catch (tableErr) {
+          errors.push({ name: tableName, status: 'error', error: tableErr.message });
+          console.error('[ServiceNow API] Failed to drop table', { ...logContext, table: tableName, error: tableErr.message });
+        }
+      }
+      
+      // 3. Reset schema_initialized flag in system_modules
+      try {
+        await client.query(
+          `UPDATE ${dbSchema}.system_modules SET schema_initialized = false, updated_at = NOW() WHERE module_id = $1`,
+          ['servicenow']
+        );
+      } catch { /* DB flag reset is best-effort */ }
+      
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+    
+    // 4. Caches cleared (no in-memory caching used)
+    console.log('[ServiceNow API] Data reset complete', logContext);
+    
+    const duration = Date.now() - startTime;
+    const totalRowsDeleted = droppedTables.reduce((sum, t) => sum + t.rowsDeleted, 0);
+    
+    console.log('[ServiceNow API] Delete module data completed', {
+      ...logContext,
+      tablesDropped: droppedTables.length,
+      tablesSkipped: skippedTables.length,
+      totalRowsDeleted,
+      errors: errors.length,
+      duration,
+    });
+    
+    return res.json({
+      success: true,
+      data: {
+        message: `Module data deleted. Dropped ${droppedTables.length} table(s) (${totalRowsDeleted} row(s)), ${skippedTables.length} not found, ${errors.length} error(s).`,
+        droppedTables,
+        skippedTables,
+        errors,
+        totalRowsDeleted,
+        completedAt: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    const duration = Date.now() - startTime;
+    console.error('[ServiceNow API] Delete module data failed', {
+      ...logContext,
+      error: err.message,
+      stack: err.stack,
+      duration,
+    });
+    return res.status(500).json({
+      success: false,
+      error: { message: `Delete module data failed: ${err.message}` },
+    });
   }
 });
 
@@ -840,32 +1505,48 @@ router.delete('/data/reset', (req, res) => {
 // DETAILED REPORTS
 // ═════════════════════════════════════════════════════════════════════════════
 
-// ── GET /reports/incidents — Incident report ─────────────────────────────
+// ── GET /reports/incidents — Incident report (live from SNOW) ─────────────
 router.get('/reports/incidents', async (req, res) => {
   try {
-    const incidents = _incidentCache.data || [];
+    const conn = loadConnectionConfig();
+    if (!conn.isConfigured) return res.json({ success: true, data: { totalCount: 0, incidents: [] } });
+
+    const incidentConfig = await loadIncidentConfig();
+    const agQuery = buildAssignmentGroupQuery(incidentConfig.assignmentGroup);
     const { startDate, endDate } = req.query;
-    let filtered = [...incidents];
-    if (startDate) filtered = filtered.filter(i => i.opened_at >= startDate);
-    if (endDate) filtered = filtered.filter(i => i.opened_at <= endDate);
+
+    const queryParts = [];
+    if (agQuery) queryParts.push(agQuery);
+    if (startDate) queryParts.push(`opened_at>=${startDate}`);
+    if (endDate) queryParts.push(`opened_at<=${endDate}`);
+    queryParts.push('ORDERBYDESCnumber');
+
+    const result = await snowRequest(conn, 'table/incident',
+      `sysparm_limit=200&sysparm_fields=number,short_description,priority,state,category,assignment_group,opened_at,resolved_at&sysparm_query=${queryParts.join('^')}`
+    );
+
+    let incidents = [];
+    if (result.statusCode >= 200 && result.statusCode < 300 && result.data?.result) {
+      incidents = result.data.result;
+    }
+
     const byPriority = {}, byState = {}, byCategory = {};
-    const closed = filtered.filter(i => ['6', '7'].includes(String(i.state)));
-    for (const inc of filtered) {
-      byPriority[String(inc.priority || '4')] = (byPriority[String(inc.priority || '4')] || 0) + 1;
-      byState[String(inc.state || 'unknown')] = (byState[String(inc.state || 'unknown')] || 0) + 1;
-      byCategory[inc.category || 'General'] = (byCategory[inc.category || 'General'] || 0) + 1;
+    const closed = incidents.filter(i => ['6', '7'].includes(String(snowVal(i.state))));
+    for (const inc of incidents) {
+      byPriority[String(snowVal(inc.priority) || '4')] = (byPriority[String(snowVal(inc.priority) || '4')] || 0) + 1;
+      byState[String(snowVal(inc.state) || 'unknown')] = (byState[String(snowVal(inc.state) || 'unknown')] || 0) + 1;
+      byCategory[snowVal(inc.category) || 'General'] = (byCategory[snowVal(inc.category) || 'General'] || 0) + 1;
     }
     return res.json({
       success: true,
       data: {
-        totalCount: filtered.length, totalClosed: closed.length,
+        totalCount: incidents.length, totalClosed: closed.length,
         reportingPeriod: { start: startDate || null, end: endDate || null },
         byPriority, byState, byCategory,
-        averageResponseTime: null, averageResolutionTime: null,
-        incidents: filtered.slice(0, 100).map(i => ({
-          number: i.number, shortDescription: i.short_description, priority: i.priority,
-          state: i.state, category: i.category, assignmentGroup: i.assignment_group,
-          openedAt: i.opened_at, responseTime: null, resolutionTime: null,
+        incidents: incidents.slice(0, 100).map(i => ({
+          number: snowVal(i.number), shortDescription: snowVal(i.short_description), priority: snowVal(i.priority),
+          state: snowVal(i.state), category: snowVal(i.category), assignmentGroup: snowVal(i.assignment_group),
+          openedAt: snowVal(i.opened_at),
         })),
       },
     });
@@ -912,33 +1593,60 @@ router.get('/reports/ritms', async (req, res) => {
   }
 });
 
-// ── GET /reports/sla — SLA compliance report ─────────────────────────────
-router.get('/reports/sla', (req, res) => {
+// ── GET /reports/sla — SLA compliance report (live from SNOW + DB SLA config)
+router.get('/reports/sla', async (req, res) => {
   try {
-    const defaults = loadDefaultsConfig();
-    const slaConfig = readJsonFile(path.join(CONFIG_DIR, 'servicenow_sla.json')) || [];
-    const incidents = _incidentCache.data || [];
-    const slaThresholds = defaults.sla || { critical: 4, high: 8, medium: 24, low: 72 };
-    if (slaConfig.length === 0) {
-      return res.json({ success: true, data: { message: 'No SLA configuration found. Configure SLA thresholds first.' } });
+    const conn = loadConnectionConfig();
+    if (!conn.isConfigured) return res.json({ success: true, data: { incidentSla: { byPriority: {} }, ritmSla: { byPriority: {} } } });
+
+    const incidentConfig = await loadIncidentConfig();
+    const agQuery = buildAssignmentGroupQuery(incidentConfig.assignmentGroup);
+    const queryParts = [];
+    if (agQuery) queryParts.push(agQuery);
+    queryParts.push('ORDERBYDESCnumber');
+
+    const result = await snowRequest(conn, 'table/incident',
+      `sysparm_limit=500&sysparm_fields=number,priority,state,opened_at,resolved_at,closed_at&sysparm_query=${queryParts.join('^')}`
+    );
+    let incidents = [];
+    if (result.statusCode >= 200 && result.statusCode < 300 && result.data?.result) {
+      incidents = result.data.result;
     }
+
+    // Load SLA thresholds from DB
+    let slaThresholds = {};
+    try {
+      const slaResult = await DatabaseService.query(`SELECT * FROM ${dbSchema}.sn_sla_config WHERE enabled = true`);
+      for (const row of slaResult.rows) {
+        slaThresholds[row.priority] = { responseMinutes: Number(row.response_minutes), resolutionMinutes: Number(row.resolution_minutes) };
+      }
+    } catch { /* empty */ }
+
     const incidentSlaByPriority = {};
     for (const inc of incidents) {
-      const p = String(inc.priority || '4');
+      const p = String(snowVal(inc.priority) || '4');
       const pLabel = p === '1' ? '1 - Critical' : p === '2' ? '2 - High' : p === '3' ? '3 - Medium' : '4 - Low';
       if (!incidentSlaByPriority[pLabel]) {
-        const cfg = slaConfig.find(s => s.priority === pLabel && s.recordType === 'incident');
+        const threshold = slaThresholds[pLabel] || { responseMinutes: 60, resolutionMinutes: 480 };
         incidentSlaByPriority[pLabel] = {
-          responseTarget: cfg?.responseTimeMinutes || null,
-          resolutionTarget: cfg?.resolutionTimeMinutes || null,
+          responseTarget: threshold.responseMinutes,
+          resolutionTarget: threshold.resolutionMinutes,
           responseMet: 0, responseBreached: 0, resolutionMet: 0, resolutionBreached: 0,
         };
       }
-      if (inc.opened_at) {
-        const hours = (Date.now() - new Date(inc.opened_at).getTime()) / 3600000;
-        const threshold = slaThresholds[p === '1' ? 'critical' : p === '2' ? 'high' : p === '3' ? 'medium' : 'low'];
-        if (hours <= threshold) incidentSlaByPriority[pLabel].resolutionMet++;
-        else incidentSlaByPriority[pLabel].resolutionBreached++;
+      const openedAt = snowVal(inc.opened_at);
+      const resolvedAt = snowVal(inc.resolved_at) || snowVal(inc.closed_at);
+      if (openedAt) {
+        const threshold = slaThresholds[pLabel] || { resolutionMinutes: 480 };
+        if (resolvedAt) {
+          const resolutionMinutes = (new Date(resolvedAt) - new Date(openedAt)) / 60000;
+          if (resolutionMinutes <= threshold.resolutionMinutes) incidentSlaByPriority[pLabel].resolutionMet++;
+          else incidentSlaByPriority[pLabel].resolutionBreached++;
+        } else if (!['6', '7', '8'].includes(String(snowVal(inc.state)))) {
+          const openMinutes = (Date.now() - new Date(openedAt).getTime()) / 60000;
+          if (openMinutes > threshold.resolutionMinutes) incidentSlaByPriority[pLabel].resolutionBreached++;
+          else incidentSlaByPriority[pLabel].resolutionMet++;
+        }
       }
     }
     for (const val of Object.values(incidentSlaByPriority)) {
@@ -953,7 +1661,6 @@ router.get('/reports/sla', (req, res) => {
       data: {
         incidentSla: { byPriority: incidentSlaByPriority },
         ritmSla: { byPriority: {} },
-        reportingPeriod: { start: null, end: null },
       },
     });
   } catch (err) {
@@ -961,29 +1668,71 @@ router.get('/reports/sla', (req, res) => {
   }
 });
 
-// ── GET /reports — SLA compliance + volume analytics ────────────────────────
-router.get('/reports', (req, res) => {
+// ── GET /reports — SLA compliance + volume analytics (live from SNOW) ────────
+router.get('/reports', async (req, res) => {
   try {
+    const conn = loadConnectionConfig();
     const defaults = loadDefaultsConfig();
-    const incidents = _incidentCache.data || [];
-    const slaThresholds = defaults.sla || { critical: 4, high: 8, medium: 24, low: 72 };
+
+    if (!conn.isConfigured) {
+      return res.json({ success: true, data: { notConfigured: true, totalIncidents: 0, slaCompliance: 100, lastSync: defaults.sync?.lastSync || null } });
+    }
+
+    const incidentConfig = await loadIncidentConfig();
+    const agQuery = buildAssignmentGroupQuery(incidentConfig.assignmentGroup);
+    const queryParts = [];
+    if (agQuery) queryParts.push(agQuery);
+    queryParts.push('ORDERBYDESCnumber');
+
+    const result = await snowRequest(conn, 'table/incident',
+      `sysparm_limit=500&sysparm_fields=number,priority,state,opened_at,resolved_at,closed_at&sysparm_query=${queryParts.join('^')}`
+    );
+
+    let incidents = [];
+    if (result.statusCode >= 200 && result.statusCode < 300 && result.data?.result) {
+      incidents = result.data.result;
+    }
+
+    // Load SLA thresholds from DB
+    let slaThresholds = {};
+    try {
+      const slaResult = await DatabaseService.query(`SELECT * FROM ${dbSchema}.sn_sla_config WHERE enabled = true`);
+      for (const row of slaResult.rows) {
+        slaThresholds[row.priority] = { resolutionMinutes: Number(row.resolution_minutes) };
+      }
+    } catch { /* empty */ }
 
     const totalIncidents = incidents.length;
     let slaBreaches = 0;
-    const byPriority = { '1': 0, '2': 0, '3': 0, '4': 0 };
+    const priorityCounts = { critical: 0, high: 0, medium: 0, low: 0 };
     const byState = {};
+    let totalResolved = 0;
+    const resolutionByPriority = {};
 
     for (const inc of incidents) {
-      const p = String(inc.priority || '4');
-      byPriority[p] = (byPriority[p] || 0) + 1;
+      const p = String(snowVal(inc.priority) || '4');
+      const pKey = p === '1' ? 'critical' : p === '2' ? 'high' : p === '3' ? 'medium' : 'low';
+      priorityCounts[pKey] = (priorityCounts[pKey] || 0) + 1;
 
-      const s = String(inc.state || 'unknown');
+      const s = String(snowVal(inc.state) || 'unknown');
       byState[s] = (byState[s] || 0) + 1;
 
-      if (inc.opened_at && !inc.resolved_at) {
-        const hours = (Date.now() - new Date(inc.opened_at).getTime()) / 3600000;
-        const threshold = slaThresholds[p === '1' ? 'critical' : p === '2' ? 'high' : p === '3' ? 'medium' : 'low'];
-        if (hours > threshold) slaBreaches++;
+      if (['6', '7'].includes(s)) totalResolved++;
+
+      const openedAt = snowVal(inc.opened_at);
+      const resolvedAt = snowVal(inc.resolved_at) || snowVal(inc.closed_at);
+      const pLabel = p === '1' ? '1 - Critical' : p === '2' ? '2 - High' : p === '3' ? '3 - Medium' : '4 - Low';
+      const threshold = slaThresholds[pLabel]?.resolutionMinutes || (p === '1' ? 120 : p === '2' ? 360 : p === '3' ? 960 : 2400);
+
+      if (openedAt && resolvedAt) {
+        const resHours = Math.round((new Date(resolvedAt) - new Date(openedAt)) / 3600000 * 10) / 10;
+        if (!resolutionByPriority[pKey]) resolutionByPriority[pKey] = { total: 0, count: 0 };
+        resolutionByPriority[pKey].total += resHours;
+        resolutionByPriority[pKey].count++;
+        if ((resHours * 60) > threshold) slaBreaches++;
+      } else if (openedAt && !['6', '7', '8'].includes(s)) {
+        const openMinutes = (Date.now() - new Date(openedAt).getTime()) / 60000;
+        if (openMinutes > threshold) slaBreaches++;
       }
     }
 
@@ -991,14 +1740,31 @@ router.get('/reports', (req, res) => {
       ? Math.round(((totalIncidents - slaBreaches) / totalIncidents) * 100)
       : 100;
 
+    // Compute avg resolution hours per priority
+    const avgResolution = {};
+    for (const [k, v] of Object.entries(resolutionByPriority)) {
+      avgResolution[k] = v.count > 0 ? Math.round((v.total / v.count) * 10) / 10 : null;
+    }
+
+    // SLA threshold hours for display
+    const slaThresholdHours = {};
+    for (const [label, cfg] of Object.entries(slaThresholds)) {
+      const key = label.startsWith('1') ? 'critical' : label.startsWith('2') ? 'high' : label.startsWith('3') ? 'medium' : 'low';
+      slaThresholdHours[key] = Math.round(cfg.resolutionMinutes / 60 * 10) / 10;
+    }
+
     return res.json({
       success: true,
       data: {
         totalIncidents,
+        totalResolved,
         slaCompliance,
         slaBreaches,
-        byPriority,
+        priorityCounts,
         byState,
+        resolutionByPriority: avgResolution,
+        slaThresholds: slaThresholdHours,
+        lastSync: defaults.sync?.lastSync || null,
       },
     });
   } catch (err) {
@@ -1045,8 +1811,7 @@ export async function onEnable() {
  * Called when the module is disabled. Cleanup resources.
  */
 export async function onDisable() {
-  // Clear in-memory cache
-  _incidentCache = { data: null, fetchedAt: null };
+  // No caching to clear — all data fetched live from SNOW API
 }
 
 export { router };

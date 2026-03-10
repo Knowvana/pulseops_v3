@@ -402,6 +402,39 @@ router.post('/:id/disable', authenticate, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// POST /modules/:id/reload — Force unload + reload of module API routes
+// Useful for development: pick up changes to dist-modules without restart
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/:id/reload', authenticate, async (req, res) => {
+  const requestId = req.requestId;
+  const { id } = req.params;
+  logger.info(`[${requestId}] Modules:POST /${id}/reload — user ${req.user?.userId}`);
+
+  try {
+    // Unload current routes
+    const unloadResult = await unloadModuleRoutes(id);
+    logger.info(`[${requestId}] Modules:POST /${id}/reload — unload: ${unloadResult.message}`);
+
+    // Re-load from disk (cache-busted via ?t=Date.now())
+    const app = getApp(req);
+    const loadResult = await loadModuleRoutes(app, id);
+    logger.info(`[${requestId}] Modules:POST /${id}/reload — reload: ${loadResult.message}`);
+
+    return res.json({
+      success: true,
+      data: { id, reloaded: loadResult.success },
+      message: `Module '${id}' reloaded. ${loadResult.message}`,
+    });
+  } catch (err) {
+    logger.error(`[${requestId}] Modules:POST /${id}/reload — failed`, { error: err.message });
+    return res.status(500).json({
+      success: false,
+      error: { message: `Module reload failed: ${err.message}`, requestId },
+    });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // DELETE /modules/:id — Remove a module from DB entirely
 // ─────────────────────────────────────────────────────────────────────────────
 router.delete('/:id', authenticate, async (req, res) => {

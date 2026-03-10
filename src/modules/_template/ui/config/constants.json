@@ -13,7 +13,11 @@
     "features": [
       "Placeholder dashboard view",
       "Placeholder reports view",
-      "Placeholder configuration tab"
+      "General configuration tab",
+      "Data Management tab (DB tables, default data, delete module data)",
+      "Component Showcase (all reusable components)",
+      "Database schema provisioning via Schema.json",
+      "Default data seeding via DefaultData.json"
     ],
     "author": "PulseOps Team",
     "license": "Proprietary",

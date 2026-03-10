@@ -446,6 +446,529 @@
           "404": { "description": "Key not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
         }
       }
+    },
+    "/modules/{id}/enable": {
+      "post": {
+        "tags": ["Modules"],
+        "operationId": "enableModule",
+        "summary": "Enable a module",
+        "description": "Enables an installed module and dynamically loads its API routes at runtime. Zero downtime — no server restart required.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "example": "servicenow" }
+        ],
+        "responses": {
+          "200": { "description": "Module enabled and API routes loaded.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } },
+          "400": { "description": "Module not installed or is a core module.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/modules/{id}/disable": {
+      "post": {
+        "tags": ["Modules"],
+        "operationId": "disableModule",
+        "summary": "Disable a module",
+        "description": "Disables a module and unloads its API routes from the gateway. Requests to module routes will immediately 404.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "example": "servicenow" }
+        ],
+        "responses": {
+          "200": { "description": "Module disabled and routes unloaded.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } },
+          "400": { "description": "Core module cannot be disabled.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/modules/{id}/reload": {
+      "post": {
+        "tags": ["Modules"],
+        "operationId": "reloadModule",
+        "summary": "Reload a module's API routes",
+        "description": "Force unloads and reloads a module's API routes from dist-modules/. Useful for development to pick up changes without restarting the server. Cache-busted via query string.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "example": "servicenow" }
+        ],
+        "responses": {
+          "200": { "description": "Module reloaded successfully.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } },
+          "500": { "description": "Reload failed.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/servicenow/config": {
+      "get": {
+        "tags": ["ServiceNow"],
+        "operationId": "snGetConfig",
+        "summary": "Get ServiceNow configuration",
+        "description": "Returns connection config (password redacted), SLA thresholds, and sync settings.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "ServiceNow configuration.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      },
+      "put": {
+        "tags": ["ServiceNow"],
+        "operationId": "snUpdateConfig",
+        "summary": "Save ServiceNow configuration",
+        "description": "Saves connection settings, SLA thresholds, and sync schedule. Password placeholder '••••••••' preserves stored password.",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object" } } }
+        },
+        "responses": {
+          "200": { "description": "Configuration saved.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      }
+    },
+    "/servicenow/config/test": {
+      "post": {
+        "tags": ["ServiceNow"],
+        "operationId": "snTestConnection",
+        "summary": "Test ServiceNow connection",
+        "description": "Tests connectivity to a ServiceNow instance by querying the incident table (sysparm_limit=1). Returns latency, status code, and success flag.",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "properties": { "instanceUrl": { "type": "string", "example": "https://dev300418.service-now.com" }, "username": { "type": "string" }, "password": { "type": "string" } } } } }
+        },
+        "responses": {
+          "200": { "description": "Connection test result with latency.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      }
+    },
+    "/servicenow/stats": {
+      "get": {
+        "tags": ["ServiceNow"],
+        "operationId": "snGetStats",
+        "summary": "Get dashboard statistics",
+        "description": "Returns incident counts, SLA breaches, connection status, and last sync time. Uses cached data when fresh.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Dashboard statistics.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      }
+    },
+    "/servicenow/incidents": {
+      "get": {
+        "tags": ["ServiceNow — Incidents"],
+        "operationId": "snListIncidents",
+        "summary": "List incidents (paginated + filtered)",
+        "description": "Returns paginated, filtered incident list from ServiceNow. Supports state, priority, and search query filters.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "state", "in": "query", "schema": { "type": "string" }, "description": "Filter by state" },
+          { "name": "priority", "in": "query", "schema": { "type": "string" }, "description": "Filter by priority" },
+          { "name": "search", "in": "query", "schema": { "type": "string" }, "description": "Search by number or description" },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } }
+        ],
+        "responses": {
+          "200": { "description": "Paginated incident list.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      },
+      "post": {
+        "tags": ["ServiceNow — Incidents"],
+        "operationId": "snCreateIncident",
+        "summary": "Create an incident",
+        "description": "Creates a new incident in ServiceNow. Requires shortDescription. Invalidates incident cache on success.",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["shortDescription"], "properties": { "shortDescription": { "type": "string" }, "priority": { "type": "string" }, "state": { "type": "string" }, "category": { "type": "string" }, "impact": { "type": "string" }, "urgency": { "type": "string" } } } } }
+        },
+        "responses": {
+          "200": { "description": "Incident created.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } },
+          "400": { "description": "Missing shortDescription or not configured.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/servicenow/incidents/{id}": {
+      "put": {
+        "tags": ["ServiceNow — Incidents"],
+        "operationId": "snUpdateIncident",
+        "summary": "Update an incident",
+        "description": "Updates an existing incident in ServiceNow by sys_id. Invalidates incident cache.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "ServiceNow sys_id" }
+        ],
+        "requestBody": {
+          "content": { "application/json": { "schema": { "type": "object", "properties": { "shortDescription": { "type": "string" }, "priority": { "type": "string" }, "state": { "type": "string" }, "comment": { "type": "string" } } } } }
+        },
+        "responses": {
+          "200": { "description": "Incident updated.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      }
+    },
+    "/servicenow/incidents/{id}/close": {
+      "post": {
+        "tags": ["ServiceNow — Incidents"],
+        "operationId": "snCloseIncident",
+        "summary": "Close an incident",
+        "description": "Closes an incident by setting state=7 (Closed). Accepts close notes and close code.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": { "application/json": { "schema": { "type": "object", "properties": { "closeNotes": { "type": "string" }, "closeCode": { "type": "string" } } } } }
+        },
+        "responses": {
+          "200": { "description": "Incident closed.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      }
+    },
+    "/servicenow/ritms": {
+      "get": {
+        "tags": ["ServiceNow — RITMs"],
+        "operationId": "snListRitms",
+        "summary": "List RITMs",
+        "description": "Returns requested items (sc_req_item) from ServiceNow with optional filters.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "state", "in": "query", "schema": { "type": "string" } },
+          { "name": "priority", "in": "query", "schema": { "type": "string" } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } },
+          { "name": "offset", "in": "query", "schema": { "type": "integer", "default": 0 } }
+        ],
+        "responses": {
+          "200": { "description": "RITM list.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      },
+      "post": {
+        "tags": ["ServiceNow — RITMs"],
+        "operationId": "snCreateRitm",
+        "summary": "Create a RITM",
+        "description": "Creates a new requested item in ServiceNow.",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["shortDescription"], "properties": { "shortDescription": { "type": "string" }, "priority": { "type": "string" }, "catalogItem": { "type": "string" } } } } }
+        },
+        "responses": {
+          "200": { "description": "RITM created.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      }
+    },
+    "/servicenow/ritms/{id}": {
+      "put": {
+        "tags": ["ServiceNow — RITMs"],
+        "operationId": "snUpdateRitm",
+        "summary": "Update a RITM",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": { "application/json": { "schema": { "type": "object", "properties": { "shortDescription": { "type": "string" }, "priority": { "type": "string" }, "state": { "type": "string" }, "comment": { "type": "string" } } } } }
+        },
+        "responses": {
+          "200": { "description": "RITM updated.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      }
+    },
+    "/servicenow/ritms/{id}/close": {
+      "post": {
+        "tags": ["ServiceNow — RITMs"],
+        "operationId": "snCloseRitm",
+        "summary": "Close a RITM",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": { "application/json": { "schema": { "type": "object", "properties": { "closeNotes": { "type": "string" } } } } }
+        },
+        "responses": {
+          "200": { "description": "RITM closed.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      }
+    },
+    "/servicenow/sla/config": {
+      "get": {
+        "tags": ["ServiceNow — Configuration"],
+        "operationId": "snGetSlaConfig",
+        "summary": "Get SLA configuration",
+        "description": "Returns SLA thresholds for incidents and RITMs by priority level.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "SLA configuration array.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      },
+      "put": {
+        "tags": ["ServiceNow — Configuration"],
+        "operationId": "snUpdateSlaConfig",
+        "summary": "Save SLA configuration",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "array", "items": { "type": "object" } } } }
+        },
+        "responses": {
+          "200": { "description": "SLA configuration saved.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      }
+    },
+    "/servicenow/business-hours": {
+      "get": {
+        "tags": ["ServiceNow — Configuration"],
+        "operationId": "snGetBusinessHours",
+        "summary": "Get business hours",
+        "description": "Returns business hours configuration (day of week, start/end times, business day flag).",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Business hours array.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      },
+      "put": {
+        "tags": ["ServiceNow — Configuration"],
+        "operationId": "snUpdateBusinessHours",
+        "summary": "Save business hours",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "array", "items": { "type": "object" } } } }
+        },
+        "responses": {
+          "200": { "description": "Business hours saved.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      }
+    },
+    "/servicenow/config/settings": {
+      "get": {
+        "tags": ["ServiceNow — Configuration"],
+        "operationId": "snGetSettings",
+        "summary": "Get module settings",
+        "description": "Returns module-specific settings (report columns, sync filters).",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Module settings.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      },
+      "put": {
+        "tags": ["ServiceNow — Configuration"],
+        "operationId": "snUpdateSettings",
+        "summary": "Save module settings",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object" } } }
+        },
+        "responses": {
+          "200": { "description": "Settings saved.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      }
+    },
+    "/servicenow/sync": {
+      "post": {
+        "tags": ["ServiceNow — Sync"],
+        "operationId": "snTriggerSync",
+        "summary": "Trigger manual sync",
+        "description": "Fetches latest incidents from ServiceNow and updates the local cache. Records last sync time.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Sync completed with count.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } },
+          "400": { "description": "Connection not configured.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/servicenow/sync/status": {
+      "get": {
+        "tags": ["ServiceNow — Sync"],
+        "operationId": "snGetSyncStatus",
+        "summary": "Get sync status",
+        "description": "Returns whether sync is running, last sync time, and interval.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Sync status.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      }
+    },
+    "/servicenow/sync/schedule": {
+      "get": {
+        "tags": ["ServiceNow — Sync"],
+        "operationId": "snGetSyncSchedule",
+        "summary": "Get sync schedule",
+        "description": "Returns sync schedule configuration (enabled, interval, data types).",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Sync schedule.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      },
+      "put": {
+        "tags": ["ServiceNow — Sync"],
+        "operationId": "snUpdateSyncSchedule",
+        "summary": "Save sync schedule",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "properties": { "syncEnabled": { "type": "boolean" }, "syncIntervalMinutes": { "type": "integer" }, "syncIncidents": { "type": "boolean" }, "syncRitms": { "type": "boolean" }, "syncChanges": { "type": "boolean" } } } } }
+        },
+        "responses": {
+          "200": { "description": "Sync schedule saved.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      }
+    },
+    "/servicenow/schema/info": {
+      "get": {
+        "tags": ["ServiceNow — Data Management"],
+        "operationId": "snGetSchemaInfo",
+        "summary": "Get schema/config file status",
+        "description": "Returns detailed status of all expected configuration files — existing files include size and modification time, missing files are flagged with required status. Used by the Data Management tab.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Schema status with file details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "initialized": { "type": "boolean", "description": "True if all required config files exist" },
+                        "existing": { "type": "array", "items": { "type": "string" } },
+                        "missing": { "type": "array", "items": { "type": "string" } },
+                        "details": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "label": { "type": "string" }, "status": { "type": "string", "enum": ["exists", "missing"] }, "size": { "type": "integer" }, "modified": { "type": "string", "format": "date-time" } } } },
+                        "checkedAt": { "type": "string", "format": "date-time" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/servicenow/data/demo": {
+      "post": {
+        "tags": ["ServiceNow — Data Management"],
+        "operationId": "snLoadDemoData",
+        "summary": "Load default/demo data",
+        "description": "Creates default SLA, business hours, and settings configuration files if they don't exist. Skips files that already exist. Returns detailed summary of created/skipped files.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Demo data loaded with summary.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "message": { "type": "string" },
+                        "filesCreated": { "type": "array", "items": { "type": "object" } },
+                        "filesSkipped": { "type": "array", "items": { "type": "object" } },
+                        "summary": { "type": "object", "properties": { "filesCreated": { "type": "integer" }, "filesSkipped": { "type": "integer" }, "totalFiles": { "type": "integer" } } },
+                        "completedAt": { "type": "string", "format": "date-time" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/servicenow/data/reset": {
+      "delete": {
+        "tags": ["ServiceNow — Data Management"],
+        "operationId": "snHardReset",
+        "summary": "Hard reset all module data",
+        "description": "DANGER ZONE: Deletes all module configuration files (connection, defaults, SLA, business hours, settings) and clears in-memory caches. Returns detailed summary of deleted/not-found files and any errors.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Hard reset completed with summary.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "message": { "type": "string" },
+                        "deletedFiles": { "type": "array", "items": { "type": "object" } },
+                        "notFoundFiles": { "type": "array", "items": { "type": "object" } },
+                        "errors": { "type": "array", "items": { "type": "object" } },
+                        "summary": { "type": "object", "properties": { "filesDeleted": { "type": "integer" }, "filesNotFound": { "type": "integer" }, "errors": { "type": "integer" }, "totalProcessed": { "type": "integer" } } },
+                        "completedAt": { "type": "string", "format": "date-time" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/servicenow/reports": {
+      "get": {
+        "tags": ["ServiceNow — Reports"],
+        "operationId": "snGetReports",
+        "summary": "Get SLA compliance and volume analytics",
+        "description": "Returns incident counts by priority/state, SLA breach count, and compliance percentage.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Report data.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      }
+    },
+    "/servicenow/reports/incidents": {
+      "get": {
+        "tags": ["ServiceNow — Reports"],
+        "operationId": "snGetIncidentReport",
+        "summary": "Detailed incident report",
+        "description": "Returns incident analytics with breakdowns by priority, state, and category. Supports date range filtering.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "startDate", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "endDate", "in": "query", "schema": { "type": "string", "format": "date-time" } }
+        ],
+        "responses": {
+          "200": { "description": "Incident report.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      }
+    },
+    "/servicenow/reports/ritms": {
+      "get": {
+        "tags": ["ServiceNow — Reports"],
+        "operationId": "snGetRitmReport",
+        "summary": "Detailed RITM report",
+        "description": "Returns RITM analytics with breakdowns by priority, state, and catalog item.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "startDate", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "endDate", "in": "query", "schema": { "type": "string", "format": "date-time" } }
+        ],
+        "responses": {
+          "200": { "description": "RITM report.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      }
+    },
+    "/servicenow/reports/sla": {
+      "get": {
+        "tags": ["ServiceNow — Reports"],
+        "operationId": "snGetSlaReport",
+        "summary": "SLA compliance report",
+        "description": "Returns SLA compliance metrics per priority for incidents and RITMs, including response/resolution targets and breach counts.",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": { "description": "SLA compliance report.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessResponse" } } } }
+        }
+      }
     }
   }
 }

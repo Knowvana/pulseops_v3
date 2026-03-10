@@ -64,26 +64,33 @@
     },
     {
       "name": "sn_sla_config",
-      "description": "SLA configuration per priority level.",
+      "description": "SLA configuration per priority level — response and resolution times in minutes.",
       "columns": [
-        { "name": "id",             "type": "SERIAL PRIMARY KEY" },
-        { "name": "priority",       "type": "VARCHAR(20) UNIQUE NOT NULL" },
-        { "name": "response_hours", "type": "NUMERIC(6,2) NOT NULL" },
-        { "name": "resolve_hours",  "type": "NUMERIC(6,2) NOT NULL" },
-        { "name": "enabled",        "type": "BOOLEAN DEFAULT TRUE" },
-        { "name": "updated_at",     "type": "TIMESTAMPTZ DEFAULT NOW()" }
+        { "name": "id",                  "type": "SERIAL PRIMARY KEY" },
+        { "name": "priority",            "type": "VARCHAR(20) UNIQUE NOT NULL" },
+        { "name": "response_minutes",    "type": "INTEGER NOT NULL DEFAULT 60" },
+        { "name": "resolution_minutes",  "type": "INTEGER NOT NULL DEFAULT 480" },
+        { "name": "enabled",             "type": "BOOLEAN DEFAULT TRUE" },
+        { "name": "created_at",          "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "updated_at",          "type": "TIMESTAMPTZ DEFAULT NOW()" }
       ],
       "indexes": [
         { "name": "idx_sn_sla_config_priority", "columns": ["priority"], "unique": true }
       ]
+    },
+    {
+      "name": "sn_incident_config",
+      "description": "Incident configuration — selected columns, assignment group, SLA column mapping.",
+      "columns": [
+        { "name": "id",                "type": "SERIAL PRIMARY KEY" },
+        { "name": "selected_columns",  "type": "JSONB NOT NULL DEFAULT '[]'::jsonb" },
+        { "name": "created_column",    "type": "VARCHAR(100) NOT NULL DEFAULT 'opened_at'" },
+        { "name": "closed_column",     "type": "VARCHAR(100) NOT NULL DEFAULT 'closed_at'" },
+        { "name": "assignment_group",  "type": "VARCHAR(255) DEFAULT ''" },
+        { "name": "created_at",        "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "updated_at",        "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": []
     }
-  ],
-  "seedData": {
-    "sn_sla_config": [
-      { "priority": "critical", "response_hours": 1,  "resolve_hours": 4  },
-      { "priority": "high",     "response_hours": 2,  "resolve_hours": 8  },
-      { "priority": "medium",   "response_hours": 4,  "resolve_hours": 24 },
-      { "priority": "low",      "response_hours": 8,  "resolve_hours": 72 }
-    ]
-  }
+  ]
 }

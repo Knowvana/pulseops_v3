@@ -146,16 +146,11 @@ export default function LogManager() {
           lastSync: d.ui?.lastEntry || d.api?.lastEntry || d.ui?.lastModified || d.api?.lastModified || null,
         });
         // Database Setup Alert Logic:
-        // Shows "Database Not Configured" modal when:
-        // - Storage is 'database' (configured for database logging)
-        // - Total log count is 0 (no logs exist)
-        // - No lastEntry timestamps (tables exist but are empty)
-        // This indicates database schema exists but no logs have been written yet
-        if (storage === 'database' && total === 0 && !d.ui?.lastEntry && !d.api?.lastEntry) {
-          setDbNotSetup(true);
-        } else {
-          setDbNotSetup(false);
-        }
+        // Only show "Database Not Configured" if the API explicitly indicates
+        // the database schema doesn't exist (via error message in response).
+        // Empty logs (total === 0) is a normal state after deletion — don't show alert.
+        // This prevents false alerts after user deletes all logs.
+        setDbNotSetup(false);
       } else if (!json.success) {
         // API Error Alert Logic:
         // Shows setup modal if error indicates database schema issues

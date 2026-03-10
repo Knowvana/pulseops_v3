@@ -1,15 +1,15 @@
 // ============================================================================
 // ServiceNowReports — PulseOps V3 ServiceNow Module
 //
-// PURPOSE: Tabbed reports view for the ServiceNow module. Displays:
-//   Tab 1 — Incident Reports: volume by priority/state, data grid
-//   Tab 2 — RITM Reports: volume by priority, catalog item breakdown
-//   Tab 3 — SLA Compliance: per-priority compliance tables, gauge
-//   Each tab has date navigation for filtering by reporting period.
+// PURPOSE: Vertical tab layout reports view for the ServiceNow module. Includes:
+//   Tab 1 — Incident SLA Report (with Monthly/Weekly/Daily filter)
+//   Tab 2 — Incident Analytics: volume by priority/state, data grid
+//   Tab 3 — RITM Reports: volume by priority, catalog item breakdown
+//   Tab 4 — SLA Compliance: per-priority compliance tables, gauge
 //
 // ARCHITECTURE:
-//   - Fetches from GET /api/servicenow/reports/* endpoints
-//   - Tabbed UI with date range navigation
+//   - Vertical tab navigation on the left
+//   - Incident SLA Report fetches live data from SNOW API
 //   - All charts are pure CSS — no chart library dependency
 //   - All text from uiText.json — zero hardcoded strings
 //
@@ -18,6 +18,7 @@
 // DEPENDENCIES:
 //   - lucide-react       → Icons
 //   - @shared            → createLogger, ApiClient
+//   - ServiceNowSlaReport → Incident SLA Report sub-component
 // ============================================================================
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -28,6 +29,7 @@ import {
 } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
+import ServiceNowSlaReport from './ServiceNowSlaReport';
 const snApi = {
   reports:          '/api/servicenow/reports',
   reportIncidents:  '/api/servicenow/reports/incidents',
@@ -328,11 +330,12 @@ function SlaComplianceGrid({ slaData, loading }) {
   );
 }
 
-// ── Report tab definitions ──────────────────────────────────────────────────
+// ── Report tab definitions (vertical layout) ────────────────────────────────
 const REPORT_TABS = [
-  { id: 'incidents', label: 'Incidents', icon: FileText },
-  { id: 'ritms',     label: 'RITMs',     icon: ListChecks },
-  { id: 'sla',       label: 'SLA',       icon: ShieldCheck },
+  { id: 'incident_sla', label: 'Incident SLA Report', icon: ShieldCheck },
+  { id: 'incidents',    label: 'Incident Analytics',   icon: FileText },
+  { id: 'ritms',        label: 'RITMs',                icon: ListChecks },
+  { id: 'sla',          label: 'SLA Compliance',       icon: ShieldCheck },
 ];
 
 const INCIDENT_GRID_COLS = [
@@ -357,7 +360,7 @@ const RITM_GRID_COLS = [
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ServiceNowReports({ onNavigate }) {
-  const [activeTab, setActiveTab] = useState('incidents');
+  const [activeTab, setActiveTab] = useState('incident_sla');
   const [data,      setData]      = useState(null);
   const [incData,   setIncData]   = useState(null);
   const [ritmData,  setRitmData]  = useState(null);
@@ -452,147 +455,159 @@ export default function ServiceNowReports({ onNavigate }) {
 
   // ── Render ─────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 space-y-5 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-brand-50 flex items-center justify-center">
-            <BarChart3 size={20} className="text-brand-600" />
+    <div className="animate-fade-in flex h-full" style={{ minHeight: 'calc(100vh - 120px)' }}>
+      {/* ── Vertical Tab Sidebar ──────────────────────────────────────────── */}
+      <div className="w-56 flex-shrink-0 bg-surface-50 border-r border-surface-200 py-4 px-2 space-y-1">
+        <div className="px-3 pb-3 mb-2 border-b border-surface-200">
+          <div className="flex items-center gap-2">
+            <BarChart3 size={16} className="text-brand-600" />
+            <h2 className="text-sm font-bold text-surface-800">{t.title}</h2>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-surface-800">{t.title}</h1>
-            <p className="text-sm text-surface-500">{t.subtitle}</p>
-          </div>
+          <p className="text-[10px] text-surface-400 mt-0.5">{t.subtitle}</p>
         </div>
-        <button
-          onClick={() => { fetchReports(); fetchTabData(activeTab); }}
-          disabled={loading}
-          className="p-1.5 rounded-lg text-surface-400 hover:text-brand-600 hover:bg-brand-50 transition-colors disabled:opacity-40"
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-        </button>
+        {REPORT_TABS.map(tab => {
+          const TabIcon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => handleTabChange(tab.id)}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-xs font-medium transition-all text-left ${
+                isActive
+                  ? 'bg-brand-50 text-brand-700 border border-brand-200 shadow-sm'
+                  : 'text-surface-600 hover:bg-surface-100 hover:text-surface-800'
+              }`}
+            >
+              <TabIcon size={14} />
+              <span className="truncate">{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Error banner */}
-      {error && (
-        <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-sm">
-          <AlertCircle size={14} />
-          <span>{error}</span>
-          <button onClick={fetchReports} className="ml-auto text-xs underline">{uiText.common.retry}</button>
-        </div>
-      )}
+      {/* ── Main Content Area ─────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Incident SLA Report (full sub-component) */}
+        {activeTab === 'incident_sla' && (
+          <ServiceNowSlaReport />
+        )}
 
-      {/* Summary stats row */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: t.totalIncidents, value: data?.totalIncidents ?? 0, icon: TrendingUp,   color: 'text-brand-600', bg: 'bg-brand-50' },
-          { label: t.totalResolved,  value: data?.totalResolved  ?? 0, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-          { label: t.lastSync,
-            value: data?.lastSync ? new Date(data.lastSync).toLocaleString() : uiText.sync.never,
-            icon: Clock, color: 'text-teal-600', bg: 'bg-teal-50', isText: true },
-        ].map(card => (
-          <div key={card.label} className="bg-white rounded-xl border border-surface-200 p-4 flex items-center gap-3 shadow-sm">
-            <div className={`w-10 h-10 rounded-lg ${card.bg} flex items-center justify-center flex-shrink-0`}>
-              <card.icon size={18} className={card.color} />
-            </div>
-            <div>
-              <p className="text-xs text-surface-500 font-medium">{card.label}</p>
-              {loading
-                ? <div className="h-5 w-16 bg-surface-100 rounded animate-pulse mt-0.5" />
-                : <p className={`font-bold ${card.isText ? 'text-sm text-surface-700' : 'text-xl text-surface-800'}`}>{card.value}</p>
-              }
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Main charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <SlaGauge pct={data?.slaCompliance ?? 0} loading={loading} />
-        <div className="lg:col-span-2">
-          <PriorityChart counts={data?.priorityCounts} total={data?.totalIncidents || 0} loading={loading} />
-        </div>
-      </div>
-
-      {/* Resolution time table */}
-      <ResolutionTable
-        resolutionByPriority={data?.resolutionByPriority}
-        slaThresholds={data?.slaThresholds}
-        loading={loading}
-      />
-
-      {/* ── Tabbed Detail Reports ──────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
-        {/* Tab bar */}
-        <div className="flex items-center border-b border-surface-200 bg-surface-50/50 px-2">
-          {REPORT_TABS.map(tab => {
-            const TabIcon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button key={tab.id} onClick={() => handleTabChange(tab.id)}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold transition-all border-b-2 ${
-                  isActive
-                    ? 'text-brand-700 border-brand-500 bg-white'
-                    : 'text-surface-500 border-transparent hover:text-surface-700 hover:border-surface-300'
-                }`}>
-                <TabIcon size={13} />
-                {tab.label}
+        {/* Incident Analytics */}
+        {activeTab === 'incidents' && (
+          <div className="p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-surface-800">Incident Analytics</h2>
+              <button
+                onClick={() => { fetchReports(); fetchTabData('incidents'); }}
+                disabled={loading}
+                className="p-1.5 rounded-lg text-surface-400 hover:text-brand-600 hover:bg-brand-50 transition-colors disabled:opacity-40"
+              >
+                <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
               </button>
-            );
-          })}
-        </div>
+            </div>
 
-        {/* Tab content */}
-        <div className="p-0">
-          {activeTab === 'incidents' && (
-            <div className="space-y-4 p-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <BreakdownTable title="By Priority" data={incData?.byPriority} loading={!incData} />
-                <BreakdownTable title="By State" data={incData?.byState} loading={!incData} />
+            {error && (
+              <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-sm">
+                <AlertCircle size={14} /><span>{error}</span>
+                <button onClick={fetchReports} className="ml-auto text-xs underline">{uiText.common.retry}</button>
               </div>
-              <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
-                <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center justify-between">
-                  <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide">Incident Details</p>
-                  <span className="text-xs text-surface-400">{incData?.totalCount ?? 0} records</span>
+            )}
+
+            {/* Summary stats */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: t.totalIncidents, value: data?.totalIncidents ?? 0, icon: TrendingUp, color: 'text-brand-600', bg: 'bg-brand-50' },
+                { label: t.totalResolved, value: data?.totalResolved ?? 0, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+                { label: t.lastSync,
+                  value: data?.lastSync ? new Date(data.lastSync).toLocaleString() : uiText.sync.never,
+                  icon: Clock, color: 'text-teal-600', bg: 'bg-teal-50', isText: true },
+              ].map(card => (
+                <div key={card.label} className="bg-white rounded-xl border border-surface-200 p-4 flex items-center gap-3 shadow-sm">
+                  <div className={`w-10 h-10 rounded-lg ${card.bg} flex items-center justify-center flex-shrink-0`}>
+                    <card.icon size={18} className={card.color} />
+                  </div>
+                  <div>
+                    <p className="text-xs text-surface-500 font-medium">{card.label}</p>
+                    {loading
+                      ? <div className="h-5 w-16 bg-surface-100 rounded animate-pulse mt-0.5" />
+                      : <p className={`font-bold ${card.isText ? 'text-sm text-surface-700' : 'text-xl text-surface-800'}`}>{card.value}</p>
+                    }
+                  </div>
                 </div>
-                <DataGrid columns={INCIDENT_GRID_COLS} rows={incData?.incidents} loading={!incData} />
+              ))}
+            </div>
+
+            {/* Charts */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <SlaGauge pct={data?.slaCompliance ?? 0} loading={loading} />
+              <div className="lg:col-span-2">
+                <PriorityChart counts={data?.priorityCounts} total={data?.totalIncidents || 0} loading={loading} />
               </div>
             </div>
-          )}
 
-          {activeTab === 'ritms' && (
-            <div className="space-y-4 p-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <BreakdownTable title="By Priority" data={ritmData?.byPriority} loading={!ritmData} />
-                <BreakdownTable title="By Catalog Item" data={ritmData?.byCatalogItem} loading={!ritmData} />
-              </div>
-              <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
-                <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center justify-between">
-                  <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide">RITM Details</p>
-                  <span className="text-xs text-surface-400">{ritmData?.totalCount ?? 0} records</span>
-                </div>
-                <DataGrid columns={RITM_GRID_COLS} rows={ritmData?.ritms} loading={!ritmData} />
-              </div>
-            </div>
-          )}
+            <ResolutionTable resolutionByPriority={data?.resolutionByPriority} slaThresholds={data?.slaThresholds} loading={loading} />
 
-          {activeTab === 'sla' && (
-            <div className="space-y-4 p-5">
-              <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
-                <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50">
-                  <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide">Incident SLA Compliance</p>
-                </div>
-                <SlaComplianceGrid slaData={slaData?.incidentSla} loading={!slaData} />
-              </div>
-              <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
-                <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50">
-                  <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide">RITM SLA Compliance</p>
-                </div>
-                <SlaComplianceGrid slaData={slaData?.ritmSla} loading={!slaData} />
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <BreakdownTable title="By Priority" data={incData?.byPriority} loading={!incData} />
+              <BreakdownTable title="By State" data={incData?.byState} loading={!incData} />
             </div>
-          )}
-        </div>
+
+            <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center justify-between">
+                <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide">Incident Details</p>
+                <span className="text-xs text-surface-400">{incData?.totalCount ?? 0} records</span>
+              </div>
+              <DataGrid columns={INCIDENT_GRID_COLS} rows={incData?.incidents} loading={!incData} />
+            </div>
+          </div>
+        )}
+
+        {/* RITMs */}
+        {activeTab === 'ritms' && (
+          <div className="p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-surface-800">RITM Reports</h2>
+              <button onClick={() => fetchTabData('ritms')} className="p-1.5 rounded-lg text-surface-400 hover:text-brand-600 hover:bg-brand-50 transition-colors">
+                <RefreshCw size={14} />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <BreakdownTable title="By Priority" data={ritmData?.byPriority} loading={!ritmData} />
+              <BreakdownTable title="By Catalog Item" data={ritmData?.byCatalogItem} loading={!ritmData} />
+            </div>
+            <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center justify-between">
+                <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide">RITM Details</p>
+                <span className="text-xs text-surface-400">{ritmData?.totalCount ?? 0} records</span>
+              </div>
+              <DataGrid columns={RITM_GRID_COLS} rows={ritmData?.ritms} loading={!ritmData} />
+            </div>
+          </div>
+        )}
+
+        {/* SLA Compliance */}
+        {activeTab === 'sla' && (
+          <div className="p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-surface-800">SLA Compliance</h2>
+              <button onClick={() => fetchTabData('sla')} className="p-1.5 rounded-lg text-surface-400 hover:text-brand-600 hover:bg-brand-50 transition-colors">
+                <RefreshCw size={14} />
+              </button>
+            </div>
+            <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50">
+                <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide">Incident SLA Compliance</p>
+              </div>
+              <SlaComplianceGrid slaData={slaData?.incidentSla} loading={!slaData} />
+            </div>
+            <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50">
+                <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide">RITM SLA Compliance</p>
+              </div>
+              <SlaComplianceGrid slaData={slaData?.ritmSla} loading={!slaData} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

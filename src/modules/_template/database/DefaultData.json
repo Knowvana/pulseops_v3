@@ -1,0 +1,19 @@
+{
+  "_meta": {
+    "moduleId": "_template",
+    "version": "1.0.0",
+    "description": "Default seed data for the template module. Each top-level key is a table name from Schema.json. The value is an array of row objects whose keys match the column names. Loaded via POST /api/<moduleId>/data/defaults. Uses ON CONFLICT DO NOTHING so it is safe to run multiple times."
+  },
+  "template_items": [
+    {
+      "name": "Welcome Item",
+      "description": "Auto-seeded by DefaultData.json when the user clicks 'Load Default Data' in the Data Management settings tab.",
+      "status": "active"
+    },
+    {
+      "name": "Example Configuration",
+      "description": "Another seed row — add as many as your module needs. Each row is inserted in a single transaction.",
+      "status": "active"
+    }
+  ]
+}

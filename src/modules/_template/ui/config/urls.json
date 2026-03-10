@@ -1,7 +1,10 @@
 {
-  "_description": "Module API endpoints. Self-contained — no dependency on platform urls.json.",
+  "_description": "Module API endpoints. Self-contained — no dependency on platform urls.json. Replace '_template' with your module ID.",
   "api": {
     "config": "/api/_template/config",
-    "status": "/api/_template/status"
+    "status": "/api/_template/status",
+    "schemaInfo": "/api/_template/schema/info",
+    "loadDefaults": "/api/_template/data/defaults",
+    "deleteData": "/api/_template/data/reset"
   }
 }

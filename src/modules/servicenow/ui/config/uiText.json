@@ -107,6 +107,11 @@
         "label": "Connection",
         "description": "Configure the ServiceNow API connection credentials."
       },
+      "incidentConfig": {
+        "id": "sn_incident_config",
+        "label": "Incident Configuration",
+        "description": "Configure incident column mapping, assignment group, and SLA thresholds."
+      },
       "sla": {
         "id": "sn_sla",
         "label": "SLA Thresholds",
@@ -304,26 +309,24 @@
   },
   "dataManagement": {
     "title": "Data Management",
-    "subtitle": "Manage the ServiceNow module's data and database objects.",
+    "subtitle": "Manage the ServiceNow module's database tables, default data, and schema objects.",
     "schemaStatusTitle": "Schema Status",
-    "schemaStatusSubtitle": "Status of the module's database tables.",
+    "schemaStatusSubtitle": "Database tables defined in Schema.json with live row counts and status.",
     "initialized": "Initialized",
     "notInitialized": "Not Initialized",
     "existingTables": "Existing Tables",
     "missingTables": "Missing Tables",
     "defaultDataTitle": "Default Data",
-    "defaultDataSubtitle": "Load default SLA thresholds and business hours configuration.",
+    "defaultDataSubtitle": "Seed default SLA thresholds and configuration from DefaultData.json into the database.",
     "loadDefaultsButton": "Load Default Data",
     "loading": "Loading...",
     "dangerZoneTitle": "Danger Zone",
     "dangerZoneSubtitle": "Irreversible actions — proceed with extreme caution.",
-    "hardResetButton": "Hard Reset Module",
-    "hardResetDescription": "Delete all ServiceNow module configuration and cached data. This action cannot be undone.",
-    "confirmResetTitle": "Hard Reset ServiceNow Module",
-    "confirmResetDescription": "permanently delete all ServiceNow module data and configuration",
-    "confirmResetTarget": "ServiceNow Module Data",
-    "confirmResetSummaryStatus": "Module Reset Complete",
-    "confirmResetSummarySuccess": "All ServiceNow data has been deleted"
+    "deleteDataButton": "Delete Module Data",
+    "deleteDataDescription": "Drop all database tables defined in Schema.json. All rows will be permanently deleted.",
+    "confirmDeleteTitle": "Delete Module Data",
+    "confirmDeleteDescription": "permanently drop all ServiceNow database tables and their data",
+    "confirmDeleteTarget": "ServiceNow Database Tables"
   },
   "common": {
     "save": "Save Changes",

@@ -114,13 +114,15 @@ function ConnectionBanner({ status, lastSync }) {
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ServiceNowDashboard({ onNavigate }) {
-  const [stats, setStats]           = useState(null);
-  const [incidents, setIncidents]   = useState([]);
-  const [syncStatus, setSyncStatus] = useState(null);
-  const [configData, setConfigData] = useState(null);
-  const [loading, setLoading]       = useState(true);
-  const [syncing, setSyncing]       = useState(false);
-  const [error, setError]           = useState(null);
+  const [stats, setStats]             = useState(null);
+  const [incidents, setIncidents]     = useState([]);
+  const [syncStatus, setSyncStatus]   = useState(null);
+  const [configData, setConfigData]   = useState(null);
+  const [incidentConfig, setIncidentConfig] = useState(null);
+  const [loading, setLoading]         = useState(true);
+  const [syncing, setSyncing]         = useState(false);
+  const [error, setError]             = useState(null);
+  const [syncMessage, setSyncMessage] = useState(null); // { type: 'success'|'error', text, summary }
   const initRan = useRef(false);
 
   // ── Fetch dashboard stats ─────────────────────────────────────────────────
@@ -129,11 +131,12 @@ export default function ServiceNowDashboard({ onNavigate }) {
     setLoading(true);
     setError(null);
     try {
-      const [statsRes, incRes, syncRes, cfgRes] = await Promise.all([
+      const [statsRes, incRes, syncRes, cfgRes, incCfgRes] = await Promise.all([
         ApiClient.get(snApi.stats),
         ApiClient.get(`${snApi.incidents}?limit=5`),
         ApiClient.get(snApi.syncStatus).catch(() => null),
         ApiClient.get(snApi.config).catch(() => null),
+        ApiClient.get('/api/servicenow/config/incidents').catch(() => null),
       ]);
 
       if (statsRes?.success) {
@@ -150,6 +153,7 @@ export default function ServiceNowDashboard({ onNavigate }) {
       }
       if (syncRes?.success) setSyncStatus(syncRes.data);
       if (cfgRes?.success) setConfigData(cfgRes.data);
+      if (incCfgRes?.success) setIncidentConfig(incCfgRes.data);
     } catch (err) {
       log.error('fetchStats', 'Unexpected error', { error: err.message });
       setError(uiText.common.fetchError);
@@ -164,26 +168,51 @@ export default function ServiceNowDashboard({ onNavigate }) {
     initRan.current = true;
     log.info('mount', 'ServiceNow Dashboard mounted');
     fetchStats();
+
+    // Auto-refresh when user returns to this tab (e.g., after creating incident in Test Incidents)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        log.info('visibilitychange', 'Dashboard regained focus — refreshing data');
+        fetchStats();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [fetchStats]);
 
   // ── Manual sync ───────────────────────────────────────────────────────────
   const handleSync = useCallback(async () => {
     log.info('handleSync', 'Manual sync triggered');
     setSyncing(true);
+    setSyncMessage(null);
     try {
       const res = await ApiClient.post(snApi.sync, {});
       if (res?.success) {
-        log.info('handleSync', 'Sync complete', { count: res.data?.count });
-        await fetchStats(); // Refresh after sync
+        const summary = res.data?.summary;
+        const msg = res.message || `Sync completed. Fetched ${summary?.totalFetched || 0} record(s) from ${summary?.tables?.length || 0} table(s) in ${res.data?.durationMs || 0}ms.`;
+        log.info('handleSync', msg, { summary });
+        setSyncMessage({ type: 'success', text: msg, summary });
+        await fetchStats();
       } else {
-        log.warn('handleSync', 'Sync failed', { error: res?.error?.message });
+        const errMsg = res?.error?.message || 'Sync failed.';
+        log.warn('handleSync', errMsg);
+        setSyncMessage({ type: 'error', text: errMsg });
       }
     } catch (err) {
       log.error('handleSync', 'Sync error', { error: err.message });
+      setSyncMessage({ type: 'error', text: `Sync failed: ${err.message}` });
     } finally {
       setSyncing(false);
     }
   }, [fetchStats]);
+
+  // Auto-dismiss sync message after 10s
+  useEffect(() => {
+    if (syncMessage) {
+      const timer = setTimeout(() => setSyncMessage(null), 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [syncMessage]);
 
   // ── Not configured state ──────────────────────────────────────────────────
   if (!loading && stats?.notConfigured) {
@@ -252,6 +281,30 @@ export default function ServiceNowDashboard({ onNavigate }) {
         </div>
       </div>
 
+      {/* Sync result banner */}
+      {syncMessage && (
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
+          syncMessage.type === 'success'
+            ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+            : 'bg-rose-50 border border-rose-200 text-rose-700'
+        }`}>
+          {syncMessage.type === 'success' ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
+          <div className="flex-1">
+            <span>{syncMessage.text}</span>
+            {syncMessage.summary?.tables?.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-3 text-xs opacity-80">
+                {syncMessage.summary.tables.map(t => (
+                  <span key={t.name} className="inline-flex items-center gap-1">
+                    <span className="font-semibold capitalize">{t.name}:</span> {t.recordsFetched} records
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <button onClick={() => setSyncMessage(null)} className="ml-2 text-xs opacity-60 hover:opacity-100">&times;</button>
+        </div>
+      )}
+
       {/* Error banner */}
       {error && (
         <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-sm">
@@ -296,16 +349,17 @@ export default function ServiceNowDashboard({ onNavigate }) {
           </div>
         </div>
 
-        {/* Config Summary */}
+        {/* Sync Summary */}
         <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
           <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50">
-            <h3 className="text-sm font-bold text-surface-700">Configuration Summary</h3>
+            <h3 className="text-sm font-bold text-surface-700">Sync Summary</h3>
           </div>
           <div className="p-5 space-y-3">
             {[
               { label: 'Sync Scheduler', value: syncStatus?.running ? 'Running' : 'Stopped', ok: syncStatus?.running },
               { label: 'Sync Interval', value: syncStatus?.syncIntervalMinutes ? `${syncStatus.syncIntervalMinutes} min` : '—', ok: !!syncStatus?.syncIntervalMinutes },
-              { label: 'Last Sync', value: syncStatus?.lastSyncTime ? new Date(syncStatus.lastSyncTime).toLocaleString() : 'Never', ok: !!syncStatus?.lastSyncTime },
+              { label: 'Last Sync', value: stats?.lastSync ? new Date(stats.lastSync).toLocaleString() : (syncStatus?.lastSyncTime ? new Date(syncStatus.lastSyncTime).toLocaleString() : 'Never'), ok: !!(stats?.lastSync || syncStatus?.lastSyncTime) },
+              { label: 'Cached Incidents', value: stats?.total != null ? `${stats.total} record(s)` : '—', ok: stats?.total > 0 },
               { label: 'SLA Config', value: configData?.sla ? 'Configured' : 'Default', ok: !!configData?.sla },
             ].map(row => (
               <div key={row.label} className="flex items-center justify-between">
@@ -350,26 +404,39 @@ export default function ServiceNowDashboard({ onNavigate }) {
                   <th className="text-left px-4 py-2 text-xs font-semibold text-surface-500 uppercase tracking-wide">{inc.columns.priority}</th>
                   <th className="text-left px-4 py-2 text-xs font-semibold text-surface-500 uppercase tracking-wide">{inc.columns.state}</th>
                   <th className="text-left px-4 py-2 text-xs font-semibold text-surface-500 uppercase tracking-wide">{inc.columns.assignedTo}</th>
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-surface-500 uppercase tracking-wide">{inc.columns.createdAt}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-50">
-                {incidents.map(incident => (
-                  <tr key={incident.id} className="hover:bg-surface-50/50 transition-colors">
-                    <td className="px-4 py-2.5 font-mono text-xs text-brand-600 font-semibold">{incident.number}</td>
-                    <td className="px-4 py-2.5 text-surface-700 max-w-[280px] truncate">{incident.title}</td>
-                    <td className="px-4 py-2.5">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border ${PRIORITY_STYLES[incident.priority] || PRIORITY_STYLES.low}`}>
-                        {inc.priority[incident.priority] || incident.priority}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${STATE_STYLES[incident.state] || STATE_STYLES.open}`}>
-                        {inc.state[incident.state] || incident.state}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-surface-500 text-xs">{incident.assignedTo || uiText.common.na}</td>
-                  </tr>
-                ))}
+                {incidents.map(incident => {
+                  // Helper to extract value from ServiceNow's {link, value} objects
+                  const getValue = (field) => typeof field === 'object' && field?.value ? field.value : field;
+                  const number = getValue(incident.number);
+                  const description = getValue(incident.short_description) || getValue(incident.title) || uiText.common.na;
+                  const priority = getValue(incident.priority);
+                  const state = getValue(incident.state);
+                  const assignedTo = getValue(incident.assigned_to) || getValue(incident.assignedTo) || uiText.common.na;
+                  const openedAt = getValue(incident.opened_at);
+                  
+                  return (
+                    <tr key={incident.sys_id || number} className="hover:bg-surface-50/50 transition-colors">
+                      <td className="px-4 py-2.5 font-mono text-xs text-brand-600 font-semibold">{number}</td>
+                      <td className="px-4 py-2.5 text-surface-700 max-w-[280px] truncate">{description}</td>
+                      <td className="px-4 py-2.5">
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border ${PRIORITY_STYLES[priority] || PRIORITY_STYLES.low}`}>
+                          {inc.priority[priority] || priority}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${STATE_STYLES[state] || STATE_STYLES.open}`}>
+                          {inc.state[state] || state}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-surface-500 text-xs">{assignedTo}</td>
+                      <td className="px-4 py-2.5 text-surface-500 text-xs">{openedAt ? new Date(openedAt).toLocaleDateString() : uiText.common.na}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -19,7 +19,7 @@ Enterprise modular operations platform with plug-and-play module architecture, R
 |---------|-----|-------------|
 | **Frontend (Vite)** | http://localhost:1001 | — |
 | **API Server** | http://localhost:4001 | — |
-| **Swagger Docs** | http://localhost:4001/api-docs | — |
+| **Swagger** | http://localhost:4001/swagger-ui | — |
 | **PostgreSQL** | localhost:5432 | `postgres` / `Infosys@123` |
 | **pgAdmin** | http://localhost:5050 | `admin@domain.com` / `Infosys@123` |
 

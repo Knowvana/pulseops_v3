@@ -8,7 +8,7 @@
 //   - snowVal() for extracting values from {link, value} objects
 //   - Assignment group query builder
 //
-// USED BY: All route files in src/modules/servicenow/api/
+// USED BY: All route files in src/modules/servicenow/api/routes/
 // ============================================================================
 import fs from 'fs';
 import path from 'path';
@@ -22,16 +22,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ── Exported constants ───────────────────────────────────────────────────────
 export const dbSchema = appConfig.db.schema || 'pulseops';
-export const CONFIG_DIR = path.resolve(__dirname, 'config');
+export const CONFIG_DIR = path.resolve(__dirname, '..', 'config');
 export const CONNECTION_CONFIG = path.join(CONFIG_DIR, 'servicenow_connection.json');
 export const DEFAULTS_CONFIG = path.join(CONFIG_DIR, 'servicenow_defaults.json');
 export { DatabaseService };
 
 // ── Database-related paths ───────────────────────────────────────────────────
 export function resolveModuleDbFile(filename) {
-  const distPath = path.resolve(__dirname, '..', 'database', filename);
+  const distPath = path.resolve(__dirname, '..', '..', 'database', filename);
   if (fs.existsSync(distPath)) return distPath;
-  const srcPath = path.resolve(__dirname, '..', '..', '..', 'src', 'modules', 'servicenow', 'database', filename);
+  const srcPath = path.resolve(__dirname, '..', '..', '..', '..', '..', 'src', 'modules', 'servicenow', 'database', filename);
   if (fs.existsSync(srcPath)) return srcPath;
   return null;
 }

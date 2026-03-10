@@ -18,7 +18,7 @@
 import { Router } from 'express';
 import {
   loadConnectionConfig, loadIncidentConfig, snowRequest, snowVal,
-  DatabaseService, dbSchema,
+  buildAssignmentGroupQuery, DatabaseService, dbSchema,
 } from './helpers.js';
 
 const router = Router();
@@ -130,9 +130,6 @@ router.put('/config/incidents', async (req, res) => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 // ── GET /schema/columns — Fetch SNOW incident column metadata ────────────
-// Queries sys_dictionary for real field definitions (element, label, type,
-// max_length, mandatory, read_only, help_text) and also fetches ONE sample
-// incident to show actual values for each column.
 router.get('/schema/columns', async (req, res) => {
   try {
     const conn = loadConnectionConfig();
@@ -141,8 +138,6 @@ router.get('/schema/columns', async (req, res) => {
     }
 
     // 1. Query sys_dictionary for column metadata
-    //    Filter: name=incident (table name), internal_type is not empty
-    //    Fields: element, column_label, internal_type, max_length, mandatory, read_only, comments
     const dictResult = await snowRequest(conn, 'table/sys_dictionary',
       'sysparm_query=name=incident^elementISNOTEMPTY^elementNOT LIKEsys_^ORDERBYcolumn_label' +
       '&sysparm_fields=element,column_label,internal_type,max_length,mandatory,read_only,comments' +
@@ -162,7 +157,7 @@ router.get('/schema/columns', async (req, res) => {
         mandatory: snowVal(field.mandatory) === 'true' || snowVal(field.mandatory) === true,
         readOnly:  snowVal(field.read_only) === 'true' || snowVal(field.read_only) === true,
         helpText:  snowVal(field.comments) || null,
-      })).filter(c => c.name); // filter out any empty element rows
+      })).filter(c => c.name);
     }
 
     // Fallback: if sys_dictionary didn't work, get column names from a sample record
@@ -200,7 +195,6 @@ router.get('/schema/columns', async (req, res) => {
     }
 
     // 4. Also add any columns that appear in the sample but not in sys_dictionary
-    //    (e.g. sys_ columns that were filtered out, or custom fields)
     if (usedDictionary) {
       const knownNames = new Set(columns.map(c => c.name));
       for (const [key, val] of Object.entries(sampleValues)) {
@@ -311,6 +305,77 @@ router.delete('/config/sla/:id', async (req, res) => {
     return res.json({ success: true, message: 'SLA configuration deleted.' });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: `Failed to delete SLA config: ${err.message}` } });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// LIVE SEARCH: Assignment Groups from ServiceNow
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ── GET /search/assignment-groups?q=<query> — Search assignment groups live ──
+router.get('/search/assignment-groups', async (req, res) => {
+  try {
+    const conn = loadConnectionConfig();
+    if (!conn.isConfigured) {
+      return res.status(400).json({ success: false, error: { message: 'ServiceNow connection is not configured.' } });
+    }
+    const { q = '' } = req.query;
+    const queryParts = ['active=true'];
+    if (q.trim()) queryParts.push(`nameLIKE${q.trim()}`);
+    queryParts.push('ORDERBYname');
+
+    const result = await snowRequest(conn, 'table/sys_user_group',
+      `sysparm_query=${queryParts.join('^')}&sysparm_fields=sys_id,name,description,manager&sysparm_limit=50`
+    );
+
+    let groups = [];
+    if (result.statusCode >= 200 && result.statusCode < 300 && result.data?.result) {
+      groups = result.data.result.map(g => ({
+        sysId: snowVal(g.sys_id),
+        name: snowVal(g.name),
+        description: snowVal(g.description) || '',
+        manager: snowVal(g.manager) || '',
+      }));
+    }
+
+    return res.json({ success: true, data: { groups, total: groups.length, query: q } });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { message: `Assignment group search failed: ${err.message}` } });
+  }
+});
+
+// ── GET /incidents/open — Fetch open incidents for close dropdown ────────────
+router.get('/incidents/open', async (req, res) => {
+  try {
+    const conn = loadConnectionConfig();
+    if (!conn.isConfigured) {
+      return res.json({ success: true, data: { incidents: [] } });
+    }
+    const incidentConfig = await loadIncidentConfig();
+    const agQuery = buildAssignmentGroupQuery(incidentConfig.assignmentGroup);
+    const queryParts = ['stateNOT IN6,7,8'];
+    if (agQuery) queryParts.push(agQuery);
+    queryParts.push('ORDERBYDESCnumber');
+
+    const result = await snowRequest(conn, 'table/incident',
+      `sysparm_query=${queryParts.join('^')}&sysparm_fields=sys_id,number,short_description,priority,state,assigned_to&sysparm_limit=200`
+    );
+
+    let incidents = [];
+    if (result.statusCode >= 200 && result.statusCode < 300 && result.data?.result) {
+      incidents = result.data.result.map(inc => ({
+        sysId: snowVal(inc.sys_id),
+        number: snowVal(inc.number),
+        shortDescription: snowVal(inc.short_description),
+        priority: snowVal(inc.priority),
+        state: snowVal(inc.state),
+        assignedTo: snowVal(inc.assigned_to),
+      }));
+    }
+
+    return res.json({ success: true, data: { incidents, total: incidents.length } });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { message: `Open incidents fetch failed: ${err.message}` } });
   }
 });
 

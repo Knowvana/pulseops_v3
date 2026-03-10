@@ -61,11 +61,32 @@ export default function LeftSideNavBar({
         </button>
       </div>
 
-      {/* Nav items */}
+      {/* Nav items — supports type: 'separator' and type: 'header' */}
       <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
-        {items.map((item) => {
+        {items.map((item, idx) => {
+          // ── Separator ──────────────────────────────────────────────
+          if (item.type === 'separator') {
+            return isCollapsed
+              ? <div key={`sep-${idx}`} className="my-2 mx-2 border-t border-surface-200" />
+              : <div key={`sep-${idx}`} className="my-2 mx-1 border-t border-surface-200" />;
+          }
+
+          // ── Section header ─────────────────────────────────────────
+          if (item.type === 'header') {
+            if (isCollapsed) return null;
+            return (
+              <div key={`hdr-${idx}`} className="pt-3 pb-1 px-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-surface-400">
+                  {item.label}
+                </span>
+              </div>
+            );
+          }
+
+          // ── Regular nav item ───────────────────────────────────────
           const Icon = item.icon;
           const isActive = item.id === activeItemId;
+          const isIndented = item.indent;
 
           return (
             <button
@@ -75,7 +96,7 @@ export default function LeftSideNavBar({
               className={`
                 w-full flex items-center gap-3 rounded-lg
                 transition-all duration-200 group
-                ${isCollapsed ? 'justify-center px-2 py-2.5' : 'px-3 py-2.5'}
+                ${isCollapsed ? 'justify-center px-2 py-2.5' : isIndented ? 'pl-7 pr-3 py-2' : 'px-3 py-2.5'}
                 ${isActive
                   ? 'bg-gradient-to-r from-brand-50 to-brand-50/50 text-brand-700 shadow-sm shadow-brand-100/50'
                   : 'text-surface-500 hover:text-surface-700 hover:bg-surface-50'
@@ -84,12 +105,12 @@ export default function LeftSideNavBar({
             >
               {Icon && (
                 <Icon
-                  size={18}
+                  size={isIndented ? 14 : 18}
                   className={`flex-shrink-0 ${isActive ? 'text-brand-600' : 'text-surface-400 group-hover:text-surface-600'}`}
                 />
               )}
               {!isCollapsed && (
-                <span className="text-sm font-medium truncate">{item.label}</span>
+                <span className={`${isIndented ? 'text-xs' : 'text-sm'} font-medium truncate`}>{item.label}</span>
               )}
               {!isCollapsed && item.badge && (
                 <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-brand-100 text-brand-600">

@@ -18,24 +18,19 @@ import React from 'react';
 import { Package, LayoutDashboard, BarChart3, Sliders, Blocks, Database } from 'lucide-react';
 import moduleConstants from './config/constants.json';
 import uiText from './config/uiText.json';
+
+// ── View Components (from ui/views/) ─────────────────────────────────────────
+import DashboardView from './views/DashboardView';
+import ReportsView from './views/ReportsView';
+
+// ── Shared Components ────────────────────────────────────────────────────────
 import ComponentShowcase from './components/ComponentShowcase';
+
+// ── Config Tab Components (from ui/components/settings/) ─────────────────────
 import DataManagementTab from './components/settings/DataManagementTab';
 
 const navText = uiText.navItems;
 const cfgText = uiText.config;
-
-// ── Placeholder view component ──────────────────────────────────────────────
-function PlaceholderView({ viewName }) {
-  return (
-    <div className="p-6">
-      <h1 className="text-xl font-bold text-surface-800">{viewName}</h1>
-      <p className="text-sm text-surface-500 mt-1">This view is under construction.</p>
-    </div>
-  );
-}
-
-function DashboardView() { return <PlaceholderView viewName="Dashboard" />; }
-function ReportsView()   { return <PlaceholderView viewName="Reports" />; }
 
 /** @type {import('@modules/moduleRegistry').ModuleManifest} */
 const manifest = {
@@ -64,7 +59,12 @@ const manifest = {
       id:      cfgText.tabs.general.id,
       label:   cfgText.tabs.general.label,
       icon:    Sliders,
-      content: () => <PlaceholderView viewName="General Configuration" />,
+      content: () => (
+        <div className="p-6">
+          <h1 className="text-xl font-bold text-surface-800">General Configuration</h1>
+          <p className="text-sm text-surface-500 mt-1">This tab is under construction.</p>
+        </div>
+      ),
     },
     {
       id:      cfgText.tabs.dataManagement.id,

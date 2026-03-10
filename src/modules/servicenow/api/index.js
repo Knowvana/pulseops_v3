@@ -34,14 +34,14 @@
 import { Router } from 'express';
 import fs from 'fs';
 
-import { CONFIG_DIR, CONNECTION_CONFIG, DEFAULTS_CONFIG, writeJsonFile } from './helpers.js';
-import configRoutes from './configRoutes.js';
-import incidentRoutes from './incidentRoutes.js';
-import ritmRoutes from './ritmRoutes.js';
-import incidentConfigRoutes from './incidentConfigRoutes.js';
-import syncRoutes from './syncRoutes.js';
-import reportRoutes from './reportRoutes.js';
-import dataRoutes from './dataRoutes.js';
+import { CONFIG_DIR, CONNECTION_CONFIG, DEFAULTS_CONFIG, writeJsonFile } from './routes/helpers.js';
+import configRoutes from './routes/configRoutes.js';
+import incidentRoutes from './routes/incidentRoutes.js';
+import ritmRoutes from './routes/ritmRoutes.js';
+import incidentConfigRoutes from './routes/incidentConfigRoutes.js';
+import syncRoutes from './routes/syncRoutes.js';
+import reportRoutes from './routes/reportRoutes.js';
+import dataRoutes from './routes/dataRoutes.js';
 
 const router = Router();
 

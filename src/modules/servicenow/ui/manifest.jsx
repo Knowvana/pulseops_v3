@@ -30,7 +30,7 @@
 // ============================================================================
 
 import React from 'react';
-import { Headset, LayoutDashboard, BarChart3, Sliders, Wifi, Clock, RefreshCw, ListFilter, ClipboardList, CalendarClock, Settings, Database, Columns } from 'lucide-react';
+import { Headset, LayoutDashboard, BarChart3, Sliders, Wifi, Clock, RefreshCw, ListFilter, ClipboardList, CalendarClock, Settings, Database, Columns, ShieldCheck, FileText, ListChecks, TrendingUp } from 'lucide-react';
 import moduleConstants from './config/constants.json';
 import uiText from './config/uiText.json';
 
@@ -38,7 +38,10 @@ import uiText from './config/uiText.json';
 import ServiceNowDashboard      from './components/ServiceNowDashboard';
 import ServiceNowIncidents      from './components/ServiceNowIncidents';
 import ServiceNowTestIncidents  from './components/ServiceNowTestIncidents';
-import ServiceNowReports        from './components/ServiceNowReports';
+import IncidentSlaReportView    from './views/IncidentSlaReportView';
+import IncidentAnalyticsView    from './views/IncidentAnalyticsView';
+import RitmReportsView          from './views/RitmReportsView';
+import SlaComplianceView        from './views/SlaComplianceView';
 
 // ── Config Tab Components (lazy-mounted via render functions) ─────────────────
 import ServiceNowConnectionTab         from './components/settings/ServiceNowConnectionTab';
@@ -60,13 +63,20 @@ const servicenowManifest = {
   // ── Module icon (Lucide — never hardcoded string) ─────────────────────────
   icon: Headset,
 
-  // ── Sidebar Navigation (MUST include dashboard, config, reports in this order)
+  // ── Sidebar Navigation ─────────────────────────────────────────────────────
+  // Flat layout: main items → separator → Reports header → indented sub-items → config
   navItems: [
-    { id: 'dashboard',     label: navText.dashboard,      icon: LayoutDashboard },
-    { id: 'incidents',     label: navText.incidents,       icon: ListFilter       },
-    { id: 'testIncidents', label: navText.testIncidents,   icon: ClipboardList    },
-    { id: 'reports',       label: navText.reports,         icon: BarChart3        },
-    { id: 'config',        label: navText.config,          icon: Sliders          },
+    { id: 'dashboard',        label: navText.dashboard,      icon: LayoutDashboard },
+    { id: 'incidents',        label: navText.incidents,       icon: ListFilter       },
+    { id: 'testIncidents',    label: navText.testIncidents,   icon: ClipboardList    },
+    { type: 'separator' },
+    { type: 'header', label: 'Reports' },
+    { id: 'incidentSlaReport',  label: 'Incident SLA Report',  icon: ShieldCheck,   indent: true },
+    { id: 'incidentAnalytics',  label: 'Incident Analytics',   icon: TrendingUp,    indent: true },
+    { id: 'ritmReports',        label: 'RITMs',                icon: ListChecks,    indent: true },
+    { id: 'slaCompliance',      label: 'SLA Compliance',       icon: ShieldCheck,   indent: true },
+    { type: 'separator' },
+    { id: 'config',           label: navText.config,          icon: Sliders          },
   ],
 
   /**
@@ -77,10 +87,13 @@ const servicenowManifest = {
    * @returns {{ [viewId: string]: React.ComponentType }}
    */
   getViews: () => ({
-    dashboard:     ServiceNowDashboard,
-    incidents:     ServiceNowIncidents,
-    testIncidents: ServiceNowTestIncidents,
-    reports:       ServiceNowReports,
+    dashboard:          ServiceNowDashboard,
+    incidents:          ServiceNowIncidents,
+    testIncidents:      ServiceNowTestIncidents,
+    incidentSlaReport:  IncidentSlaReportView,
+    incidentAnalytics:  IncidentAnalyticsView,
+    ritmReports:        RitmReportsView,
+    slaCompliance:      SlaComplianceView,
   }),
 
   /**

@@ -21,7 +21,7 @@
 //   - @shared                              → createLogger, ApiClient
 // ============================================================================
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   ListFilter, Search, RefreshCw, ChevronLeft, ChevronRight,
   WifiOff, ArrowRight, Loader2, AlertCircle,
@@ -40,9 +40,26 @@ const t   = uiText.incidents;
 
 const PAGE_SIZE = 20;
 
+// ── SNOW numeric → display key mappings ──────────────────────────────────────
+const PRIORITY_NUM_MAP = { '1': 'critical', '2': 'high', '3': 'medium', '4': 'low', '5': 'planning' };
+const STATE_NUM_MAP = { '1': 'open', '2': 'in_progress', '3': 'on_hold', '6': 'resolved', '7': 'closed', '8': 'cancelled' };
+
+// ── Column label map for SNOW field names ────────────────────────────────────
+const COLUMN_LABELS = {
+  number: 'Number', short_description: 'Title', priority: 'Priority',
+  state: 'State', assigned_to: 'Assigned To', assignment_group: 'Assignment Group',
+  opened_at: 'Created', sys_created_on: 'Sys Created', resolved_at: 'Resolved',
+  closed_at: 'Closed', category: 'Category', subcategory: 'Subcategory',
+  impact: 'Impact', urgency: 'Urgency', description: 'Description',
+  caller_id: 'Caller', sla_due: 'SLA Due', sys_updated_on: 'Updated',
+  close_code: 'Close Code', close_notes: 'Close Notes', contact_type: 'Contact Type',
+  work_notes: 'Work Notes', comments: 'Comments', sys_id: 'Sys ID',
+};
+const DEFAULT_COLUMNS = ['number','short_description','priority','state','assigned_to','opened_at'];
+
 // ── Filter option arrays ──────────────────────────────────────────────────────
 const STATE_OPTIONS   = ['all', 'open', 'in_progress', 'on_hold', 'resolved', 'closed'];
-const PRIORITY_OPTIONS = ['all', 'critical', 'high', 'medium', 'low'];
+const PRIORITY_OPTIONS = ['all', 'critical', 'high', 'medium', 'low', 'planning'];
 
 // ── Visual config ─────────────────────────────────────────────────────────────
 const PRIORITY_STYLES = {
@@ -137,8 +154,8 @@ export default function ServiceNowIncidents({ onNavigate }) {
             id: getValue(inc.sys_id) || getValue(inc.number),
             number: getValue(inc.number),
             title: getValue(inc.short_description) || getValue(inc.title) || '—',
-            priority: getValue(inc.priority),
-            state: getValue(inc.state),
+            priority: PRIORITY_NUM_MAP[String(getValue(inc.priority))] || getValue(inc.priority),
+            state: STATE_NUM_MAP[String(getValue(inc.state))] || getValue(inc.state),
             assignedTo: getValue(inc.assigned_to) || getValue(inc.assignedTo),
             slaDue: getValue(inc.sla_due) || getValue(inc.slaDue),
             createdAt: getValue(inc.opened_at) || getValue(inc.sys_created_on) || getValue(inc.createdAt),
@@ -213,6 +230,51 @@ export default function ServiceNowIncidents({ onNavigate }) {
   }, [fetchIncidents]);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
+
+  // ── Dynamic columns from incident config ──────────────────────────────
+  const activeColumns = useMemo(() => {
+    const cols = incidentConfig?.selectedColumns?.length > 0
+      ? incidentConfig.selectedColumns
+      : DEFAULT_COLUMNS;
+    return cols.map(key => ({
+      key,
+      label: COLUMN_LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+    }));
+  }, [incidentConfig]);
+
+  // ── Render a cell value with special formatting for priority/state ─────
+  const renderCellValue = useCallback((inc, colKey) => {
+    const raw = inc._raw?.[colKey];
+    const val = raw !== undefined ? raw : inc[colKey];
+    if (colKey === 'priority') {
+      const pKey = PRIORITY_NUM_MAP[String(val)] || val;
+      return (
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${PRIORITY_STYLES[pKey] || PRIORITY_STYLES.low}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${PRIORITY_DOTS[pKey] || 'bg-surface-400'}`} />
+          {t.priority[pKey] || pKey}
+        </span>
+      );
+    }
+    if (colKey === 'state') {
+      const sKey = STATE_NUM_MAP[String(val)] || val;
+      return (
+        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${STATE_STYLES[sKey] || STATE_STYLES.open}`}>
+          {t.state[sKey] || sKey}
+        </span>
+      );
+    }
+    if (colKey === 'number') {
+      return <span className="font-mono text-xs text-brand-600 font-bold whitespace-nowrap">{val || uiText.common.na}</span>;
+    }
+    if (colKey === 'short_description') {
+      return <span className="block truncate max-w-[300px]">{val || uiText.common.na}</span>;
+    }
+    // Date columns
+    if (['opened_at','sys_created_on','resolved_at','closed_at','sys_updated_on'].includes(colKey)) {
+      return val ? new Date(val).toLocaleString() : uiText.common.na;
+    }
+    return val || uiText.common.na;
+  }, []);
 
   // ── Not configured ─────────────────────────────────────────────────────
   if (!loading && notConfigured) {
@@ -347,14 +409,7 @@ export default function ServiceNowIncidents({ onNavigate }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-surface-50 border-b border-surface-200">
-                  {[
-                    { key: 'number', label: t.columns.number },
-                    { key: 'short_description', label: t.columns.title },
-                    { key: 'priority', label: t.columns.priority },
-                    { key: 'state', label: t.columns.state },
-                    { key: 'assigned_to', label: t.columns.assignedTo },
-                    { key: 'opened_at', label: t.columns.createdAt },
-                  ].map(col => (
+                  {activeColumns.map(col => (
                     <th
                       key={col.key}
                       onClick={() => handleSort(col.key)}
@@ -371,25 +426,11 @@ export default function ServiceNowIncidents({ onNavigate }) {
               <tbody className="divide-y divide-surface-50">
                 {incidents.map(inc => (
                   <tr key={inc.id} className="hover:bg-surface-50/60 transition-colors">
-                    <td className="px-4 py-2.5 font-mono text-xs text-brand-600 font-bold whitespace-nowrap">{inc.number}</td>
-                    <td className="px-4 py-2.5 text-surface-700 max-w-[300px]">
-                      <span className="block truncate">{inc.title}</span>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${PRIORITY_STYLES[inc.priority] || PRIORITY_STYLES.low}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${PRIORITY_DOTS[inc.priority] || 'bg-surface-400'}`} />
-                        {t.priority[inc.priority] || inc.priority}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${STATE_STYLES[inc.state] || STATE_STYLES.open}`}>
-                        {t.state[inc.state] || inc.state}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-surface-500 text-xs whitespace-nowrap">{inc.assignedTo || uiText.common.na}</td>
-                    <td className="px-4 py-2.5 text-surface-400 text-xs whitespace-nowrap">
-                      {inc.createdAt ? new Date(inc.createdAt).toLocaleString() : uiText.common.na}
-                    </td>
+                    {activeColumns.map(col => (
+                      <td key={col.key} className="px-4 py-2.5 text-surface-700 text-xs whitespace-nowrap">
+                        {renderCellValue(inc, col.key)}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>

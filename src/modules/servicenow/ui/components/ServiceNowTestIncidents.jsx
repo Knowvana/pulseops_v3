@@ -7,6 +7,9 @@
 //
 // ARCHITECTURE:
 //   - Three action panels: Create, Update, Close
+//   - Create panel uses Impact + Urgency (SNOW calculates Priority)
+//   - Create panel has searchable assignment group dropdown
+//   - Close panel uses open incident dropdown instead of manual sys_id
 //   - Recent operations log with status badges
 //   - All text from uiText.json — zero hardcoded strings
 //
@@ -17,10 +20,10 @@
 //   - @shared            → createLogger, ApiClient
 // ============================================================================
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus, Edit3, XCircle, CheckCircle2, AlertCircle,
-  Loader2, ClipboardList, Clock, Trash2,
+  Loader2, ClipboardList, Clock, Trash2, Search, RefreshCw, Users,
 } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
@@ -33,6 +36,25 @@ const snApi = {
   incidents: '/api/servicenow/incidents',
   incidentClose: (id) => `/api/servicenow/incidents/${id}/close`,
   incidentUpdate: (id) => `/api/servicenow/incidents/${id}`,
+  openIncidents: '/api/servicenow/incidents/open',
+  searchGroups: '/api/servicenow/search/assignment-groups',
+};
+
+// ServiceNow Impact/Urgency values (3-level)
+const IMPACT_OPTIONS = [
+  { value: '1', label: '1 - High' },
+  { value: '2', label: '2 - Medium' },
+  { value: '3', label: '3 - Low' },
+];
+
+const URGENCY_OPTIONS = [
+  { value: '1', label: '1 - High' },
+  { value: '2', label: '2 - Medium' },
+  { value: '3', label: '3 - Low' },
+];
+
+const PRIORITY_LABELS = {
+  '1': '1 - Critical', '2': '2 - High', '3': '3 - Medium', '4': '4 - Low', '5': '5 - Planning',
 };
 
 // ── Operation result component ───────────────────────────────────────────────
@@ -72,11 +94,19 @@ function OpResult({ op }) {
 export default function ServiceNowTestIncidents() {
   // Create form state
   const [createDesc, setCreateDesc]       = useState('');
-  const [createPriority, setCreatePriority] = useState('3 - Medium');
   const [createCategory, setCreateCategory] = useState('General');
-  const [createImpact, setCreateImpact]   = useState('3 - Low');
-  const [createUrgency, setCreateUrgency] = useState('3 - Low');
+  const [createImpact, setCreateImpact]   = useState('2');
+  const [createUrgency, setCreateUrgency] = useState('2');
+  const [createGroup, setCreateGroup]     = useState('');
   const [creating, setCreating]           = useState(false);
+
+  // Assignment group search state
+  const [groupSearch, setGroupSearch]       = useState('');
+  const [groupResults, setGroupResults]     = useState([]);
+  const [groupSearching, setGroupSearching] = useState(false);
+  const [showGroupDropdown, setShowGroupDropdown] = useState(false);
+  const groupSearchRef = useRef(null);
+  const groupDropdownRef = useRef(null);
 
   // Update form state
   const [updateSysId, setUpdateSysId]       = useState('');
@@ -86,34 +116,91 @@ export default function ServiceNowTestIncidents() {
   const [updating, setUpdating]             = useState(false);
 
   // Close form state
-  const [closeSysId, setCloseSysId]       = useState('');
+  const [closeIncident, setCloseIncident] = useState('');
   const [closeNotes, setCloseNotes]       = useState('');
   const [closeCode, setCloseCode]         = useState('Solved (Permanently)');
   const [closing, setClosing]             = useState(false);
 
+  // Open incidents for close dropdown
+  const [openIncidents, setOpenIncidents]       = useState([]);
+  const [openIncidentsLoading, setOpenIncidentsLoading] = useState(false);
+
   // Operations log
   const [operations, setOperations] = useState([]);
+
+  const initRan = useRef(false);
 
   const addOp = useCallback((action, success, message, data = null) => {
     setOperations(prev => [{ action, success, message, data, timestamp: Date.now() }, ...prev].slice(0, 20));
   }, []);
 
+  // ── Fetch open incidents for close dropdown ─────────────────────────────
+  const fetchOpenIncidents = useCallback(async () => {
+    setOpenIncidentsLoading(true);
+    try {
+      const res = await ApiClient.get(snApi.openIncidents);
+      if (res?.success) {
+        setOpenIncidents(res.data.incidents || []);
+      }
+    } catch (err) {
+      log.error('fetchOpenIncidents', 'Failed', { error: err.message });
+    } finally {
+      setOpenIncidentsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (initRan.current) return;
+    initRan.current = true;
+    fetchOpenIncidents();
+  }, [fetchOpenIncidents]);
+
+  // ── Assignment group search (debounced) ─────────────────────────────────
+  useEffect(() => {
+    if (!groupSearch.trim()) {
+      setGroupResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setGroupSearching(true);
+      try {
+        const res = await ApiClient.get(`${snApi.searchGroups}?q=${encodeURIComponent(groupSearch)}`);
+        if (res?.success) setGroupResults(res.data.groups || []);
+      } catch { /* ignore */ }
+      finally { setGroupSearching(false); }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [groupSearch]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (groupDropdownRef.current && !groupDropdownRef.current.contains(e.target)) {
+        setShowGroupDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
   // ── Create ──────────────────────────────────────────────────────────────
   const handleCreate = useCallback(async () => {
     if (!createDesc.trim()) return;
-    log.info('handleCreate', 'Creating incident', { priority: createPriority });
+    log.info('handleCreate', 'Creating incident', { impact: createImpact, urgency: createUrgency });
     setCreating(true);
     try {
-      const res = await ApiClient.post(snApi.incidents, {
+      const body = {
         shortDescription: createDesc,
-        priority: createPriority,
         category: createCategory,
         impact: createImpact,
         urgency: createUrgency,
-      });
+      };
+      if (createGroup) body.assignmentGroup = createGroup;
+      const res = await ApiClient.post(snApi.incidents, body);
       if (res?.success) {
         addOp('CREATE', true, res.message || 'Incident created', res.data);
         setCreateDesc('');
+        fetchOpenIncidents();
         log.info('handleCreate', 'Incident created', { number: res.data?.number });
       } else {
         addOp('CREATE', false, res?.error?.message || 'Create failed');
@@ -125,7 +212,7 @@ export default function ServiceNowTestIncidents() {
     } finally {
       setCreating(false);
     }
-  }, [createDesc, createPriority, createCategory, createImpact, createUrgency, addOp]);
+  }, [createDesc, createCategory, createImpact, createUrgency, createGroup, addOp, fetchOpenIncidents]);
 
   // ── Update ──────────────────────────────────────────────────────────────
   const handleUpdate = useCallback(async () => {
@@ -155,16 +242,18 @@ export default function ServiceNowTestIncidents() {
 
   // ── Close ───────────────────────────────────────────────────────────────
   const handleClose = useCallback(async () => {
-    if (!closeSysId.trim()) return;
-    log.info('handleClose', 'Closing incident', { sysId: closeSysId });
+    if (!closeIncident) return;
+    log.info('handleClose', 'Closing incident', { incident: closeIncident });
     setClosing(true);
     try {
-      const res = await ApiClient.post(snApi.incidentClose(closeSysId), {
+      const res = await ApiClient.post(snApi.incidentClose(closeIncident), {
         closeNotes: closeNotes || 'Closed via PulseOps Test Page',
         closeCode,
       });
       if (res?.success) {
         addOp('CLOSE', true, res.message || 'Incident closed', res.data);
+        setCloseIncident('');
+        fetchOpenIncidents();
         log.info('handleClose', 'Incident closed');
       } else {
         addOp('CLOSE', false, res?.error?.message || 'Close failed');
@@ -176,7 +265,7 @@ export default function ServiceNowTestIncidents() {
     } finally {
       setClosing(false);
     }
-  }, [closeSysId, closeNotes, closeCode, addOp]);
+  }, [closeIncident, closeNotes, closeCode, addOp, fetchOpenIncidents]);
 
   // ── Select styling helpers ─────────────────────────────────────────────
   const selectCls = 'w-full px-3 py-2 rounded-lg border border-surface-200 bg-white text-sm text-surface-700 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400';
@@ -211,35 +300,83 @@ export default function ServiceNowTestIncidents() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-semibold text-surface-600 mb-1 block">{t.priorityLabel}</label>
-                <select value={createPriority} onChange={e => setCreatePriority(e.target.value)} className={selectCls}>
-                  {t.priorities.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-surface-600 mb-1 block">{t.categoryLabel}</label>
-                <input type="text" value={createCategory} onChange={e => setCreateCategory(e.target.value)} className={inputCls} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
                 <label className="text-xs font-semibold text-surface-600 mb-1 block">{t.impactLabel}</label>
                 <select value={createImpact} onChange={e => setCreateImpact(e.target.value)} className={selectCls}>
-                  {t.priorities.map(p => <option key={p} value={p}>{p}</option>)}
+                  {IMPACT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
               <div>
                 <label className="text-xs font-semibold text-surface-600 mb-1 block">{t.urgencyLabel}</label>
                 <select value={createUrgency} onChange={e => setCreateUrgency(e.target.value)} className={selectCls}>
-                  {t.priorities.map(p => <option key={p} value={p}>{p}</option>)}
+                  {URGENCY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
             </div>
-            <button onClick={handleCreate} disabled={creating || !createDesc.trim()}
-              className={`${btnPrimary} bg-emerald-600 text-white hover:bg-emerald-700 w-full justify-center`}>
-              {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-              {creating ? t.creating : t.createButton}
-            </button>
+            <div>
+              <label className="text-xs font-semibold text-surface-600 mb-1 block">{t.categoryLabel}</label>
+              <input type="text" value={createCategory} onChange={e => setCreateCategory(e.target.value)} className={inputCls} />
+            </div>
+            {/* Assignment Group — searchable dropdown */}
+            <div className="relative" ref={groupDropdownRef}>
+              <label className="text-xs font-semibold text-surface-600 mb-1 block">
+                <Users size={11} className="inline mr-1" />Assignment Group
+              </label>
+              <div className="relative">
+                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-400" />
+                <input
+                  ref={groupSearchRef}
+                  type="text"
+                  value={createGroup || groupSearch}
+                  onChange={e => {
+                    setGroupSearch(e.target.value);
+                    setCreateGroup('');
+                    setShowGroupDropdown(true);
+                  }}
+                  onFocus={() => setShowGroupDropdown(true)}
+                  placeholder="Search assignment groups..."
+                  className={`${inputCls} pl-8 pr-8`}
+                />
+                {groupSearching && <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-500 animate-spin" />}
+                {createGroup && !groupSearching && (
+                  <button onClick={() => { setCreateGroup(''); setGroupSearch(''); }}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-400 hover:text-rose-500">
+                    <XCircle size={13} />
+                  </button>
+                )}
+              </div>
+              {showGroupDropdown && groupResults.length > 0 && (
+                <div className="absolute z-20 w-full mt-1 bg-white rounded-lg border border-surface-200 shadow-lg max-h-[160px] overflow-y-auto">
+                  {groupResults.map(g => (
+                    <button key={g.sysId} onClick={() => {
+                      setCreateGroup(g.name);
+                      setGroupSearch('');
+                      setShowGroupDropdown(false);
+                    }}
+                      className="w-full text-left px-3 py-2 hover:bg-brand-50 transition-colors border-b border-surface-50 last:border-b-0">
+                      <span className="text-xs font-medium text-surface-700">{g.name}</span>
+                      {g.description && (
+                        <span className="block text-[10px] text-surface-400 truncate">{g.description}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {createGroup && (
+                <p className="text-[10px] text-emerald-600 mt-0.5 flex items-center gap-1">
+                  <CheckCircle2 size={10} /> {createGroup}
+                </p>
+              )}
+            </div>
+            <div className="pt-1">
+              <p className="text-[10px] text-surface-400 bg-surface-50 rounded-lg px-3 py-1.5 mb-2">
+                ServiceNow auto-calculates Priority from Impact + Urgency
+              </p>
+              <button onClick={handleCreate} disabled={creating || !createDesc.trim()}
+                className={`${btnPrimary} bg-emerald-600 text-white hover:bg-emerald-700 w-full justify-center`}>
+                {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                {creating ? t.creating : t.createButton}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -257,10 +394,10 @@ export default function ServiceNowTestIncidents() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-semibold text-surface-600 mb-1 block">{t.priorityLabel}</label>
+                <label className="text-xs font-semibold text-surface-600 mb-1 block">{t.impactLabel}</label>
                 <select value={updatePriority} onChange={e => setUpdatePriority(e.target.value)} className={selectCls}>
                   <option value="">— No change —</option>
-                  {t.priorities.map(p => <option key={p} value={p}>{p}</option>)}
+                  {IMPACT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
               <div>
@@ -287,15 +424,37 @@ export default function ServiceNowTestIncidents() {
 
         {/* ── Close Panel ──────────────────────────────────────────────── */}
         <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-surface-100 bg-rose-50/50 flex items-center gap-2">
-            <XCircle size={15} className="text-rose-600" />
-            <h3 className="text-sm font-bold text-surface-700">{t.closeTitle}</h3>
+          <div className="px-5 py-3 border-b border-surface-100 bg-rose-50/50 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <XCircle size={15} className="text-rose-600" />
+              <h3 className="text-sm font-bold text-surface-700">{t.closeTitle}</h3>
+            </div>
+            <button onClick={fetchOpenIncidents} disabled={openIncidentsLoading}
+              className="p-1 rounded text-surface-400 hover:text-brand-600 hover:bg-brand-50 transition-colors disabled:opacity-40"
+              title="Refresh open incidents">
+              <RefreshCw size={12} className={openIncidentsLoading ? 'animate-spin' : ''} />
+            </button>
           </div>
           <div className="p-5 space-y-3">
             <div>
-              <label className="text-xs font-semibold text-surface-600 mb-1 block">{t.sysIdLabel}</label>
-              <input type="text" value={closeSysId} onChange={e => setCloseSysId(e.target.value)}
-                placeholder={t.sysIdPlaceholder} className={inputCls} />
+              <label className="text-xs font-semibold text-surface-600 mb-1 block">Select Incident</label>
+              {openIncidentsLoading ? (
+                <div className="flex items-center gap-2 px-3 py-2 text-xs text-surface-400">
+                  <Loader2 size={12} className="animate-spin" /> Loading open incidents...
+                </div>
+              ) : (
+                <select value={closeIncident} onChange={e => setCloseIncident(e.target.value)} className={selectCls}>
+                  <option value="">— Select an open incident —</option>
+                  {openIncidents.map(inc => (
+                    <option key={inc.number} value={inc.number}>
+                      {inc.number} — P{inc.priority} — {(inc.shortDescription || '').slice(0, 50)}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <p className="text-[10px] text-surface-400 mt-0.5">
+                {openIncidents.length} open incident(s) available
+              </p>
             </div>
             <div>
               <label className="text-xs font-semibold text-surface-600 mb-1 block">{t.closeNotesLabel}</label>
@@ -309,7 +468,7 @@ export default function ServiceNowTestIncidents() {
                 {t.closeCodes.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <button onClick={handleClose} disabled={closing || !closeSysId.trim()}
+            <button onClick={handleClose} disabled={closing || !closeIncident}
               className={`${btnPrimary} bg-rose-600 text-white hover:bg-rose-700 w-full justify-center`}>
               {closing ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
               {closing ? t.closing : t.closeButton}

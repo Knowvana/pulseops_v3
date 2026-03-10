@@ -17,6 +17,14 @@ import {
 
 const router = Router();
 
+// ── Extract numeric value from SNOW label strings like '3 - Medium' → '3' ───
+function extractNumeric(val) {
+  if (val == null || val === '') return val;
+  const s = String(val).trim();
+  const match = s.match(/^(\d+)/);
+  return match ? match[1] : s;
+}
+
 // ── GET /incidents — Paginated + filtered incident list (always live from SNOW)
 router.get('/incidents', async (req, res) => {
   try {
@@ -79,18 +87,19 @@ router.post('/incidents', async (req, res) => {
     if (!conn.isConfigured) {
       return res.status(400).json({ success: false, error: { message: 'ServiceNow connection is not configured.' } });
     }
-    const { shortDescription, priority, state, category, impact, urgency } = req.body;
+    const { shortDescription, priority, state, category, impact, urgency, assignmentGroup } = req.body;
     if (!shortDescription) {
       return res.status(400).json({ success: false, error: { message: 'shortDescription is required.' } });
     }
-    const payload = JSON.stringify({
+    const payloadObj = {
       short_description: shortDescription,
-      priority: priority || '3 - Medium',
-      state: state || 'New',
+      impact: extractNumeric(impact || '3'),
+      urgency: extractNumeric(urgency || '3'),
       category: category || 'General',
-      impact: impact || '3 - Low',
-      urgency: urgency || '3 - Low',
-    });
+      ...(state ? { state: state === 'New' ? '1' : state } : {}),
+    };
+    if (assignmentGroup) payloadObj.assignment_group = assignmentGroup;
+    const payload = JSON.stringify(payloadObj);
     const result = await snowRequestWrite(conn, 'table/incident', 'POST', payload);
     if (result.statusCode >= 200 && result.statusCode < 300) {
       return res.json({ success: true, data: result.data?.result || result.data, message: 'Incident created successfully.' });
@@ -109,11 +118,13 @@ router.put('/incidents/:id', async (req, res) => {
       return res.status(400).json({ success: false, error: { message: 'ServiceNow connection is not configured.' } });
     }
     const { id } = req.params;
-    const { shortDescription, priority, state, comment } = req.body;
+    const { shortDescription, priority, state, comment, impact, urgency } = req.body;
     const payload = {};
     if (shortDescription !== undefined) payload.short_description = shortDescription;
-    if (priority !== undefined) payload.priority = priority;
-    if (state !== undefined) payload.state = state;
+    if (priority !== undefined) payload.priority = extractNumeric(priority);
+    if (impact !== undefined) payload.impact = extractNumeric(impact);
+    if (urgency !== undefined) payload.urgency = extractNumeric(urgency);
+    if (state !== undefined) payload.state = extractNumeric(state);
     if (comment !== undefined) payload.comments = comment;
     const result = await snowRequestWrite(conn, `table/incident/${id}`, 'PATCH', JSON.stringify(payload));
     if (result.statusCode >= 200 && result.statusCode < 300) {
@@ -126,14 +137,27 @@ router.put('/incidents/:id', async (req, res) => {
 });
 
 // ── POST /incidents/:id/close — Close an incident ────────────────────────
+// Accepts sys_id OR incident number (e.g. INC0010001)
 router.post('/incidents/:id/close', async (req, res) => {
   try {
     const conn = loadConnectionConfig();
     if (!conn.isConfigured) {
       return res.status(400).json({ success: false, error: { message: 'ServiceNow connection is not configured.' } });
     }
-    const { id } = req.params;
+    let { id } = req.params;
     const { closeNotes, closeCode } = req.body;
+
+    // If id looks like an incident number (e.g. INC0010001), resolve to sys_id
+    if (/^INC/i.test(id)) {
+      const lookup = await snowRequest(conn, 'table/incident', `sysparm_query=number=${id}&sysparm_fields=sys_id&sysparm_limit=1`);
+      if (lookup.statusCode >= 200 && lookup.statusCode < 300 && lookup.data?.result?.length > 0) {
+        const sysIdVal = lookup.data.result[0].sys_id;
+        id = typeof sysIdVal === 'object' && sysIdVal?.value ? sysIdVal.value : sysIdVal;
+      } else {
+        return res.status(404).json({ success: false, error: { message: `Incident ${req.params.id} not found in ServiceNow.` } });
+      }
+    }
+
     const payload = JSON.stringify({
       state: '7',
       close_notes: closeNotes || 'Closed via PulseOps',

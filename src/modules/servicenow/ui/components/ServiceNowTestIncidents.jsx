@@ -249,6 +249,7 @@ export default function ServiceNowTestIncidents() {
       const res = await ApiClient.post(snApi.incidentClose(closeIncident), {
         closeNotes: closeNotes || 'Closed via PulseOps Test Page',
         closeCode,
+        resolutionCode: closeCode,
       });
       if (res?.success) {
         addOp('CLOSE', true, res.message || 'Incident closed', res.data);

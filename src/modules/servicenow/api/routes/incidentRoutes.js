@@ -104,7 +104,12 @@ router.post('/incidents', async (req, res) => {
     if (result.statusCode >= 200 && result.statusCode < 300) {
       return res.json({ success: true, data: result.data?.result || result.data, message: 'Incident created successfully.' });
     }
-    return res.status(result.statusCode || 502).json({ success: false, error: { message: `ServiceNow returned HTTP ${result.statusCode}` } });
+    const detail = result.data?.error?.detail || result.data?.error?.message || result.data?.error || JSON.stringify(result.data);
+    console.warn('[ServiceNow][incidents:create] ServiceNow rejected request', {
+      statusCode: result.statusCode,
+      detail,
+    });
+    return res.status(result.statusCode || 502).json({ success: false, error: { message: `ServiceNow returned HTTP ${result.statusCode}: ${detail}` } });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: `Create incident failed: ${err.message}` } });
   }
@@ -130,7 +135,13 @@ router.put('/incidents/:id', async (req, res) => {
     if (result.statusCode >= 200 && result.statusCode < 300) {
       return res.json({ success: true, data: result.data?.result || result.data, message: 'Incident updated successfully.' });
     }
-    return res.status(result.statusCode || 502).json({ success: false, error: { message: `ServiceNow returned HTTP ${result.statusCode}` } });
+    const detail = result.data?.error?.detail || result.data?.error?.message || result.data?.error || JSON.stringify(result.data);
+    console.warn('[ServiceNow][incidents:update] ServiceNow rejected request', {
+      id,
+      statusCode: result.statusCode,
+      detail,
+    });
+    return res.status(result.statusCode || 502).json({ success: false, error: { message: `ServiceNow returned HTTP ${result.statusCode}: ${detail}` } });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: `Update incident failed: ${err.message}` } });
   }
@@ -144,8 +155,8 @@ router.post('/incidents/:id/close', async (req, res) => {
     if (!conn.isConfigured) {
       return res.status(400).json({ success: false, error: { message: 'ServiceNow connection is not configured.' } });
     }
+    const { closeNotes, closeCode, resolutionCode } = req.body;
     let { id } = req.params;
-    const { closeNotes, closeCode } = req.body;
 
     // If id looks like an incident number (e.g. INC0010001), resolve to sys_id
     if (/^INC/i.test(id)) {
@@ -158,16 +169,20 @@ router.post('/incidents/:id/close', async (req, res) => {
       }
     }
 
+    const resolvedValue = resolutionCode || closeCode || 'Solved (Permanently)';
     const payload = JSON.stringify({
       state: '7',
       close_notes: closeNotes || 'Closed via PulseOps',
       close_code: closeCode || 'Solved (Permanently)',
+      resolution_code: resolvedValue,
+      u_resolution_code: resolvedValue,
     });
     const result = await snowRequestWrite(conn, `table/incident/${id}`, 'PATCH', payload);
     if (result.statusCode >= 200 && result.statusCode < 300) {
       return res.json({ success: true, data: result.data?.result || result.data, message: 'Incident closed successfully.' });
     }
-    return res.status(result.statusCode || 502).json({ success: false, error: { message: `ServiceNow returned HTTP ${result.statusCode}` } });
+    const detail = result.data?.error?.detail || result.data?.error?.message || result.data?.error || JSON.stringify(result.data);
+    return res.status(result.statusCode || 502).json({ success: false, error: { message: `ServiceNow returned HTTP ${result.statusCode}: ${detail}` } });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: `Close incident failed: ${err.message}` } });
   }

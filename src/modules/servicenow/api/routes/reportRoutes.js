@@ -376,11 +376,15 @@ router.get('/reports/sla/incidents', async (req, res) => {
     if (period === 'daily') {
       startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().slice(0, 10);
     } else if (period === 'weekly') {
-      const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
-      startDate = weekAgo.toISOString().slice(0, 10);
+      const weekStart = new Date(now);
+      const day = weekStart.getDay();
+      const diff = (day === 0 ? 6 : day - 1); // Monday as week start
+      weekStart.setDate(weekStart.getDate() - diff);
+      weekStart.setHours(0, 0, 0, 0);
+      startDate = weekStart.toISOString().slice(0, 10);
     } else {
-      const monthAgo = new Date(now); monthAgo.setMonth(monthAgo.getMonth() - 1);
-      startDate = monthAgo.toISOString().slice(0, 10);
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      startDate = monthStart.toISOString().slice(0, 10);
     }
 
     const queryParts = [`${incidentConfig.createdColumn}>=${startDate}`, 'ORDERBYDESCnumber'];

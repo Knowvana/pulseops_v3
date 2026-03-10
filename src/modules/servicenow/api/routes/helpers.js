@@ -99,7 +99,13 @@ export async function loadIncidentConfig() {
 // ── Assignment group query builder ───────────────────────────────────────────
 export function buildAssignmentGroupQuery(assignmentGroup) {
   if (!assignmentGroup) return '';
-  return `assignment_group=${encodeURIComponent(assignmentGroup)}`;
+  const trimmed = String(assignmentGroup).trim();
+  if (!trimmed) return '';
+  const isSysId = /^[0-9a-f]{32}$/i.test(trimmed);
+  if (isSysId) {
+    return `assignment_group=${trimmed}`;
+  }
+  return `assignment_group.nameLIKE${encodeURIComponent(trimmed)}`;
 }
 
 // ── Extract primitive value from SNOW {link, value} objects ──────────────────

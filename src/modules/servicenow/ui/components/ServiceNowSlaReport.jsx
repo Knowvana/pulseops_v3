@@ -183,12 +183,12 @@ function PrioritySummaryTable({ summaryByPriority }) {
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ServiceNowSlaReport() {
-  const [period, setPeriod]           = useState('monthly');
-  const [customFrom, setCustomFrom]   = useState(getIsoDate(30));
-  const [customTo, setCustomTo]       = useState(getIsoDate(0));
-  const [data, setData]               = useState(null);
-  const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState(null);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [period, setPeriod] = useState('monthly');
+  const [customFrom, setCustomFrom] = useState(getIsoDate(30));
+  const [customTo, setCustomTo] = useState(getIsoDate(0));
   const [searchQuery, setSearchQuery] = useState('');
   const initRan = useRef(false);
 
@@ -459,10 +459,8 @@ export default function ServiceNowSlaReport() {
                       const variance = (inc.targetMinutes != null && inc.resolutionMinutes != null)
                         ? inc.targetMinutes - inc.resolutionMinutes
                         : null;
-                      // Expected closure = created + target (business hours)
-                      const expectedClosure = (inc.createdAt && inc.targetMinutes)
-                        ? new Date(new Date(inc.createdAt).getTime() + inc.targetMinutes * 60000)
-                        : null;
+                      // Expected closure from backend (already calculated with business hours)
+                      const expectedClosure = inc.expectedClosure;
 
                       return (
                         <tr key={idx} className="hover:bg-surface-50/50 transition-colors group">
@@ -480,7 +478,7 @@ export default function ServiceNowSlaReport() {
                           <td className="px-3 py-2 text-xs text-surface-500 max-w-[120px] truncate">{inc.assignedTo || '—'}</td>
                           <td className="px-3 py-2 text-xs text-surface-500 whitespace-nowrap">{formatDate(inc.createdAt)}</td>
                           <td className="px-3 py-2 text-xs font-semibold text-brand-700 whitespace-nowrap bg-brand-50/30">
-                            {expectedClosure ? formatDate(expectedClosure.toISOString()) : '—'}
+                            {expectedClosure ? formatDate(expectedClosure) : '—'}
                           </td>
                           <td className="px-3 py-2 text-xs text-surface-500 whitespace-nowrap">{formatDate(inc.closedAt)}</td>
                           <td className="px-3 py-2 text-right text-xs font-semibold text-surface-700">{formatMinutes(inc.resolutionMinutes)}</td>

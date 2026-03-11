@@ -16,7 +16,7 @@
 //   - lucide-react            → Chevron icons
 // ============================================================================
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
 import uiText from '@config/uiElementsText.json';
 
 const txt = uiText.sideNav;
@@ -30,8 +30,17 @@ export default function LeftSideNavBar({
   onToggleCollapse,
 }) {
   const [internalCollapsed, setInternalCollapsed] = useState(false);
+  const [expandedSections, setExpandedSections] = useState({}); // Track expanded sections
   const isCollapsed = controlledCollapsed !== undefined ? controlledCollapsed : internalCollapsed;
   const toggleCollapse = onToggleCollapse || (() => setInternalCollapsed(!internalCollapsed));
+
+  // Toggle section expansion
+  const toggleSection = (sectionId) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [sectionId]: !prev[sectionId]
+    }));
+  };
 
   return (
     <aside className={`
@@ -61,7 +70,7 @@ export default function LeftSideNavBar({
         </button>
       </div>
 
-      {/* Nav items — supports type: 'separator' and type: 'header' */}
+      {/* Nav items — supports type: 'separator', type: 'header', and indent: true */}
       <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
         {items.map((item, idx) => {
           // ── Separator ──────────────────────────────────────────────
@@ -74,12 +83,24 @@ export default function LeftSideNavBar({
           // ── Section header ─────────────────────────────────────────
           if (item.type === 'header') {
             if (isCollapsed) return null;
+            const sectionId = `section-${idx}`;
+            const isExpanded = expandedSections[sectionId];
+            
             return (
-              <div key={`hdr-${idx}`} className="pt-3 pb-1 px-3">
+              <button
+                key={`hdr-${idx}`}
+                onClick={() => toggleSection(sectionId)}
+                className="w-full flex items-center justify-between pt-3 pb-1 px-3 hover:bg-surface-50 rounded-lg transition-colors group"
+              >
                 <span className="text-[10px] font-bold uppercase tracking-wider text-surface-400">
                   {item.label}
                 </span>
-              </div>
+                {isExpanded ? (
+                  <ChevronUp size={12} className="text-surface-400 group-hover:text-surface-600" />
+                ) : (
+                  <ChevronDown size={12} className="text-surface-400 group-hover:text-surface-600" />
+                )}
+              </button>
             );
           }
 
@@ -87,6 +108,25 @@ export default function LeftSideNavBar({
           const Icon = item.icon;
           const isActive = item.id === activeItemId;
           const isIndented = item.indent;
+          
+          // Find the parent section for indented items
+          let parentSectionId = null;
+          let isVisible = true;
+          
+          if (isIndented) {
+            // Look backwards for the nearest header
+            for (let i = idx - 1; i >= 0; i--) {
+              if (items[i].type === 'header') {
+                parentSectionId = `section-${i}`;
+                break;
+              }
+            }
+            // Hide indented items if parent section is collapsed
+            isVisible = expandedSections[parentSectionId];
+          }
+
+          // Don't render hidden indented items
+          if (isIndented && !isVisible) return null;
 
           return (
             <button

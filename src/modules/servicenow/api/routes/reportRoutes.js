@@ -414,7 +414,10 @@ router.get('/reports/sla/incidents', async (req, res) => {
     let businessHours = null;
     try {
       businessHours = readJsonFile(path.join(CONFIG_DIR, 'servicenow_business_hours.json'));
-    } catch { /* ignore */ }
+      console.log('[DEBUG] Business hours loaded:', businessHours);
+    } catch (err) {
+      console.log('[DEBUG] Failed to load business hours:', err.message);
+    }
 
     const incidentSlaData = incidents.map(inc => {
       const p = String(snowVal(inc.priority));
@@ -425,6 +428,78 @@ router.get('/reports/sla/incidents', async (req, res) => {
 
       let resolutionMinutes = null;
       let slaMet = null;
+      let expectedClosure = null;
+      if (createdAt) {
+        console.log(`[DEBUG] Calculating expected closure for incident ${inc.number}:`, { createdAt, threshold: threshold.resolutionMinutes });
+        // Calculate expected closure using business hours
+        if (businessHours && Array.isArray(businessHours) && businessHours.length > 0) {
+          let bizMinutesToAdd = threshold.resolutionMinutes;
+          let current = new Date(createdAt);
+          
+          // Convert business hours array to lookup
+          const hoursMap = {};
+          businessHours.forEach(day => {
+            if (day.isBusinessDay && day.startTime && day.endTime) {
+              const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+              const dayIndex = dayNames.indexOf(day.day);
+              if (dayIndex >= 0) {
+                const [sh, sm] = day.startTime.split(':').map(Number);
+                const [eh, em] = day.endTime.split(':').map(Number);
+                hoursMap[dayIndex] = { start: sh, end: eh };
+              }
+            }
+          });
+          
+          while (bizMinutesToAdd > 0) {
+            const dayOfWeek = current.getDay();
+            const hours = hoursMap[dayOfWeek];
+            
+            if (hours) {
+              const workStart = new Date(current);
+              workStart.setHours(hours.start, 0, 0, 0);
+              
+              const workEnd = new Date(current);
+              workEnd.setHours(hours.end, 0, 0, 0);
+              
+              if (current < workStart) {
+                current = new Date(workStart);
+              }
+              
+              if (current >= workEnd) {
+                current.setDate(current.getDate() + 1);
+                current.setHours(hours.start, 0, 0, 0);
+                continue;
+              }
+              
+              const minutesUntilEnd = (workEnd - current) / 60000;
+              const minutesToAddToday = Math.min(bizMinutesToAdd, minutesUntilEnd);
+              
+              current = new Date(current.getTime() + minutesToAddToday * 60000);
+              bizMinutesToAdd -= minutesToAddToday;
+              
+              if (bizMinutesToAdd > 0) {
+                do {
+                  current.setDate(current.getDate() + 1);
+                } while (!hoursMap[current.getDay()]);
+                current.setHours(hoursMap[current.getDay()].start, 0, 0, 0);
+              }
+            } else {
+              do {
+                current.setDate(current.getDate() + 1);
+              } while (!hoursMap[current.getDay()]);
+              current.setHours(hoursMap[current.getDay()].start, 0, 0, 0);
+            }
+          }
+          
+          expectedClosure = current.toISOString();
+        } else {
+          // Fallback: add calendar time if no business hours configured
+          expectedClosure = new Date(new Date(createdAt).getTime() + threshold.resolutionMinutes * 60000).toISOString();
+          console.log(`[DEBUG] Using fallback calculation for incident ${inc.number}:`, expectedClosure);
+        }
+        console.log(`[DEBUG] Final expected closure for incident ${inc.number}:`, expectedClosure);
+      }
+      
       if (createdAt && closedAt) {
         const created = new Date(createdAt);
         const closed = new Date(closedAt);
@@ -460,7 +535,7 @@ router.get('/reports/sla/incidents', async (req, res) => {
       return {
         number: snowVal(inc.number), shortDescription: snowVal(inc.short_description),
         priority: pKey, state: snowVal(inc.state), assignedTo: snowVal(inc.assigned_to),
-        createdAt, closedAt, resolutionMinutes, targetMinutes: threshold.resolutionMinutes, slaMet,
+        createdAt, closedAt, resolutionMinutes, targetMinutes: threshold.resolutionMinutes, slaMet, expectedClosure,
       };
     });
 

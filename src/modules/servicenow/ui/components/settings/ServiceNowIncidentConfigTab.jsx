@@ -13,8 +13,8 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
-  Columns, Save, Loader2, AlertCircle, CheckCircle2, Plus, Trash2,
-  RefreshCw, Shield, Users, Clock, Search, Lock, Info, ChevronUp,
+  Columns, Save, Loader2, AlertCircle, CheckCircle2,
+  RefreshCw, Users, Clock, Search, Lock, Info, ChevronUp,
 } from 'lucide-react';
 import { createLogger, ConfirmationModal } from '@shared';
 import ApiClient from '@shared/services/apiClient';
@@ -27,18 +27,10 @@ const snApi = {
   incidentSlaMapping:   '/api/servicenow/config/incidents/sla-mapping',
   incidentAssignGroup:  '/api/servicenow/config/incidents/assignment-group',
   snowColumns:          '/api/servicenow/schema/columns',
-  slaConfig:            '/api/servicenow/config/sla',
   searchGroups:         '/api/servicenow/search/assignment-groups',
 };
 
 // Priority badge styles
-const PRIORITY_STYLES = {
-  '1 - Critical': 'bg-rose-100 text-rose-700 border-rose-200',
-  '2 - High':     'bg-amber-100 text-amber-700 border-amber-200',
-  '3 - Medium':   'bg-blue-100 text-blue-700 border-blue-200',
-  '4 - Low':      'bg-emerald-100 text-emerald-700 border-emerald-200',
-};
-
 // SNOW field type → human-readable label
 const TYPE_LABELS = {
   string:             'String',
@@ -135,7 +127,6 @@ export default function ServiceNowIncidentConfigTab() {
   const [savingGroup, setSavingGroup]     = useState(false);
   const [msgColumns, setMsgColumns]       = useState(null);
   const [msgSlaMap, setMsgSlaMap]         = useState(null);
-  const [msgSla, setMsgSla]               = useState(null);
   const [groupResult, setGroupResult]     = useState(null);
   const [showGroupConfirm, setShowGroupConfirm] = useState(false);
 
@@ -148,12 +139,6 @@ export default function ServiceNowIncidentConfigTab() {
   const groupDropdownRef = useRef(null);
   const groupInputRef = useRef(null);
 
-  // SLA config
-  const [slaRows, setSlaRows]       = useState([]);
-  const [slaLoading, setSlaLoading] = useState(false);
-  const [editingSla, setEditingSla] = useState(null);
-  const [newSla, setNewSla]         = useState({ priority: '', responseMinutes: 60, resolutionMinutes: 480 });
-
   const initRan = useRef(false);
 
   // ── Auto-dismiss messages ─────────────────────────────────────────────────
@@ -163,25 +148,18 @@ export default function ServiceNowIncidentConfigTab() {
   };
   useEffect(() => { if (msgColumns) return autoDismiss(setMsgColumns); }, [msgColumns]);
   useEffect(() => { if (msgSlaMap) return autoDismiss(setMsgSlaMap); }, [msgSlaMap]);
-  useEffect(() => { if (msgSla) return autoDismiss(setMsgSla); }, [msgSla]);
   // groupResult should persist until manually updated
 
   // ── Load data ─────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [configRes, slaRes] = await Promise.all([
-        ApiClient.get(snApi.incidentConfig),
-        ApiClient.get(snApi.slaConfig),
-      ]);
+      const configRes = await ApiClient.get(snApi.incidentConfig);
       if (configRes?.success) {
         setSelectedColumns(configRes.data.selectedColumns || []);
         setCreatedColumn(configRes.data.createdColumn || 'opened_at');
         setClosedColumn(configRes.data.closedColumn || 'closed_at');
         setAssignmentGroup(configRes.data.assignmentGroup || '');
-      }
-      if (slaRes?.success) {
-        setSlaRows(slaRes.data || []);
       }
     } catch (err) {
       log.error('loadData', 'Failed to load config', { error: err.message });
@@ -343,57 +321,6 @@ export default function ServiceNowIncidentConfigTab() {
       prev.includes(colName) ? prev.filter(c => c !== colName) : [...prev, colName]
     );
   };
-
-  // ── SLA CRUD ──────────────────────────────────────────────────────────────
-  const handleSaveSla = useCallback(async (slaData, isNew = false) => {
-    setSlaLoading(true);
-    setMsgSla(null);
-    try {
-      let res;
-      if (isNew) {
-        res = await ApiClient.post(snApi.slaConfig, {
-          priority: slaData.priority,
-          responseMinutes: Number(slaData.responseMinutes),
-          resolutionMinutes: Number(slaData.resolutionMinutes),
-        });
-      } else {
-        res = await ApiClient.put(`${snApi.slaConfig}/${slaData.id}`, {
-          priority: slaData.priority,
-          responseMinutes: Number(slaData.responseMinutes),
-          resolutionMinutes: Number(slaData.resolutionMinutes),
-          enabled: slaData.enabled,
-        });
-      }
-      if (res?.success) {
-        setMsgSla({ type: 'success', text: isNew ? 'SLA created.' : 'SLA updated.' });
-        setEditingSla(null);
-        setNewSla({ priority: '', responseMinutes: 60, resolutionMinutes: 480 });
-        const slaRes = await ApiClient.get(snApi.slaConfig);
-        if (slaRes?.success) setSlaRows(slaRes.data || []);
-      } else {
-        setMsgSla({ type: 'error', text: res?.error?.message || 'SLA save failed.' });
-      }
-    } catch {
-      setMsgSla({ type: 'error', text: 'SLA save failed.' });
-    } finally {
-      setSlaLoading(false);
-    }
-  }, []);
-
-  const handleDeleteSla = useCallback(async (id) => {
-    setSlaLoading(true);
-    try {
-      const res = await ApiClient.delete(`${snApi.slaConfig}/${id}`);
-      if (res?.success) {
-        setSlaRows(prev => prev.filter(r => r.id !== id));
-        setMsgSla({ type: 'success', text: 'SLA deleted.' });
-      }
-    } catch {
-      setMsgSla({ type: 'error', text: 'Failed to delete SLA.' });
-    } finally {
-      setSlaLoading(false);
-    }
-  }, []);
 
     if (loading) {
     return (
@@ -758,143 +685,6 @@ export default function ServiceNowIncidentConfigTab() {
           <p className="text-[10px] text-surface-400 mt-1.5">
             Search for assignment groups from your ServiceNow instance. Leave empty to fetch incidents from all groups.
           </p>
-        </div>
-      </div>
-
-      {/* ═══ Section 4: SLA Configuration (CRUD) ═════════════════════════════ */}
-      <div className="bg-white rounded-xl border border-surface-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50">
-          <div className="flex items-center gap-2">
-            <Shield size={14} className="text-brand-600" />
-            <h3 className="text-sm font-bold text-surface-700">Incident SLAs</h3>
-          </div>
-          <p className="text-xs text-surface-400 mt-0.5">
-            Define contract-level SLA targets for incident response and resolution times.
-          </p>
-        </div>
-        <SectionMessage message={msgSla} />
-        <div className="p-5">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-surface-100">
-                <th className="text-left px-3 py-2 text-xs font-semibold text-surface-500 uppercase">Priority</th>
-                <th className="text-left px-3 py-2 text-xs font-semibold text-surface-500 uppercase">Response Time (min)</th>
-                <th className="text-left px-3 py-2 text-xs font-semibold text-surface-500 uppercase">Resolution Time (min)</th>
-                <th className="text-right px-3 py-2 text-xs font-semibold text-surface-500 uppercase">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-surface-50">
-              {slaRows.map(row => {
-                const isEditing = editingSla === row.id;
-                return (
-                  <tr key={row.id} className="hover:bg-surface-50/50">
-                    <td className="px-3 py-2.5">
-                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                        PRIORITY_STYLES[row.priority] || 'bg-surface-100 text-surface-600 border-surface-200'
-                      }`}>
-                        {row.priority}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          defaultValue={row.response_minutes}
-                          onChange={e => { row._editResponse = e.target.value; }}
-                          className="w-24 px-2 py-1 rounded border border-surface-200 text-sm focus:ring-2 focus:ring-brand-200 outline-none"
-                        />
-                      ) : (
-                        <span className="text-surface-700 font-medium">{row.response_minutes}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          defaultValue={row.resolution_minutes}
-                          onChange={e => { row._editResolution = e.target.value; }}
-                          className="w-24 px-2 py-1 rounded border border-surface-200 text-sm focus:ring-2 focus:ring-brand-200 outline-none"
-                        />
-                      ) : (
-                        <span className="text-surface-700 font-medium">{row.resolution_minutes}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5 text-right">
-                      {isEditing ? (
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => handleSaveSla({
-                              id: row.id,
-                              priority: row.priority,
-                              responseMinutes: row._editResponse || row.response_minutes,
-                              resolutionMinutes: row._editResolution || row.resolution_minutes,
-                              enabled: row.enabled,
-                            })}
-                            className="px-2 py-1 rounded text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700"
-                          >Save</button>
-                          <button
-                            onClick={() => setEditingSla(null)}
-                            className="px-2 py-1 rounded text-xs text-surface-500 hover:bg-surface-100"
-                          >Cancel</button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => setEditingSla(row.id)}
-                            className="px-2 py-1 rounded text-xs text-brand-600 hover:bg-brand-50 font-semibold"
-                          >Edit</button>
-                          <button
-                            onClick={() => handleDeleteSla(row.id)}
-                            className="p-1 rounded text-rose-400 hover:text-rose-600 hover:bg-rose-50"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-
-              {/* Add new row */}
-              <tr className="bg-surface-50/30">
-                <td className="px-3 py-2.5">
-                  <input
-                    type="text"
-                    value={newSla.priority}
-                    onChange={e => setNewSla(prev => ({ ...prev, priority: e.target.value }))}
-                    placeholder="e.g. 5 - Planning"
-                    className="w-full px-2 py-1 rounded border border-surface-200 text-xs focus:ring-2 focus:ring-brand-200 outline-none"
-                  />
-                </td>
-                <td className="px-3 py-2.5">
-                  <input
-                    type="number"
-                    value={newSla.responseMinutes}
-                    onChange={e => setNewSla(prev => ({ ...prev, responseMinutes: e.target.value }))}
-                    className="w-24 px-2 py-1 rounded border border-surface-200 text-xs focus:ring-2 focus:ring-brand-200 outline-none"
-                  />
-                </td>
-                <td className="px-3 py-2.5">
-                  <input
-                    type="number"
-                    value={newSla.resolutionMinutes}
-                    onChange={e => setNewSla(prev => ({ ...prev, resolutionMinutes: e.target.value }))}
-                    className="w-24 px-2 py-1 rounded border border-surface-200 text-xs focus:ring-2 focus:ring-brand-200 outline-none"
-                  />
-                </td>
-                <td className="px-3 py-2.5 text-right">
-                  <button
-                    onClick={() => newSla.priority && handleSaveSla(newSla, true)}
-                    disabled={!newSla.priority || slaLoading}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-40 ml-auto"
-                  >
-                    <Plus size={11} /> Add
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       </div>
     </div>

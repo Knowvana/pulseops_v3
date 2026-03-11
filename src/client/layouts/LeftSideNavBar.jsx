@@ -30,7 +30,7 @@ export default function LeftSideNavBar({
   onToggleCollapse,
 }) {
   const [internalCollapsed, setInternalCollapsed] = useState(false);
-  const [expandedSections, setExpandedSections] = useState({}); // Track expanded sections
+  const [expandedSections, setExpandedSections] = useState({ 'section-4': true }); // Reports section (index 4) expanded by default
   const isCollapsed = controlledCollapsed !== undefined ? controlledCollapsed : internalCollapsed;
   const toggleCollapse = onToggleCollapse || (() => setInternalCollapsed(!internalCollapsed));
 

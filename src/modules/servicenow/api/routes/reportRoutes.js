@@ -494,22 +494,48 @@ router.get('/reports/sla/incidents', async (req, res) => {
     const incidentConfig = await loadIncidentConfig();
 
     const now = new Date();
-    let startDate;
+    let rangeStart;
+    let rangeEnd;
+
     if (period === 'daily') {
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().slice(0, 10);
+      rangeStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      rangeEnd = new Date(rangeStart);
+      rangeEnd.setUTCDate(rangeEnd.getUTCDate() + 1);
+      logger.debug('[SLA] Daily filter range', { rangeStart, rangeEnd });
     } else if (period === 'weekly') {
-      const weekStart = new Date(now);
-      const day = weekStart.getDay();
-      const diff = (day === 0 ? 6 : day - 1); // Monday as week start
-      weekStart.setDate(weekStart.getDate() - diff);
-      weekStart.setHours(0, 0, 0, 0);
-      startDate = weekStart.toISOString().slice(0, 10);
+      rangeStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      const day = rangeStart.getUTCDay();
+      const diff = day === 0 ? 6 : day - 1; // Monday start
+      rangeStart.setUTCDate(rangeStart.getUTCDate() - diff);
+      rangeEnd = new Date(rangeStart);
+      rangeEnd.setUTCDate(rangeEnd.getUTCDate() + 7);
+      logger.debug('[SLA] Weekly filter range', { rangeStart, rangeEnd });
+    } else if (period === 'monthly') {
+      rangeStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      rangeEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+      logger.debug('[SLA] Monthly filter range', { rangeStart, rangeEnd });
     } else {
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      startDate = monthStart.toISOString().slice(0, 10);
+      const from = req.query.from;
+      const to = req.query.to;
+      if (from) {
+        rangeStart = new Date(`${from}T00:00:00Z`);
+      }
+      if (to) {
+        rangeEnd = new Date(`${to}T00:00:00Z`);
+        rangeEnd.setUTCDate(rangeEnd.getUTCDate() + 1); // inclusive of "to"
+      }
+      if (!rangeStart || !rangeEnd) {
+        // fallback to monthly if custom inputs missing
+        rangeStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        rangeEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+      }
+      logger.debug('[SLA] Custom filter range', { rangeStart, rangeEnd, from, to });
     }
 
-    const queryParts = [`${incidentConfig.createdColumn}>=${startDate}`, 'ORDERBYDESCnumber'];
+    const startDate = rangeStart.toISOString().slice(0, 10);
+    const endDateExclusive = rangeEnd.toISOString().slice(0, 10);
+
+    const queryParts = [`${incidentConfig.createdColumn}>=${startDate}`, `${incidentConfig.createdColumn}<${endDateExclusive}`, 'ORDERBYDESCnumber'];
     const agQuery = buildAssignmentGroupQuery(incidentConfig.assignmentGroup);
     if (agQuery) queryParts.unshift(agQuery);
 

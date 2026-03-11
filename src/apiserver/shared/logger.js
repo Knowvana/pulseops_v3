@@ -67,43 +67,16 @@ let logger = winston.createLogger({
   format: winston.format.combine(
     istTimestamp(),
     winston.format.errors({ stack: true }),
-    winston.format.json(),
-    winston.format.printf(({ timestamp, level, message, ...meta }) => {
-      // Extract module, filename, and function from metadata or defaults
-      const source = meta.service?.includes('pulseops') ? 'API' : meta.source || 'Unknown';
-      const module = meta.module || 'Core';
-      const filename = meta.fileName || meta.filename || 'unknown';
-      const functionName = meta.functionName || meta.function || 'unknown';
-      
-      // Clean up the message
-      const cleanMessage = typeof message === 'string' ? message : JSON.stringify(message);
-      
-      // Format: [date][level][source][module][filename][function] message
-      return `[${timestamp}][${level.toUpperCase()}][${source}][${module}][${filename}][${functionName}] ${cleanMessage}`;
-    })
+    winston.format.json()
   ),
-  defaultMeta: { 
-    service: 'pulseops-v2-api',
-    module: 'Core',
-    fileName: 'logger.js',
-    functionName: 'log'
-  },
+  defaultMeta: { service: 'pulseops-v2-api' },
   transports: [
     new winston.transports.Console({
       format: winston.format.combine(
         winston.format.colorize(),
         winston.format.printf(({ timestamp, level, message, ...meta }) => {
-          // Extract module, filename, and function from metadata or defaults
-          const source = meta.service?.includes('pulseops') ? 'API' : meta.source || 'Unknown';
-          const module = meta.module || 'Core';
-          const filename = meta.fileName || meta.filename || 'unknown';
-          const functionName = meta.functionName || meta.function || 'unknown';
-          
-          // Clean up the message
-          const cleanMessage = typeof message === 'string' ? message : JSON.stringify(message);
-          
-          // Format: [date][level][source][module][filename][function] message
-          return `${timestamp} [${level.toUpperCase()}][${source}][${module}][${filename}][${functionName}] ${cleanMessage}`;
+          const metaStr = Object.keys(meta).length > 1 ? ` ${JSON.stringify(meta)}` : '';
+          return `${timestamp} [${level}]: ${message}${metaStr}`;
         })
       ),
     }),

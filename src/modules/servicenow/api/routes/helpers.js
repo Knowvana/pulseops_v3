@@ -72,28 +72,68 @@ export function loadDefaultsConfig() {
   };
 }
 
-// ── Incident config (from DB) ────────────────────────────────────────────────
-export async function loadIncidentConfig() {
+// ── Module config (from DB — sn_module_config key-value store) ───────────────
+export async function loadModuleConfig(configKey) {
   try {
     const result = await DatabaseService.query(
-      `SELECT * FROM ${dbSchema}.sn_incident_config WHERE id = 1`
+      `SELECT config_value FROM ${dbSchema}.sn_module_config WHERE config_key = $1`,
+      [configKey]
     );
-    if (result.rows.length > 0) {
-      const row = result.rows[0];
-      return {
-        selectedColumns: row.selected_columns || ['number','short_description','priority','state','assigned_to','opened_at'],
-        createdColumn: row.created_column || 'opened_at',
-        closedColumn: row.closed_column || 'closed_at',
-        assignmentGroup: row.assignment_group || '',
-      };
-    }
+    if (result.rows.length > 0) return result.rows[0].config_value;
   } catch { /* table may not exist yet */ }
-  return {
-    selectedColumns: ['number','short_description','priority','state','assigned_to','opened_at'],
-    createdColumn: 'opened_at',
-    closedColumn: 'closed_at',
-    assignmentGroup: '',
-  };
+  return null;
+}
+
+export async function saveModuleConfig(configKey, configValue, description) {
+  await DatabaseService.query(
+    `INSERT INTO ${dbSchema}.sn_module_config (config_key, config_value, description, updated_at)
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (config_key) DO UPDATE SET config_value = $2, updated_at = NOW()`,
+    [configKey, JSON.stringify(configValue), description || null]
+  );
+}
+
+// ── Incident config (from DB — consolidated into sn_module_config) ───────────
+const INCIDENT_CONFIG_DEFAULTS = {
+  selectedColumns: ['number','short_description','priority','state','assigned_to','opened_at'],
+  createdColumn: 'opened_at',
+  closedColumn: 'closed_at',
+  priorityColumn: 'priority',
+  assignmentGroup: '',
+};
+
+export async function loadIncidentConfig() {
+  const stored = await loadModuleConfig('incident_config');
+  return { ...INCIDENT_CONFIG_DEFAULTS, ...(stored || {}) };
+}
+
+// ── Business hours (from DB — sn_business_hours table) ───────────────────────
+export async function loadBusinessHours() {
+  try {
+    const result = await DatabaseService.query(
+      `SELECT * FROM ${dbSchema}.sn_business_hours ORDER BY day_of_week`
+    );
+    if (result && result.rows && result.rows.length > 0) {
+      console.log(`[loadBusinessHours] Loaded ${result.rows.length} rows from DB`);
+      return result.rows;
+    }
+    console.log(`[loadBusinessHours] DB returned empty or no rows (${result?.rows?.length || 0}), using fallback`);
+  } catch (err) { 
+    console.log(`[loadBusinessHours] DB query failed (${err.code}): ${err.message}, using fallback`);
+  }
+  // Fallback to default business hours (Mon-Fri, 09:00-17:00)
+  // IMPORTANT: This ensures business hour calculations always work, even if DB is empty
+  const fallback = [
+    { day_of_week: 0, day_name: 'Sunday',    is_business_day: false, start_time: '00:00', end_time: '00:00' },
+    { day_of_week: 1, day_name: 'Monday',    is_business_day: true,  start_time: '09:00', end_time: '17:00' },
+    { day_of_week: 2, day_name: 'Tuesday',   is_business_day: true,  start_time: '09:00', end_time: '17:00' },
+    { day_of_week: 3, day_name: 'Wednesday', is_business_day: true,  start_time: '09:00', end_time: '17:00' },
+    { day_of_week: 4, day_name: 'Thursday',  is_business_day: true,  start_time: '09:00', end_time: '17:00' },
+    { day_of_week: 5, day_name: 'Friday',    is_business_day: true,  start_time: '09:00', end_time: '17:00' },
+    { day_of_week: 6, day_name: 'Saturday',  is_business_day: false, start_time: '00:00', end_time: '00:00' }
+  ];
+  console.log(`[loadBusinessHours] Using fallback with ${fallback.length} days (Mon-Fri 09:00-17:00)`);
+  return fallback;
 }
 
 // ── Assignment group query builder ───────────────────────────────────────────

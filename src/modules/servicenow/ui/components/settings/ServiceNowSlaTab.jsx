@@ -1,160 +1,164 @@
 // ============================================================================
 // ServiceNowSlaTab — PulseOps V3 ServiceNow Module Config
 //
-// PURPOSE: Configuration tab for SLA thresholds per priority and record type.
-// Supports per-priority response + resolution times for both Incidents and RITMs.
-// Also retains the simple hours-based thresholds for backward compatibility.
+// PURPOSE: Full CRUD interface for Incident SLA configuration (sn_sla_config).
+// Displays all SLA priority levels with response/resolution times in minutes,
+// priority values for ServiceNow mapping, and enabled/disabled toggle.
+// Supports Add, Edit (inline), Delete with confirmation.
 //
-// ARCHITECTURE:
-//   - Loads config from GET /api/servicenow/config + /sla/config on mount
-//   - Save uses ConfirmationModal (3-phase: Confirm → Progress → Summary)
-//   - All text from uiText.json — zero hardcoded strings
+// DATA: All config stored in DB table sn_sla_config (not JSON files).
 //
 // USED BY: src/modules/servicenow/manifest.jsx → getConfigTabs()
 //
 // DEPENDENCIES:
 //   - lucide-react                              → Icons
-//   - @modules/servicenow/uiText.json           → All UI labels
-//   - @config/urls.json                         → API endpoints
-//   - @shared                                   → createLogger, ConfirmationModal
+//   - @shared                                   → createLogger, ApiClient
+//   - @components                               → ToggleSwitch
 // ============================================================================
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Clock, AlertCircle, Loader2, Info } from 'lucide-react';
-import { createLogger, ConfirmationModal } from '@shared';
+import { Clock, AlertCircle, CheckCircle2, Loader2, Info, Plus, Trash2, Save, X, Edit3 } from 'lucide-react';
+import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
-// Module-local API URLs — no dependency on platform urls.json
-const snApi = {
-  config:    '/api/servicenow/config',
-  slaConfig: '/api/servicenow/sla/config',
-};
+import { ToggleSwitch } from '@components';
 import uiText from '../../config/uiText.json';
 
 const log = createLogger('ServiceNowSlaTab.jsx');
 const t   = uiText.sla;
-const inc = uiText.incidents;
 
-// ── SLA field definitions ─────────────────────────────────────────────────────
-const SLA_FIELDS = [
-  {
-    key:         'critical',
-    label:       t.criticalLabel,
-    description: t.criticalDescription,
-    min:         1,
-    max:         72,
-    color:       'border-rose-300 focus:ring-rose-400',
-    badge:       'bg-rose-100 text-rose-700',
-  },
-  {
-    key:         'high',
-    label:       t.highLabel,
-    description: t.highDescription,
-    min:         1,
-    max:         168,
-    color:       'border-amber-300 focus:ring-amber-400',
-    badge:       'bg-amber-100 text-amber-700',
-  },
-  {
-    key:         'medium',
-    label:       t.mediumLabel,
-    description: t.mediumDescription,
-    min:         1,
-    max:         336,
-    color:       'border-blue-300 focus:ring-blue-400',
-    badge:       'bg-blue-100 text-blue-700',
-  },
-  {
-    key:         'low',
-    label:       t.lowLabel,
-    description: t.lowDescription,
-    min:         1,
-    max:         720,
-    color:       'border-surface-300 focus:ring-surface-400',
-    badge:       'bg-surface-100 text-surface-600',
-  },
-];
+const snApi = { slaConfig: '/api/servicenow/config/sla' };
+
+const PRIORITY_COLORS = {
+  '1': 'bg-rose-100 text-rose-700 border-rose-200',
+  '2': 'bg-amber-100 text-amber-700 border-amber-200',
+  '3': 'bg-blue-100 text-blue-700 border-blue-200',
+  '4': 'bg-emerald-100 text-emerald-700 border-emerald-200',
+};
+
+const inputCls = 'px-2.5 py-1.5 text-sm text-center rounded-lg border border-surface-200 bg-white text-surface-700 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ServiceNowSlaTab() {
-  const [sla,         setSla]         = useState({ critical: 4, high: 8, medium: 24, low: 72 });
-  const [slaDetailed, setSlaDetailed] = useState([]);
-  const [fullConfig,  setFullConfig]  = useState(null);
-  const [loading,     setLoading]     = useState(true);
-  const [fetchError,  setFetchError]  = useState(null);
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [rows, setRows]                 = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [saving, setSaving]             = useState(false);
+  const [resultBanner, setResultBanner] = useState(null);
+  const [editRow, setEditRow]           = useState(null); // row being inline-edited
+  const [showAdd, setShowAdd]           = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // id to confirm delete
+  const [newRow, setNewRow] = useState({ priority: '', priority_value: '', response_minutes: 60, resolution_minutes: 480, sort_order: 99 });
   const initRan = useRef(false);
 
-  // ── Load config ─────────────────────────────────────────────────────────
-  const loadConfig = useCallback(async () => {
-    log.debug('loadConfig', 'Loading SLA config');
+  // ── Load ──────────────────────────────────────────────────────────────
+  const loadSla = useCallback(async () => {
     setLoading(true);
-    setFetchError(null);
     try {
-      const [cfgRes, slaRes] = await Promise.all([
-        ApiClient.get(snApi.config),
-        ApiClient.get(snApi.slaConfig).catch(() => null),
-      ]);
-      if (cfgRes?.success) {
-        log.info('loadConfig', 'SLA config loaded', { sla: cfgRes.data.sla });
-        setFullConfig(cfgRes.data);
-        setSla({ ...cfgRes.data.sla });
-      } else {
-        log.warn('loadConfig', 'Failed', { error: cfgRes?.error?.message });
-        setFetchError(cfgRes?.error?.message || uiText.common.fetchError);
-      }
-      if (slaRes?.success && Array.isArray(slaRes.data)) {
-        setSlaDetailed(slaRes.data);
+      const res = await ApiClient.get(snApi.slaConfig);
+      if (res?.success && Array.isArray(res.data)) {
+        setRows(res.data);
+        log.info('loadSla', 'Loaded SLA config', { count: res.data.length });
       }
     } catch (err) {
-      log.error('loadConfig', 'Unexpected error', { error: err.message });
-      setFetchError(uiText.common.fetchError);
+      setResultBanner({ success: false, message: `Failed to load: ${err.message}` });
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // StrictMode guard
   useEffect(() => {
     if (initRan.current) return;
     initRan.current = true;
-    log.info('mount', 'ServiceNowSlaTab mounted');
-    loadConfig();
-  }, [loadConfig]);
+    loadSla();
+  }, [loadSla]);
 
-  const handleChange = useCallback((key, value) => {
-    const num = parseInt(value, 10);
-    if (!isNaN(num) && num > 0) {
-      setSla(prev => ({ ...prev, [key]: num }));
+  // ── Add ───────────────────────────────────────────────────────────────
+  const handleAdd = useCallback(async () => {
+    if (!newRow.priority || !newRow.priority_value) {
+      setResultBanner({ success: false, message: 'Priority name and value are required.' });
+      return;
     }
-  }, []);
-
-  // ── Update detailed SLA row ────────────────────────────────────────────
-  const handleDetailedChange = useCallback((idx, field, value) => {
-    setSlaDetailed(prev => prev.map((row, i) => i === idx ? { ...row, [field]: parseInt(value, 10) || 0 } : row));
-  }, []);
-
-  // ── Save SLA config ─────────────────────────────────────────────────────
-  const handleSave = useCallback(async () => {
-    log.info('handleSave', 'Saving SLA thresholds', { sla });
-    const [res1, res2] = await Promise.all([
-      ApiClient.put(snApi.config, {
-        connection: fullConfig?.connection,
-        sla,
-        sync: fullConfig?.sync,
-      }),
-      slaDetailed.length > 0 ? ApiClient.put(snApi.slaConfig, slaDetailed) : Promise.resolve({ success: true }),
-    ]);
-    if (!res1?.success) {
-      throw new Error(res1?.error?.message || uiText.common.fetchError);
+    setSaving(true);
+    setResultBanner(null);
+    try {
+      const res = await ApiClient.post(snApi.slaConfig, {
+        priority: newRow.priority,
+        priorityValue: newRow.priority_value,
+        responseMinutes: Number(newRow.response_minutes) || 60,
+        resolutionMinutes: Number(newRow.resolution_minutes) || 480,
+        sortOrder: Number(newRow.sort_order) || 99,
+      });
+      if (res?.success) {
+        setResultBanner({ success: true, message: `SLA "${newRow.priority}" created.` });
+        setShowAdd(false);
+        setNewRow({ priority: '', priority_value: '', response_minutes: 60, resolution_minutes: 480, sort_order: 99 });
+        await loadSla();
+      } else {
+        setResultBanner({ success: false, message: res?.error?.message || 'Create failed.' });
+      }
+    } catch (err) {
+      setResultBanner({ success: false, message: err.message });
+    } finally {
+      setSaving(false);
     }
-    log.info('handleSave', 'SLA thresholds saved');
-    await loadConfig();
-    return { sla };
-  }, [sla, slaDetailed, fullConfig, loadConfig]);
+  }, [newRow, loadSla]);
 
-  // ── Render ──────────────────────────────────────────────────────────────
+  // ── Update ────────────────────────────────────────────────────────────
+  const handleUpdate = useCallback(async (row) => {
+    setSaving(true);
+    setResultBanner(null);
+    try {
+      const res = await ApiClient.put(`${snApi.slaConfig}/${row.id}`, {
+        priority: row.priority,
+        priorityValue: row.priority_value,
+        responseMinutes: Number(row.response_minutes),
+        resolutionMinutes: Number(row.resolution_minutes),
+        enabled: row.enabled,
+        sortOrder: Number(row.sort_order),
+      });
+      if (res?.success) {
+        setResultBanner({ success: true, message: `SLA "${row.priority}" updated.` });
+        setEditRow(null);
+        await loadSla();
+      } else {
+        setResultBanner({ success: false, message: res?.error?.message || 'Update failed.' });
+      }
+    } catch (err) {
+      setResultBanner({ success: false, message: err.message });
+    } finally {
+      setSaving(false);
+    }
+  }, [loadSla]);
+
+  // ── Delete ────────────────────────────────────────────────────────────
+  const handleDelete = useCallback(async (id) => {
+    setSaving(true);
+    setResultBanner(null);
+    setDeleteConfirm(null);
+    try {
+      const res = await ApiClient.delete(`${snApi.slaConfig}/${id}`);
+      if (res?.success) {
+        setResultBanner({ success: true, message: 'SLA configuration deleted.' });
+        await loadSla();
+      } else {
+        setResultBanner({ success: false, message: res?.error?.message || 'Delete failed.' });
+      }
+    } catch (err) {
+      setResultBanner({ success: false, message: err.message });
+    } finally {
+      setSaving(false);
+    }
+  }, [loadSla]);
+
+  // ── Toggle enabled ─────────────────────────────────────────────────────
+  const handleToggleEnabled = useCallback(async (row) => {
+    try {
+      await ApiClient.put(`${snApi.slaConfig}/${row.id}`, { enabled: !row.enabled });
+      await loadSla();
+    } catch { /* silent */ }
+  }, [loadSla]);
+
   if (loading) {
     return (
       <div className="p-8 flex items-center justify-center">
@@ -164,135 +168,209 @@ export default function ServiceNowSlaTab() {
   }
 
   return (
-    <div className="p-5 space-y-5 max-w-xl">
-      {/* Info banner */}
-      <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-xs">
-        <Info size={13} className="flex-shrink-0 mt-0.5" />
-        <span>{t.subtitle}</span>
-      </div>
-
-      {/* Fetch error */}
-      {fetchError && (
-        <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs">
-          <AlertCircle size={13} />{fetchError}
-        </div>
-      )}
-
-      {/* SLA fields */}
-      <div className="space-y-4">
-        {SLA_FIELDS.map(field => (
-          <div key={field.key} className="flex items-center gap-4 bg-white rounded-xl border border-surface-200 px-4 py-3 shadow-sm">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${field.badge}`}>
-                  {inc.priority[field.key]}
-                </span>
-                <span className="text-sm font-semibold text-surface-700">{field.label}</span>
-              </div>
-              <p className="text-xs text-surface-400">{field.description}</p>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="number"
-                  min={field.min}
-                  max={field.max}
-                  value={sla[field.key] || ''}
-                  onChange={e => handleChange(field.key, e.target.value)}
-                  className={`w-20 px-2 py-1.5 text-sm text-center rounded-lg border ${field.color} bg-white text-surface-700 focus:outline-none focus:ring-2 transition-all`}
-                />
-                <span className="text-xs text-surface-500 font-medium">{t.hoursLabel}</span>
-              </div>
-              <Clock size={14} className="text-surface-300" />
-            </div>
+    <div className="space-y-5 animate-fade-in">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center">
+            <Clock size={18} className="text-brand-600" />
           </div>
-        ))}
-      </div>
-
-      {/* Detailed SLA tables (Incidents / RITMs) */}
-      {slaDetailed.length > 0 && (
-        <div className="space-y-4">
-          {['incident', 'ritm'].map(recordType => {
-            const rows = slaDetailed.filter(r => r.recordType === recordType);
-            if (rows.length === 0) return null;
-            return (
-              <div key={recordType} className="bg-white rounded-xl border border-surface-200 shadow-sm overflow-hidden">
-                <div className="px-4 py-2.5 border-b border-surface-100 bg-surface-50/50">
-                  <p className="text-xs font-bold text-surface-600 uppercase tracking-wide">
-                    {recordType === 'incident' ? 'Incident' : 'RITM'} SLA Targets (minutes)
-                  </p>
-                </div>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-surface-100">
-                      <th className="text-left px-4 py-2 text-xs font-semibold text-surface-500">Priority</th>
-                      <th className="text-center px-4 py-2 text-xs font-semibold text-surface-500">Response Time</th>
-                      <th className="text-center px-4 py-2 text-xs font-semibold text-surface-500">Resolution Time</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-surface-50">
-                    {rows.map((row) => {
-                      const idx = slaDetailed.indexOf(row);
-                      return (
-                        <tr key={row.priority} className="hover:bg-surface-50/50">
-                          <td className="px-4 py-2 text-surface-700 font-medium text-xs">{row.priority}</td>
-                          <td className="px-4 py-2 text-center">
-                            <input
-                              type="number" min={1}
-                              value={row.responseTimeMinutes || ''}
-                              onChange={e => handleDetailedChange(idx, 'responseTimeMinutes', e.target.value)}
-                              className="w-20 px-2 py-1 text-xs text-center rounded-lg border border-surface-200 focus:outline-none focus:ring-2 focus:ring-brand-300"
-                            />
-                          </td>
-                          <td className="px-4 py-2 text-center">
-                            <input
-                              type="number" min={1}
-                              value={row.resolutionTimeMinutes || ''}
-                              onChange={e => handleDetailedChange(idx, 'resolutionTimeMinutes', e.target.value)}
-                              className="w-20 px-2 py-1 text-xs text-center rounded-lg border border-surface-200 focus:outline-none focus:ring-2 focus:ring-brand-300"
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            );
-          })}
+          <div>
+            <h2 className="text-base font-bold text-surface-800">Incident SLA Configuration</h2>
+            <p className="text-xs text-surface-500">Response and resolution time targets per priority level (in minutes).</p>
+          </div>
         </div>
-      )}
-
-      {/* Save button */}
-      <div className="flex items-center gap-2 pt-1">
         <button
-          onClick={() => setShowConfirm(true)}
-          className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 transition-colors"
+          onClick={() => setShowAdd(!showAdd)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 transition-colors"
         >
-          {t.saveButton}
+          <Plus size={13} />
+          Add Priority
         </button>
       </div>
 
-      {/* Confirmation modal */}
-      <ConfirmationModal
-        isOpen={showConfirm}
-        onClose={() => setShowConfirm(false)}
-        title={t.confirmTitle}
-        actionDescription={t.confirmDescription}
-        actionTarget={t.confirmTarget}
-        actionDetails={SLA_FIELDS.map(f => ({
-          label: `${inc.priority[f.key]} ${uiText.reports.hours ? `(${uiText.reports.hours})` : ''}`,
-          value: `${sla[f.key]} hrs`,
-        }))}
-        confirmLabel={uiText.common.save}
-        variant="info"
-        action={handleSave}
-        onSuccess={() => setShowConfirm(false)}
-        buildSummary={() => [
-          { label: t.confirmSummaryStatus, value: t.confirmSummarySuccess },
-          ...SLA_FIELDS.map(f => ({ label: inc.priority[f.key], value: `${sla[f.key]} hrs` })),
-        ]}
-      />
+      {/* Info */}
+      <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-xs">
+        <Info size={13} className="flex-shrink-0 mt-0.5" />
+        <span>SLA targets are stored in the database. Priority Value must match the ServiceNow priority field value (e.g., "1" for Critical). Resolution times are used for SLA report calculations.</span>
+      </div>
+
+      {/* Result banner (persistent) */}
+      {resultBanner && (
+        <div className={`flex items-center justify-between gap-2 px-4 py-2.5 rounded-lg text-sm border ${
+          resultBanner.success ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-50 border-rose-200 text-rose-700'
+        }`}>
+          <div className="flex items-center gap-2">
+            {resultBanner.success ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+            <span>{resultBanner.message}</span>
+          </div>
+          <button onClick={() => setResultBanner(null)} className="p-0.5 rounded hover:bg-black/5"><X size={14} /></button>
+        </div>
+      )}
+
+      {/* Add new row form */}
+      {showAdd && (
+        <div className="bg-white rounded-xl border border-brand-200 shadow-sm p-4 space-y-3">
+          <p className="text-xs font-bold text-surface-600 uppercase tracking-wide">New SLA Priority</p>
+          <div className="grid grid-cols-5 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold text-surface-500 uppercase mb-1">Priority Name</label>
+              <input value={newRow.priority} onChange={e => setNewRow(p => ({ ...p, priority: e.target.value }))}
+                placeholder="e.g. 1 - Critical" className={`${inputCls} w-full text-left`} />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-surface-500 uppercase mb-1">Priority Value</label>
+              <input value={newRow.priority_value} onChange={e => setNewRow(p => ({ ...p, priority_value: e.target.value }))}
+                placeholder="e.g. 1" className={`${inputCls} w-full`} />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-surface-500 uppercase mb-1">Response (min)</label>
+              <input type="number" min={1} value={newRow.response_minutes} onChange={e => setNewRow(p => ({ ...p, response_minutes: e.target.value }))}
+                className={`${inputCls} w-full`} />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-surface-500 uppercase mb-1">Resolution (min)</label>
+              <input type="number" min={1} value={newRow.resolution_minutes} onChange={e => setNewRow(p => ({ ...p, resolution_minutes: e.target.value }))}
+                className={`${inputCls} w-full`} />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-surface-500 uppercase mb-1">Sort Order</label>
+              <input type="number" min={1} value={newRow.sort_order} onChange={e => setNewRow(p => ({ ...p, sort_order: e.target.value }))}
+                className={`${inputCls} w-full`} />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setShowAdd(false)} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-surface-600 bg-surface-100 hover:bg-surface-200 transition-colors">Cancel</button>
+            <button onClick={handleAdd} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 transition-colors">
+              {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Create
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* SLA Table */}
+      <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-surface-50 border-b border-surface-200">
+              <th className="text-left px-4 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider">Priority</th>
+              <th className="text-center px-4 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider">Value</th>
+              <th className="text-center px-4 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider">Response (min)</th>
+              <th className="text-center px-4 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider">Resolution (min)</th>
+              <th className="text-center px-4 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider">Enabled</th>
+              <th className="text-center px-4 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider">Order</th>
+              <th className="text-center px-4 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider w-24">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-surface-50">
+            {rows.map(row => {
+              const isEditing = editRow?.id === row.id;
+              const pColor = PRIORITY_COLORS[row.priority_value] || 'bg-surface-100 text-surface-600 border-surface-200';
+              return (
+                <tr key={row.id} className="hover:bg-surface-50/50 transition-colors">
+                  <td className="px-4 py-2.5">
+                    {isEditing ? (
+                      <input value={editRow.priority} onChange={e => setEditRow(p => ({ ...p, priority: e.target.value }))}
+                        className={`${inputCls} w-full text-left`} />
+                    ) : (
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold border ${pColor}`}>
+                        {row.priority}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-center">
+                    {isEditing ? (
+                      <input value={editRow.priority_value} onChange={e => setEditRow(p => ({ ...p, priority_value: e.target.value }))}
+                        className={`${inputCls} w-16`} />
+                    ) : (
+                      <span className="text-xs font-mono font-bold text-surface-600">{row.priority_value}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-center">
+                    {isEditing ? (
+                      <input type="number" min={1} value={editRow.response_minutes} onChange={e => setEditRow(p => ({ ...p, response_minutes: e.target.value }))}
+                        className={`${inputCls} w-20`} />
+                    ) : (
+                      <span className="text-xs font-semibold text-surface-700">{row.response_minutes}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-center">
+                    {isEditing ? (
+                      <input type="number" min={1} value={editRow.resolution_minutes} onChange={e => setEditRow(p => ({ ...p, resolution_minutes: e.target.value }))}
+                        className={`${inputCls} w-20`} />
+                    ) : (
+                      <span className="text-xs font-semibold text-surface-700">{row.resolution_minutes}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-center">
+                    <ToggleSwitch checked={row.enabled} onChange={() => handleToggleEnabled(row)} size="sm" />
+                  </td>
+                  <td className="px-4 py-2.5 text-center">
+                    {isEditing ? (
+                      <input type="number" min={1} value={editRow.sort_order} onChange={e => setEditRow(p => ({ ...p, sort_order: e.target.value }))}
+                        className={`${inputCls} w-14`} />
+                    ) : (
+                      <span className="text-xs text-surface-500">{row.sort_order}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-center">
+                    {isEditing ? (
+                      <div className="flex items-center justify-center gap-1">
+                        <button onClick={() => handleUpdate(editRow)} disabled={saving}
+                          className="p-1 rounded text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-40">
+                          <Save size={13} />
+                        </button>
+                        <button onClick={() => setEditRow(null)} className="p-1 rounded text-surface-400 hover:bg-surface-100 transition-colors">
+                          <X size={13} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center gap-1">
+                        <button onClick={() => setEditRow({ ...row })} className="p-1 rounded text-brand-600 hover:bg-brand-50 transition-colors">
+                          <Edit3 size={13} />
+                        </button>
+                        <button onClick={() => setDeleteConfirm(row.id)} className="p-1 rounded text-rose-500 hover:bg-rose-50 transition-colors">
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-surface-400">
+                  No SLA configurations found. Click "Add Priority" to create one.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Delete confirmation modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-surface-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center">
+                <Trash2 size={18} className="text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-surface-800">Delete SLA Configuration</h3>
+                <p className="text-xs text-surface-500 mt-0.5">This action cannot be undone.</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 rounded-lg text-xs font-semibold text-surface-600 bg-surface-100 hover:bg-surface-200 transition-colors">Cancel</button>
+              <button onClick={() => handleDelete(deleteConfirm)} disabled={saving} className="px-4 py-2 rounded-lg text-xs font-semibold bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50 transition-colors">
+                {saving ? <Loader2 size={12} className="animate-spin" /> : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

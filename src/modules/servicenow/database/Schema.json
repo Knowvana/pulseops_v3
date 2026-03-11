@@ -1,10 +1,61 @@
 {
   "_meta": {
     "moduleId": "servicenow",
-    "version": "1.0.0",
-    "description": "ServiceNow ITSM Integration — module database schema. Tables are provisioned when the module is enabled via Module Manager. Uses the same JSON format as DefaultDatabaseSchema.json."
+    "version": "2.0.0",
+    "description": "ServiceNow ITSM Integration — module database schema. Tables are provisioned when the module is enabled via Module Manager. Uses the same JSON format as DefaultDatabaseSchema.json. Architecture: sn_module_config for key-value JSONB config, sn_sla_config for structured SLA CRUD, sn_business_hours for 7-row weekly schedule, sn_incidents for cached data, sn_sync_history for audit."
   },
   "tables": [
+    {
+      "name": "sn_module_config",
+      "description": "Consolidated module configuration — key-value store with JSONB values. Replaces sn_incident_config and JSON config files. Keys: incident_config, connection, sync_settings, general_settings.",
+      "columns": [
+        { "name": "id",          "type": "SERIAL PRIMARY KEY" },
+        { "name": "config_key",  "type": "VARCHAR(100) UNIQUE NOT NULL" },
+        { "name": "config_value","type": "JSONB NOT NULL DEFAULT '{}'::jsonb" },
+        { "name": "description", "type": "TEXT" },
+        { "name": "created_at",  "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "updated_at",  "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_sn_module_config_key", "columns": ["config_key"], "unique": true }
+      ]
+    },
+    {
+      "name": "sn_sla_config",
+      "description": "SLA configuration per priority level — response and resolution times in minutes. Structured CRUD table with industry-standard defaults for P1-P4.",
+      "columns": [
+        { "name": "id",                  "type": "SERIAL PRIMARY KEY" },
+        { "name": "priority",            "type": "VARCHAR(50) UNIQUE NOT NULL" },
+        { "name": "priority_value",      "type": "VARCHAR(10) NOT NULL DEFAULT '4'" },
+        { "name": "response_minutes",    "type": "INTEGER NOT NULL DEFAULT 60" },
+        { "name": "resolution_minutes",  "type": "INTEGER NOT NULL DEFAULT 480" },
+        { "name": "enabled",             "type": "BOOLEAN DEFAULT TRUE" },
+        { "name": "sort_order",          "type": "INTEGER NOT NULL DEFAULT 99" },
+        { "name": "created_at",          "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "updated_at",          "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_sn_sla_config_priority", "columns": ["priority"], "unique": true },
+        { "name": "idx_sn_sla_config_priority_value", "columns": ["priority_value"], "unique": false }
+      ]
+    },
+    {
+      "name": "sn_business_hours",
+      "description": "Weekly business hours schedule — exactly 7 rows (Sun-Sat). Used for SLA calculations. Rows cannot be deleted, only updated (start_time, end_time, is_business_day).",
+      "columns": [
+        { "name": "id",              "type": "SERIAL PRIMARY KEY" },
+        { "name": "day_of_week",     "type": "INTEGER UNIQUE NOT NULL" },
+        { "name": "day_name",        "type": "VARCHAR(20) NOT NULL" },
+        { "name": "is_business_day", "type": "BOOLEAN NOT NULL DEFAULT FALSE" },
+        { "name": "start_time",      "type": "TIME NOT NULL DEFAULT '09:00'" },
+        { "name": "end_time",        "type": "TIME NOT NULL DEFAULT '17:00'" },
+        { "name": "created_at",      "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "updated_at",      "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_sn_business_hours_dow", "columns": ["day_of_week"], "unique": true }
+      ]
+    },
     {
       "name": "sn_incidents",
       "description": "Cached ServiceNow incidents — synced from the ServiceNow REST API.",
@@ -61,36 +112,6 @@
         { "name": "idx_sn_sync_history_status",     "columns": ["status"],     "unique": false },
         { "name": "idx_sn_sync_history_started_at", "columns": ["started_at"], "unique": false }
       ]
-    },
-    {
-      "name": "sn_sla_config",
-      "description": "SLA configuration per priority level — response and resolution times in minutes.",
-      "columns": [
-        { "name": "id",                  "type": "SERIAL PRIMARY KEY" },
-        { "name": "priority",            "type": "VARCHAR(20) UNIQUE NOT NULL" },
-        { "name": "response_minutes",    "type": "INTEGER NOT NULL DEFAULT 60" },
-        { "name": "resolution_minutes",  "type": "INTEGER NOT NULL DEFAULT 480" },
-        { "name": "enabled",             "type": "BOOLEAN DEFAULT TRUE" },
-        { "name": "created_at",          "type": "TIMESTAMPTZ DEFAULT NOW()" },
-        { "name": "updated_at",          "type": "TIMESTAMPTZ DEFAULT NOW()" }
-      ],
-      "indexes": [
-        { "name": "idx_sn_sla_config_priority", "columns": ["priority"], "unique": true }
-      ]
-    },
-    {
-      "name": "sn_incident_config",
-      "description": "Incident configuration — selected columns, assignment group, SLA column mapping.",
-      "columns": [
-        { "name": "id",                "type": "SERIAL PRIMARY KEY" },
-        { "name": "selected_columns",  "type": "JSONB NOT NULL DEFAULT '[]'::jsonb" },
-        { "name": "created_column",    "type": "VARCHAR(100) NOT NULL DEFAULT 'opened_at'" },
-        { "name": "closed_column",     "type": "VARCHAR(100) NOT NULL DEFAULT 'closed_at'" },
-        { "name": "assignment_group",  "type": "VARCHAR(255) DEFAULT ''" },
-        { "name": "created_at",        "type": "TIMESTAMPTZ DEFAULT NOW()" },
-        { "name": "updated_at",        "type": "TIMESTAMPTZ DEFAULT NOW()" }
-      ],
-      "indexes": []
     }
   ]
 }

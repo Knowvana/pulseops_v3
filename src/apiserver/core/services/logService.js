@@ -37,7 +37,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { config } from '#config';
-import { logger } from '#shared/logger.js';
+import { logger, updateLoggerLevel } from '#shared/logger.js';
 import { loadJson, loadSeedJson, messages, errors } from '#shared/loadJson.js';
 import SettingsService from '#core/services/settingsService.js';
 
@@ -481,6 +481,12 @@ const LogService = {
     logsConfig.storage = 'database';
     await SettingsService.set('logs_config', logsConfig, 'Logging configuration (storage, levels, capture options, management)');
     _cachedLogsConfig = logsConfig;
+    
+    // Also update Winston logger level if defaultLevel changed
+    if (updates.defaultLevel) {
+      updateLoggerLevel(updates.defaultLevel);
+    }
+    
     logger.info('Log configuration updated and persisted to DB', { enabled: logsConfig.enabled, level: logsConfig.defaultLevel });
     return logsConfig;
   },

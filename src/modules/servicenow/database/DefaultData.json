@@ -1,22 +1,35 @@
 {
   "_meta": {
     "moduleId": "servicenow",
-    "version": "2.0.0",
+    "version": "3.0.0",
     "description": "Default / seed data for the ServiceNow module. Loaded into database tables defined in Schema.json via the Data Management → Load Default Data action. Each key maps to a table name in Schema.json."
   },
-  "sn_sla_config": [
-    { "priority": "1 - Critical", "response_minutes": 15,  "resolution_minutes": 120,  "enabled": true },
-    { "priority": "2 - High",     "response_minutes": 30,  "resolution_minutes": 360,  "enabled": true },
-    { "priority": "3 - Medium",   "response_minutes": 120, "resolution_minutes": 960,  "enabled": true },
-    { "priority": "4 - Low",      "response_minutes": 480, "resolution_minutes": 2400, "enabled": true }
-  ],
-  "sn_incident_config": [
+  "sn_module_config": [
     {
-      "id": 1,
-      "selected_columns": ["number", "short_description", "priority", "state", "assigned_to", "assignment_group", "opened_at", "resolved_at", "closed_at"],
-      "created_column": "opened_at",
-      "closed_column": "closed_at",
-      "assignment_group": ""
+      "config_key": "incident_config",
+      "config_value": {
+        "selectedColumns": ["number", "short_description", "priority", "state", "assigned_to", "assignment_group", "opened_at", "resolved_at", "closed_at"],
+        "createdColumn": "opened_at",
+        "closedColumn": "closed_at",
+        "priorityColumn": "priority",
+        "assignmentGroup": ""
+      },
+      "description": "Incident table configuration — selected columns, SLA column mapping, priority column, assignment group filter."
     }
+  ],
+  "sn_sla_config": [
+    { "priority": "1 - Critical", "priority_value": "1", "response_minutes": 15,  "resolution_minutes": 60,   "enabled": true, "sort_order": 1 },
+    { "priority": "2 - High",     "priority_value": "2", "response_minutes": 30,  "resolution_minutes": 240,  "enabled": true, "sort_order": 2 },
+    { "priority": "3 - Medium",   "priority_value": "3", "response_minutes": 60,  "resolution_minutes": 480,  "enabled": true, "sort_order": 3 },
+    { "priority": "4 - Low",      "priority_value": "4", "response_minutes": 240, "resolution_minutes": 1440, "enabled": true, "sort_order": 4 }
+  ],
+  "sn_business_hours": [
+    { "day_of_week": 0, "day_name": "Sunday",    "is_business_day": false, "start_time": "00:00", "end_time": "00:00" },
+    { "day_of_week": 1, "day_name": "Monday",    "is_business_day": true,  "start_time": "09:00", "end_time": "17:00" },
+    { "day_of_week": 2, "day_name": "Tuesday",   "is_business_day": true,  "start_time": "09:00", "end_time": "17:00" },
+    { "day_of_week": 3, "day_name": "Wednesday", "is_business_day": true,  "start_time": "09:00", "end_time": "17:00" },
+    { "day_of_week": 4, "day_name": "Thursday",  "is_business_day": true,  "start_time": "09:00", "end_time": "17:00" },
+    { "day_of_week": 5, "day_name": "Friday",    "is_business_day": true,  "start_time": "09:00", "end_time": "17:00" },
+    { "day_of_week": 6, "day_name": "Saturday",  "is_business_day": false, "start_time": "00:00", "end_time": "00:00" }
   ]
 }

@@ -41,7 +41,7 @@ import ServiceNowTestIncidents  from './components/ServiceNowTestIncidents';
 import IncidentSlaReportView    from './views/IncidentSlaReportView';
 import IncidentAnalyticsView    from './views/IncidentAnalyticsView';
 import RitmReportsView          from './views/RitmReportsView';
-import SlaComplianceView        from './views/SlaComplianceView';
+// SlaComplianceView removed — SLA compliance is now part of Incident SLA Report
 
 // ── Config Tab Components (lazy-mounted via render functions) ─────────────────
 import ServiceNowConnectionTab         from './components/settings/ServiceNowConnectionTab';
@@ -74,7 +74,6 @@ const servicenowManifest = {
     { id: 'incidentSlaReport',  label: 'Incident SLA Report',  icon: ShieldCheck,   indent: true },
     { id: 'incidentAnalytics',  label: 'Incident Analytics',   icon: TrendingUp,    indent: true },
     { id: 'ritmReports',        label: 'RITMs',                icon: ListChecks,    indent: true },
-    { id: 'slaCompliance',      label: 'SLA Compliance',       icon: ShieldCheck,   indent: true },
     { type: 'separator' },
     { id: 'config',           label: navText.config,          icon: Sliders          },
   ],
@@ -93,7 +92,6 @@ const servicenowManifest = {
     incidentSlaReport:  IncidentSlaReportView,
     incidentAnalytics:  IncidentAnalyticsView,
     ritmReports:        RitmReportsView,
-    slaCompliance:      SlaComplianceView,
   }),
 
   /**

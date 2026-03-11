@@ -38,6 +38,12 @@ const PRIORITY_CONFIG = {
   '2 - High':     { badge: 'bg-amber-100 text-amber-700 border-amber-200', dot: 'bg-amber-500',   short: 'P2' },
   '3 - Medium':   { badge: 'bg-blue-100 text-blue-700 border-blue-200',   dot: 'bg-blue-500',    short: 'P3' },
   '4 - Low':      { badge: 'bg-emerald-100 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', short: 'P4' },
+  '5 - Planning': { badge: 'bg-purple-100 text-purple-700 border-purple-200', dot: 'bg-purple-500', short: 'P5' },
+  '1': { badge: 'bg-rose-100 text-rose-700 border-rose-200',   dot: 'bg-rose-500',    short: 'P1' },
+  '2': { badge: 'bg-amber-100 text-amber-700 border-amber-200', dot: 'bg-amber-500',   short: 'P2' },
+  '3': { badge: 'bg-blue-100 text-blue-700 border-blue-200',   dot: 'bg-blue-500',    short: 'P3' },
+  '4': { badge: 'bg-emerald-100 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', short: 'P4' },
+  '5': { badge: 'bg-purple-100 text-purple-700 border-purple-200', dot: 'bg-purple-500', short: 'P5' },
 };
 
 const STATE_MAP = { '1': 'New', '2': 'In Progress', '3': 'On Hold', '6': 'Resolved', '7': 'Closed', '8': 'Cancelled' };
@@ -243,6 +249,46 @@ export default function ServiceNowSlaReport() {
     return { total, met, breached, pending, compliance };
   }, [data]);
 
+  // ── Download PDF ──────────────────────────────────────────────────────
+  const handleDownloadPdf = useCallback(() => {
+    if (!data) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    const rows = (data.incidents || []).map(inc => `
+      <tr>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-family:monospace;font-size:11px">${inc.number}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${inc.shortDescription || ''}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px">${inc.priority}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px">${inc.createdAt ? new Date(inc.createdAt).toLocaleString() : '—'}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px">${inc.expectedClosure ? new Date(inc.expectedClosure).toLocaleString() : '—'}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px">${inc.closedAt ? new Date(inc.closedAt).toLocaleString() : '—'}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:right">${inc.resolutionMinutes != null ? formatMinutes(inc.resolutionMinutes) : '—'}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:right">${formatMinutes(inc.targetMinutes)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px;font-weight:bold;color:${inc.slaMet === true ? '#059669' : inc.slaMet === false ? '#dc2626' : '#6b7280'}">${inc.slaMet === true ? 'Met' : inc.slaMet === false ? 'Breached' : 'Pending'}</td>
+      </tr>
+    `).join('');
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Incident SLA Report</title></head><body style="font-family:system-ui,sans-serif;padding:24px;color:#1e293b">
+      <h1 style="font-size:18px;margin:0">Incident SLA Report — Resolution Time</h1>
+      <p style="font-size:12px;color:#64748b;margin:4px 0 16px">Generated: ${new Date().toLocaleString()} | Period: ${data.startDate} to ${data.endDate} (${period})</p>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:#f1f5f9">
+          <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Number</th>
+          <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Description</th>
+          <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Priority</th>
+          <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Created</th>
+          <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Expected Closure</th>
+          <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Actual Closure</th>
+          <th style="padding:8px;text-align:right;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Resolution</th>
+          <th style="padding:8px;text-align:right;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Target</th>
+          <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">SLA Status</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </body></html>`);
+    printWindow.document.close();
+    setTimeout(() => { printWindow.print(); }, 500);
+  }, [data, period]);
+
   // ── Filtered incidents (search) ────────────────────────────────────────
   const filteredIncidents = useMemo(() => {
     if (!data?.incidents) return [];
@@ -259,49 +305,66 @@ export default function ServiceNowSlaReport() {
   // ── Render ─────────────────────────────────────────────────────────────
   return (
     <div className="p-6 space-y-5 animate-fade-in">
-      {/* ── Header ────────────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center">
-              <ShieldCheck size={18} className="text-brand-600" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-surface-800">Incident SLA Report</h1>
-              <p className="text-xs text-surface-500">
-                Resolution SLA compliance &bull; {data?.startDate || '...'} to {data?.endDate || '...'}
-              </p>
+      {/* ── Report Header ──────────────────────────────────────────────────── */}
+      <div className="bg-white rounded-xl border border-surface-200 shadow-sm p-5">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center">
+                <ShieldCheck size={20} className="text-white" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold text-surface-800">Incident SLA Report — Resolution Time</h1>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="text-[11px] text-surface-500">
+                    <span className="font-semibold text-surface-600">Generated:</span> {data?.generatedAt ? new Date(data.generatedAt).toLocaleString() : new Date().toLocaleString()}
+                  </span>
+                  <span className="w-px h-3 bg-surface-200" />
+                  <span className="text-[11px] text-surface-500">
+                    <span className="font-semibold text-surface-600">Period:</span> {data?.startDate || '...'} to {data?.endDate || '...'} ({period.charAt(0).toUpperCase() + period.slice(1)})
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Period toggle */}
-          <div className="flex items-center bg-surface-100 rounded-lg p-0.5">
-            {PERIOD_OPTIONS.map(opt => {
-              const PIcon = opt.icon;
-              const isActive = period === opt.id;
-              return (
-                <button
-                  key={opt.id}
-                  onClick={() => handlePeriodChange(opt.id)}
-                  className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                    isActive ? 'bg-white text-brand-700 shadow-sm' : 'text-surface-500 hover:text-surface-700'
-                  }`}
-                >
-                  <PIcon size={12} />
-                  {opt.label}
-                </button>
-              );
-            })}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Period toggle */}
+            <div className="flex items-center bg-surface-100 rounded-lg p-0.5">
+              {PERIOD_OPTIONS.map(opt => {
+                const PIcon = opt.icon;
+                const isActive = period === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    onClick={() => handlePeriodChange(opt.id)}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                      isActive ? 'bg-white text-brand-700 shadow-sm' : 'text-surface-500 hover:text-surface-700'
+                    }`}
+                  >
+                    <PIcon size={12} />
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => fetchSlaReport()}
+              disabled={loading}
+              className="p-2 rounded-lg text-surface-400 hover:text-brand-600 hover:bg-brand-50 transition-colors disabled:opacity-40"
+              title="Refresh"
+            >
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            </button>
+            <button
+              onClick={handleDownloadPdf}
+              disabled={loading || !data}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-brand-300 text-brand-700 bg-brand-50 hover:bg-brand-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              title="Download Report as PDF"
+            >
+              <Download size={13} />
+              Download PDF
+            </button>
           </div>
-          <button
-            onClick={() => fetchSlaReport()}
-            disabled={loading}
-            className="p-2 rounded-lg text-surface-400 hover:text-brand-600 hover:bg-brand-50 transition-colors disabled:opacity-40"
-            title="Refresh"
-          >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-          </button>
         </div>
       </div>
 

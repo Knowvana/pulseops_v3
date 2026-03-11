@@ -86,56 +86,81 @@ router.put('/config', (req, res) => {
 });
 
 // ── POST /config/test — Test connection to ServiceNow instance ──────────────
+// Returns: success, testedAt, per-API statuses, incident count
 router.post('/config/test', async (req, res) => {
   try {
-    const { instanceUrl, username, password } = req.body;
+    const { instanceUrl, username, password, apiToken } = req.body;
     const current = loadConnectionConfig();
 
+    const rawPassword = apiToken || password;
     const resolvedPassword =
-      password && password !== '••••••••' ? password : current.password;
+      rawPassword && rawPassword !== '••••••••' ? rawPassword : current.password;
 
     if (!instanceUrl || !username || !resolvedPassword) {
       return res.status(400).json({
         success: false,
-        error: { message: 'Instance URL, username, and password are required.' },
+        error: { message: 'Instance URL, username, and password/apiToken are required.' },
       });
     }
 
-    const startMs = Date.now();
+    const connObj = { instanceUrl, username, password: resolvedPassword, apiVersion: current.apiVersion || 'v2' };
+    const testedAt = new Date().toISOString();
+    const apis = { incidents: { status: 'failed' }, ritms: { status: 'failed' }, changes: { status: 'failed' } };
+    let incidentCount = null;
+    let overallSuccess = false;
+
+    // Test Incidents API + get count
     try {
-      const result = await snowRequest(
-        { instanceUrl, username, password: resolvedPassword, apiVersion: current.apiVersion || 'v2' },
-        'table/incident',
-        'sysparm_limit=1'
-      );
-      const latencyMs = Date.now() - startMs;
+      const incResult = await snowRequest(connObj, 'table/incident', 'sysparm_limit=1');
+      if (incResult.statusCode >= 200 && incResult.statusCode < 300) {
+        apis.incidents = { status: 'connected' };
+        overallSuccess = true;
+        // Get total count
+        try {
+          const countResult = await snowRequest(connObj, 'table/incident', 'sysparm_limit=1&sysparm_fields=sys_id');
+          if (countResult.statusCode >= 200 && countResult.statusCode < 300) {
+            const xTotal = countResult.data?.result ? countResult.data.result.length : 0;
+            // Use stats API for count if available
+            const statsResult = await snowRequest(connObj, 'stats/incident', 'sysparm_count=true');
+            if (statsResult.statusCode >= 200 && statsResult.statusCode < 300 && statsResult.data?.result?.stats?.count) {
+              incidentCount = Number(statsResult.data.result.stats.count);
+            }
+          }
+        } catch { /* count is optional */ }
+      }
+    } catch { /* incidents test failed */ }
 
-      const testSuccess = result.statusCode >= 200 && result.statusCode < 300;
+    // Test RITMs API
+    try {
+      const ritmResult = await snowRequest(connObj, 'table/sc_req_item', 'sysparm_limit=1');
+      if (ritmResult.statusCode >= 200 && ritmResult.statusCode < 300) {
+        apis.ritms = { status: 'connected' };
+      }
+    } catch { /* ritms test failed */ }
 
-      const conn = loadConnectionConfig();
-      conn.lastTested = new Date().toISOString();
-      conn.testStatus = testSuccess ? 'success' : 'failed';
-      saveConnectionConfig(conn);
+    // Test Changes API
+    try {
+      const changeResult = await snowRequest(connObj, 'table/change_request', 'sysparm_limit=1');
+      if (changeResult.statusCode >= 200 && changeResult.statusCode < 300) {
+        apis.changes = { status: 'connected' };
+      }
+    } catch { /* changes test failed */ }
 
-      return res.json({
-        success: true,
-        data: {
-          success: testSuccess,
-          latencyMs,
-          statusCode: result.statusCode,
-          error: testSuccess ? null : `ServiceNow returned HTTP ${result.statusCode}`,
-        },
-      });
-    } catch (connErr) {
-      return res.json({
-        success: true,
-        data: {
-          success: false,
-          latencyMs: Date.now() - startMs,
-          error: connErr.message,
-        },
-      });
-    }
+    // Save test result
+    const conn = loadConnectionConfig();
+    conn.lastTested = testedAt;
+    conn.testStatus = overallSuccess ? 'success' : 'failed';
+    saveConnectionConfig(conn);
+
+    return res.json({
+      success: true,
+      data: {
+        success: overallSuccess,
+        testedAt,
+        apis,
+        incidentCount,
+      },
+    });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: `Connection test failed: ${err.message}` } });
   }

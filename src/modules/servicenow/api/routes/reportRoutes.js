@@ -8,23 +8,145 @@
 //   GET /reports/ritms        → RITM report
 //   GET /reports/sla          → SLA compliance report
 //   GET /reports/sla/incidents → Incident SLA report with time filter
-//   GET /business-hours       → Get business hours config
-//   PUT /business-hours       → Save business hours config
-//   GET /config/settings      → Get general settings
-//   PUT /config/settings      → Save general settings
+//   GET /config/settings      → Get general settings (DB-backed via sn_module_config)
+//   PUT /config/settings      → Save general settings (DB-backed via sn_module_config)
 //
 // MOUNT: router.use('/', reportRoutes)  (in index.js)
 // ============================================================================
 import { Router } from 'express';
-import path from 'path';
 import {
-  loadConnectionConfig, loadDefaultsConfig, loadIncidentConfig,
+  loadConnectionConfig, loadDefaultsConfig, loadIncidentConfig, loadBusinessHours,
+  loadModuleConfig, saveModuleConfig,
   buildAssignmentGroupQuery, snowRequest, snowVal,
-  readJsonFile, writeJsonFile, CONFIG_DIR,
   DatabaseService, dbSchema,
 } from './helpers.js';
 
+// Import logger for DEBUG level logging
+import { logger } from '#shared/logger.js';
+
 const router = Router();
+
+// ═════════════════════════════════════════════════════════════════════════════
+// BUSINESS HOURS CALCULATION UTILITIES
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Build a lookup map { dayOfWeek: { start, startMin, end, endMin } } from DB rows.
+ * Returns empty object if no business hours configured → fallback to calendar time.
+ */
+function buildBusinessHoursMap(rows) {
+  const map = {};
+  if (!rows || !Array.isArray(rows) || rows.length === 0) return map;
+  for (const row of rows) {
+    if (row.is_business_day) {
+      const st = String(row.start_time || '09:00').slice(0, 5);
+      const et = String(row.end_time || '17:00').slice(0, 5);
+      const [sh, sm] = st.split(':').map(Number);
+      const [eh, em] = et.split(':').map(Number);
+      map[row.day_of_week] = { start: sh, startMin: sm, end: eh, endMin: em };
+    }
+  }
+  return map;
+}
+
+/**
+ * Normalize priority field values coming back from ServiceNow so they match
+ * the configured `priority_value` stored in sn_sla_config ("1"-"4").
+ * Handles representations like "1", "1 - Critical", "P1", "Priority 1".
+ */
+function normalizePriorityValue(raw) {
+  if (raw == null) return null;
+  const str = String(raw).trim();
+  if (!str) return null;
+  if (/^\d+$/.test(str)) return str; // already numeric
+  const digitMatch = str.match(/(\d)/);
+  if (digitMatch) return digitMatch[1];
+  const lower = str.toLowerCase();
+  if (lower.includes('critical')) return '1';
+  if (lower.includes('high')) return '2';
+  if (lower.includes('medium') || lower.includes('moderate')) return '3';
+  if (lower.includes('low')) return '4';
+  if (lower.includes('planning')) return '5';
+  return null;
+}
+
+/**
+ * Add N business minutes to a start date using the hoursMap.
+ * Returns a Date object. Falls back to calendar time if hoursMap is empty.
+ * Ensures result is always within business hours (if hoursMap is configured).
+ */
+function addBusinessMinutes(startDate, targetMinutes, hoursMap) {
+  if (!startDate || targetMinutes == null) return null;
+  if (!hoursMap || Object.keys(hoursMap).length === 0) {
+    return new Date(startDate.getTime() + targetMinutes * 60000);
+  }
+  let current = new Date(startDate);
+  let remaining = targetMinutes;
+  let guard = 0;
+  const debugLog = process.env.DEBUG_SLA === 'true';
+  if (debugLog) console.log(`[addBusinessMinutes] Start: ${current.toISOString()}, Target: ${targetMinutes} min, hoursMap keys: ${Object.keys(hoursMap)}`);
+  
+  while (remaining > 0 && guard++ < 10000) {
+    const dow = current.getDay();
+    const hours = hoursMap[dow];
+    if (!hours) { 
+      current.setDate(current.getDate() + 1); 
+      current.setHours(0, 0, 0, 0); 
+      if (debugLog) console.log(`[addBusinessMinutes] Day ${dow} not business day, moving to next day`);
+      continue; 
+    }
+    const workStart = new Date(current); workStart.setHours(hours.start, hours.startMin, 0, 0);
+    const workEnd = new Date(current); workEnd.setHours(hours.end, hours.endMin, 0, 0);
+    if (current < workStart) { 
+      current = new Date(workStart);
+      if (debugLog) console.log(`[addBusinessMinutes] Before work start, adjusted to ${current.toISOString()}`);
+      continue;
+    }
+    if (current >= workEnd) { 
+      current.setDate(current.getDate() + 1); 
+      current.setHours(0, 0, 0, 0); 
+      if (debugLog) console.log(`[addBusinessMinutes] Past work end, moving to next day`);
+      continue; 
+    }
+    const minutesUntilEnd = (workEnd - current) / 60000;
+    const chunk = Math.min(remaining, minutesUntilEnd);
+    current = new Date(current.getTime() + chunk * 60000);
+    remaining -= chunk;
+    if (debugLog) console.log(`[addBusinessMinutes] Added ${chunk} min, current: ${current.toISOString()}, remaining: ${remaining}`);
+    if (remaining > 0) { current.setDate(current.getDate() + 1); current.setHours(0, 0, 0, 0); }
+  }
+  if (debugLog) console.log(`[addBusinessMinutes] Final result: ${current.toISOString()}`);
+  return current;
+}
+
+/**
+ * Calculate business minutes between two dates using the hoursMap.
+ * Returns integer minutes. Falls back to calendar time if hoursMap is empty.
+ */
+function calcBusinessMinutesBetween(start, end, hoursMap) {
+  if (!start || !end) return null;
+  if (!hoursMap || Object.keys(hoursMap).length === 0) {
+    return Math.round((end - start) / 60000);
+  }
+  let bizMinutes = 0;
+  const cursor = new Date(start);
+  let guard = 0;
+  while (cursor < end && guard++ < 10000) {
+    const dow = cursor.getDay();
+    const hours = hoursMap[dow];
+    if (!hours) { cursor.setDate(cursor.getDate() + 1); cursor.setHours(0, 0, 0, 0); continue; }
+    const dayStart = new Date(cursor); dayStart.setHours(hours.start, hours.startMin, 0, 0);
+    const dayEnd = new Date(cursor); dayEnd.setHours(hours.end, hours.endMin, 0, 0);
+    const effectiveStart = cursor > dayStart ? cursor : dayStart;
+    const effectiveEnd = end < dayEnd ? end : dayEnd;
+    if (effectiveStart < effectiveEnd) {
+      bizMinutes += (effectiveEnd - effectiveStart) / 60000;
+    }
+    cursor.setDate(cursor.getDate() + 1);
+    cursor.setHours(0, 0, 0, 0);
+  }
+  return Math.round(bizMinutes);
+}
 
 // ── GET /stats — Dashboard statistics (always fetches live from SNOW) ────
 router.get('/stats', async (req, res) => {
@@ -403,138 +525,104 @@ router.get('/reports/sla/incidents', async (req, res) => {
       incidents = result.data.result;
     }
 
+    // ── Load SLA thresholds (keyed by priority_value for lookup) ──────────
     let slaThresholds = {};
+    let slaByPriorityValue = {};
     try {
-      const slaResult = await DatabaseService.query(`SELECT * FROM ${dbSchema}.sn_sla_config WHERE enabled = true`);
+      const slaResult = await DatabaseService.query(
+        `SELECT * FROM ${dbSchema}.sn_sla_config WHERE enabled = true ORDER BY sort_order`
+      );
       for (const row of slaResult.rows) {
-        slaThresholds[row.priority] = { responseMinutes: Number(row.response_minutes), resolutionMinutes: Number(row.resolution_minutes) };
+        const entry = { priority: row.priority, priorityValue: row.priority_value, responseMinutes: Number(row.response_minutes), resolutionMinutes: Number(row.resolution_minutes) };
+        slaThresholds[row.priority] = entry;
+        slaByPriorityValue[row.priority_value] = entry;
       }
     } catch { /* use empty */ }
 
-    let businessHours = null;
-    try {
-      businessHours = readJsonFile(path.join(CONFIG_DIR, 'servicenow_business_hours.json'));
-      console.log('[DEBUG] Business hours loaded:', businessHours);
-    } catch (err) {
-      console.log('[DEBUG] Failed to load business hours:', err.message);
-    }
+    // ── Load business hours from DB ─────────────────────────────────────
+    const businessHours = await loadBusinessHours();
+    const hoursMap = buildBusinessHoursMap(businessHours);
+
+    // DEBUG: Log overall SLA configuration
+    logger.debug(`[SLA] Report configuration loaded`, {
+      period,
+      totalIncidents: incidents.length,
+      slaConfigCount: Object.keys(slaThresholds).length,
+      slaThresholds: Object.entries(slaThresholds).map(([key, val]) => ({
+        priority: key,
+        resolutionMinutes: val.resolutionMinutes
+      })),
+      businessHoursConfigured: Object.keys(hoursMap).length > 0,
+      businessDays: Object.keys(hoursMap),
+      businessHoursMap: hoursMap
+    });
 
     const incidentSlaData = incidents.map(inc => {
-      const p = String(snowVal(inc.priority));
-      const pKey = p === '1' ? '1 - Critical' : p === '2' ? '2 - High' : p === '3' ? '3 - Medium' : '4 - Low';
+      // Get priority and normalize it
+      const priorityRaw = snowVal(inc[incidentConfig.priorityColumn || 'priority']);
+      const normalizedPriority = normalizePriorityValue(priorityRaw);
+      
+      // DEBUG: Log priority processing
+      logger.debug(`[SLA] Processing incident ${inc.number}`, {
+        incident: inc.number,
+        priorityRaw,
+        priorityType: typeof priorityRaw,
+        normalizedPriority
+      });
+      
+      // Find matching SLA threshold
+      const threshold = (normalizedPriority && slaByPriorityValue[normalizedPriority]) || 
+                       slaByPriorityValue[priorityRaw] || 
+                       slaThresholds[priorityRaw] || 
+                       { priority: priorityRaw, responseMinutes: 60, resolutionMinutes: 480 };
+      
+      // DEBUG: Log SLA threshold selection
+      logger.debug(`[SLA] Threshold selected for ${inc.number}`, {
+        incident: inc.number,
+        threshold,
+        resolutionMinutes: threshold.resolutionMinutes
+      });
+      
       const createdAt = snowVal(inc[incidentConfig.createdColumn]);
       const closedAt = snowVal(inc[incidentConfig.closedColumn]) || snowVal(inc.resolved_at);
-      const threshold = slaThresholds[pKey] || { responseMinutes: 60, resolutionMinutes: 480 };
 
       let resolutionMinutes = null;
       let slaMet = null;
       let expectedClosure = null;
+
+      // Calculate expected closure using business hours
       if (createdAt) {
-        console.log(`[DEBUG] Calculating expected closure for incident ${inc.number}:`, { createdAt, threshold: threshold.resolutionMinutes });
-        // Calculate expected closure using business hours
-        if (businessHours && Array.isArray(businessHours) && businessHours.length > 0) {
-          let bizMinutesToAdd = threshold.resolutionMinutes;
-          let current = new Date(createdAt);
+        // DEBUG: Log calculation inputs
+        logger.debug(`[SLA] Calculating expected closure for ${inc.number}`, {
+          incident: inc.number,
+          createdAt,
+          targetMinutes: threshold.resolutionMinutes,
+          businessHoursConfigured: Object.keys(hoursMap).length > 0,
+          businessDays: Object.keys(hoursMap)
+        });
+        
+        expectedClosure = addBusinessMinutes(new Date(createdAt), threshold.resolutionMinutes, hoursMap);
+        if (expectedClosure) {
+          expectedClosure = expectedClosure.toISOString();
           
-          // Convert business hours array to lookup
-          const hoursMap = {};
-          businessHours.forEach(day => {
-            if (day.isBusinessDay && day.startTime && day.endTime) {
-              const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-              const dayIndex = dayNames.indexOf(day.day);
-              if (dayIndex >= 0) {
-                const [sh, sm] = day.startTime.split(':').map(Number);
-                const [eh, em] = day.endTime.split(':').map(Number);
-                hoursMap[dayIndex] = { start: sh, end: eh };
-              }
-            }
+          // DEBUG: Log calculation result
+          logger.debug(`[SLA] Expected closure calculated for ${inc.number}`, {
+            incident: inc.number,
+            expectedClosure,
+            totalBusinessDaysAdded: Math.ceil(threshold.resolutionMinutes / 480) // Approximate business days
           });
-          
-          while (bizMinutesToAdd > 0) {
-            const dayOfWeek = current.getDay();
-            const hours = hoursMap[dayOfWeek];
-            
-            if (hours) {
-              const workStart = new Date(current);
-              workStart.setHours(hours.start, 0, 0, 0);
-              
-              const workEnd = new Date(current);
-              workEnd.setHours(hours.end, 0, 0, 0);
-              
-              if (current < workStart) {
-                current = new Date(workStart);
-              }
-              
-              if (current >= workEnd) {
-                current.setDate(current.getDate() + 1);
-                current.setHours(hours.start, 0, 0, 0);
-                continue;
-              }
-              
-              const minutesUntilEnd = (workEnd - current) / 60000;
-              const minutesToAddToday = Math.min(bizMinutesToAdd, minutesUntilEnd);
-              
-              current = new Date(current.getTime() + minutesToAddToday * 60000);
-              bizMinutesToAdd -= minutesToAddToday;
-              
-              if (bizMinutesToAdd > 0) {
-                do {
-                  current.setDate(current.getDate() + 1);
-                } while (!hoursMap[current.getDay()]);
-                current.setHours(hoursMap[current.getDay()].start, 0, 0, 0);
-              }
-            } else {
-              do {
-                current.setDate(current.getDate() + 1);
-              } while (!hoursMap[current.getDay()]);
-              current.setHours(hoursMap[current.getDay()].start, 0, 0, 0);
-            }
-          }
-          
-          expectedClosure = current.toISOString();
-        } else {
-          // Fallback: add calendar time if no business hours configured
-          expectedClosure = new Date(new Date(createdAt).getTime() + threshold.resolutionMinutes * 60000).toISOString();
-          console.log(`[DEBUG] Using fallback calculation for incident ${inc.number}:`, expectedClosure);
         }
-        console.log(`[DEBUG] Final expected closure for incident ${inc.number}:`, expectedClosure);
       }
-      
+
+      // Calculate actual resolution time in business minutes
       if (createdAt && closedAt) {
-        const created = new Date(createdAt);
-        const closed = new Date(closedAt);
-        resolutionMinutes = Math.round((closed - created) / 60000);
-
-        if (businessHours && Array.isArray(businessHours) && businessHours.length > 0) {
-          let bizMinutes = 0;
-          const cursor = new Date(created);
-          while (cursor < closed) {
-            const dayOfWeek = cursor.getDay();
-            const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dayOfWeek];
-            const dayConfig = businessHours.find(d => d.day === dayName);
-            if (dayConfig?.isBusinessDay && dayConfig.startTime && dayConfig.endTime) {
-              const [sh, sm] = dayConfig.startTime.split(':').map(Number);
-              const [eh, em] = dayConfig.endTime.split(':').map(Number);
-              const dayStart = new Date(cursor); dayStart.setHours(sh, sm, 0, 0);
-              const dayEnd = new Date(cursor); dayEnd.setHours(eh, em, 0, 0);
-              const effectiveStart = cursor > dayStart ? cursor : dayStart;
-              const effectiveEnd = closed < dayEnd ? closed : dayEnd;
-              if (effectiveStart < effectiveEnd) {
-                bizMinutes += (effectiveEnd - effectiveStart) / 60000;
-              }
-            }
-            cursor.setDate(cursor.getDate() + 1);
-            cursor.setHours(0, 0, 0, 0);
-          }
-          resolutionMinutes = Math.round(bizMinutes);
-        }
-
+        resolutionMinutes = calcBusinessMinutesBetween(new Date(createdAt), new Date(closedAt), hoursMap);
         slaMet = resolutionMinutes <= threshold.resolutionMinutes;
       }
 
       return {
         number: snowVal(inc.number), shortDescription: snowVal(inc.short_description),
-        priority: pKey, state: snowVal(inc.state), assignedTo: snowVal(inc.assigned_to),
+        priority: normalizedPriority || priorityRaw, state: snowVal(inc.state), assignedTo: snowVal(inc.assigned_to),
         createdAt, closedAt, resolutionMinutes, targetMinutes: threshold.resolutionMinutes, slaMet, expectedClosure,
       };
     });
@@ -554,9 +642,10 @@ router.get('/reports/sla/incidents', async (req, res) => {
       success: true,
       data: {
         period, startDate, endDate: now.toISOString().slice(0, 10),
+        generatedAt: new Date().toISOString(),
         totalIncidents: incidents.length, summaryByPriority,
         incidents: incidentSlaData,
-        incidentConfig: { createdColumn: incidentConfig.createdColumn, closedColumn: incidentConfig.closedColumn },
+        incidentConfig: { createdColumn: incidentConfig.createdColumn, closedColumn: incidentConfig.closedColumn, priorityColumn: incidentConfig.priorityColumn },
       },
     });
   } catch (err) {
@@ -564,42 +653,22 @@ router.get('/reports/sla/incidents', async (req, res) => {
   }
 });
 
-// ── GET/PUT /business-hours ──────────────────────────────────────────────
-router.get('/business-hours', (req, res) => {
+// ── GET/PUT /config/settings (DB-backed via sn_module_config) ────────────
+router.get('/config/settings', async (req, res) => {
   try {
-    const hours = readJsonFile(path.join(CONFIG_DIR, 'servicenow_business_hours.json')) || [];
-    return res.json({ success: true, data: hours });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: { message: `Failed to load business hours: ${err.message}` } });
-  }
-});
-
-router.put('/business-hours', (req, res) => {
-  try {
-    writeJsonFile(path.join(CONFIG_DIR, 'servicenow_business_hours.json'), req.body);
-    return res.json({ success: true, message: 'Business hours saved successfully.' });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: { message: `Failed to save business hours: ${err.message}` } });
-  }
-});
-
-// ── GET/PUT /config/settings ─────────────────────────────────────────────
-router.get('/config/settings', (req, res) => {
-  try {
-    const settings = readJsonFile(path.join(CONFIG_DIR, 'servicenow_settings.json')) || {};
+    const settings = await loadModuleConfig('general_settings') || {};
     return res.json({ success: true, data: settings });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: `Failed to load settings: ${err.message}` } });
   }
 });
 
-router.put('/config/settings', (req, res) => {
+router.put('/config/settings', async (req, res) => {
   try {
-    writeJsonFile(path.join(CONFIG_DIR, 'servicenow_settings.json'), req.body);
+    await saveModuleConfig('general_settings', req.body, 'General module settings');
     return res.json({ success: true, message: 'Settings saved successfully.' });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: `Failed to save settings: ${err.message}` } });
   }
 });
-
 export default router;

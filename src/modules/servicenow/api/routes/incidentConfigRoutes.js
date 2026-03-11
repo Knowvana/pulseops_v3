@@ -12,19 +12,22 @@
 //   POST /config/sla                   → Create a new SLA row
 //   PUT  /config/sla/:id               → Update an SLA row
 //   DELETE /config/sla/:id             → Delete an SLA row
+//   GET  /business-hours               → Get business hours
+//   PUT  /business-hours               → Update business hours
 //
 // MOUNT: router.use('/', incidentConfigRoutes)  (in index.js)
 // ============================================================================
 import { Router } from 'express';
 import {
-  loadConnectionConfig, loadIncidentConfig, snowRequest, snowVal,
+  loadConnectionConfig, loadIncidentConfig, loadModuleConfig, saveModuleConfig,
+  loadBusinessHours, snowRequest, snowVal,
   buildAssignmentGroupQuery, DatabaseService, dbSchema,
 } from './helpers.js';
 
 const router = Router();
 
 // ═════════════════════════════════════════════════════════════════════════════
-// INCIDENT CONFIGURATION (DB-backed, singleton row id=1)
+// INCIDENT CONFIGURATION (DB-backed via sn_module_config, key='incident_config')
 // ═════════════════════════════════════════════════════════════════════════════
 
 // ── GET /config/incidents — Read full incident configuration ────────────
@@ -47,14 +50,8 @@ router.put('/config/incidents/columns', async (req, res) => {
     if (!selectedColumns.includes('number')) {
       return res.status(400).json({ success: false, error: { message: 'Incident number column is mandatory.' } });
     }
-
-    await DatabaseService.query(
-      `INSERT INTO ${dbSchema}.sn_incident_config (id, selected_columns, updated_at)
-       VALUES (1, $1, NOW())
-       ON CONFLICT (id) DO UPDATE SET selected_columns = $1, updated_at = NOW()`,
-      [JSON.stringify(selectedColumns)]
-    );
-
+    const current = await loadIncidentConfig();
+    await saveModuleConfig('incident_config', { ...current, selectedColumns }, 'Incident table configuration');
     return res.json({ success: true, message: 'Selected columns saved successfully.' });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: `Failed to save columns: ${err.message}` } });
@@ -64,18 +61,14 @@ router.put('/config/incidents/columns', async (req, res) => {
 // ── PUT /config/incidents/sla-mapping — Save SLA column mapping only ────
 router.put('/config/incidents/sla-mapping', async (req, res) => {
   try {
-    const { createdColumn, closedColumn } = req.body;
+    const { createdColumn, closedColumn, priorityColumn } = req.body;
     if (!createdColumn || !closedColumn) {
       return res.status(400).json({ success: false, error: { message: 'Both createdColumn and closedColumn are required.' } });
     }
-
-    await DatabaseService.query(
-      `INSERT INTO ${dbSchema}.sn_incident_config (id, created_column, closed_column, updated_at)
-       VALUES (1, $1, $2, NOW())
-       ON CONFLICT (id) DO UPDATE SET created_column = $1, closed_column = $2, updated_at = NOW()`,
-      [createdColumn, closedColumn]
-    );
-
+    const current = await loadIncidentConfig();
+    const updated = { ...current, createdColumn, closedColumn };
+    if (priorityColumn) updated.priorityColumn = priorityColumn;
+    await saveModuleConfig('incident_config', updated, 'Incident table configuration');
     return res.json({ success: true, message: 'SLA column mapping saved successfully.' });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: `Failed to save SLA mapping: ${err.message}` } });
@@ -86,39 +79,31 @@ router.put('/config/incidents/sla-mapping', async (req, res) => {
 router.put('/config/incidents/assignment-group', async (req, res) => {
   try {
     const { assignmentGroup } = req.body;
-
-    await DatabaseService.query(
-      `INSERT INTO ${dbSchema}.sn_incident_config (id, assignment_group, updated_at)
-       VALUES (1, $1, NOW())
-       ON CONFLICT (id) DO UPDATE SET assignment_group = $1, updated_at = NOW()`,
-      [assignmentGroup || '']
-    );
-
+    const current = await loadIncidentConfig();
+    await saveModuleConfig('incident_config', { ...current, assignmentGroup: assignmentGroup || '' }, 'Incident table configuration');
     return res.json({ success: true, message: 'Assignment group saved successfully.' });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: `Failed to save assignment group: ${err.message}` } });
   }
 });
 
-// ── Backward-compatible PUT /config/incidents (saves all at once) ────────
+// ── PUT /config/incidents (saves all at once) ───────────────────────────
 router.put('/config/incidents', async (req, res) => {
   try {
-    const { selectedColumns, createdColumn, closedColumn, assignmentGroup } = req.body;
+    const { selectedColumns, createdColumn, closedColumn, priorityColumn, assignmentGroup } = req.body;
     if (!selectedColumns || !Array.isArray(selectedColumns)) {
       return res.status(400).json({ success: false, error: { message: 'selectedColumns must be an array.' } });
     }
     if (!selectedColumns.includes('number')) {
       return res.status(400).json({ success: false, error: { message: 'Incident number column is mandatory.' } });
     }
-
-    await DatabaseService.query(
-      `INSERT INTO ${dbSchema}.sn_incident_config (id, selected_columns, created_column, closed_column, assignment_group, updated_at)
-       VALUES (1, $1, $2, $3, $4, NOW())
-       ON CONFLICT (id) DO UPDATE SET
-         selected_columns = $1, created_column = $2, closed_column = $3, assignment_group = $4, updated_at = NOW()`,
-      [JSON.stringify(selectedColumns), createdColumn || 'opened_at', closedColumn || 'closed_at', assignmentGroup || '']
-    );
-
+    await saveModuleConfig('incident_config', {
+      selectedColumns,
+      createdColumn: createdColumn || 'opened_at',
+      closedColumn: closedColumn || 'closed_at',
+      priorityColumn: priorityColumn || 'priority',
+      assignmentGroup: assignmentGroup || '',
+    }, 'Incident table configuration');
     return res.json({ success: true, message: 'Incident configuration saved successfully.' });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: `Failed to save incident config: ${err.message}` } });
@@ -238,7 +223,7 @@ router.get('/schema/columns', async (req, res) => {
 router.get('/config/sla', async (req, res) => {
   try {
     const result = await DatabaseService.query(
-      `SELECT * FROM ${dbSchema}.sn_sla_config ORDER BY id`
+      `SELECT * FROM ${dbSchema}.sn_sla_config ORDER BY sort_order, id`
     );
     return res.json({ success: true, data: result.rows });
   } catch (err) {
@@ -249,14 +234,17 @@ router.get('/config/sla', async (req, res) => {
 // ── POST /config/sla — Create a new SLA row ─────────────────────────────
 router.post('/config/sla', async (req, res) => {
   try {
-    const { priority, responseMinutes, resolutionMinutes, enabled = true } = req.body;
+    const { priority, priorityValue, responseMinutes, resolutionMinutes, enabled = true, sortOrder } = req.body;
     if (!priority) {
       return res.status(400).json({ success: false, error: { message: 'priority is required.' } });
     }
+    if (!priorityValue) {
+      return res.status(400).json({ success: false, error: { message: 'priorityValue is required.' } });
+    }
     const result = await DatabaseService.query(
-      `INSERT INTO ${dbSchema}.sn_sla_config (priority, response_minutes, resolution_minutes, enabled, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING *`,
-      [priority, Number(responseMinutes) || 60, Number(resolutionMinutes) || 480, Boolean(enabled)]
+      `INSERT INTO ${dbSchema}.sn_sla_config (priority, priority_value, response_minutes, resolution_minutes, enabled, sort_order, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW()) RETURNING *`,
+      [priority, String(priorityValue), Number(responseMinutes) || 60, Number(resolutionMinutes) || 480, Boolean(enabled), Number(sortOrder) || 99]
     );
     return res.json({ success: true, data: result.rows[0], message: 'SLA configuration created.' });
   } catch (err) {
@@ -271,16 +259,18 @@ router.post('/config/sla', async (req, res) => {
 router.put('/config/sla/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { priority, responseMinutes, resolutionMinutes, enabled } = req.body;
+    const { priority, priorityValue, responseMinutes, resolutionMinutes, enabled, sortOrder } = req.body;
     const result = await DatabaseService.query(
       `UPDATE ${dbSchema}.sn_sla_config
        SET priority = COALESCE($2, priority),
-           response_minutes = COALESCE($3, response_minutes),
-           resolution_minutes = COALESCE($4, resolution_minutes),
-           enabled = COALESCE($5, enabled),
+           priority_value = COALESCE($3, priority_value),
+           response_minutes = COALESCE($4, response_minutes),
+           resolution_minutes = COALESCE($5, resolution_minutes),
+           enabled = COALESCE($6, enabled),
+           sort_order = COALESCE($7, sort_order),
            updated_at = NOW()
        WHERE id = $1 RETURNING *`,
-      [id, priority, responseMinutes != null ? Number(responseMinutes) : null, resolutionMinutes != null ? Number(resolutionMinutes) : null, enabled != null ? Boolean(enabled) : null]
+      [id, priority, priorityValue != null ? String(priorityValue) : null, responseMinutes != null ? Number(responseMinutes) : null, resolutionMinutes != null ? Number(resolutionMinutes) : null, enabled != null ? Boolean(enabled) : null, sortOrder != null ? Number(sortOrder) : null]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, error: { message: 'SLA config not found.' } });
@@ -305,6 +295,78 @@ router.delete('/config/sla/:id', async (req, res) => {
     return res.json({ success: true, message: 'SLA configuration deleted.' });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: `Failed to delete SLA config: ${err.message}` } });
+  }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// BUSINESS HOURS (DB-backed — sn_business_hours, 7 fixed rows)
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ── GET /business-hours — List all 7 days ────────────────────────────────
+router.get('/business-hours', async (req, res) => {
+  try {
+    const rows = await loadBusinessHours();
+    if (!rows || rows.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+    return res.json({ success: true, data: rows });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { message: `Failed to load business hours: ${err.message}` } });
+  }
+});
+
+// ── POST /data/seed-business-hours — Seed default business hours ────────────
+router.post('/data/seed-business-hours', async (req, res) => {
+  try {
+    const defaultHours = [
+      { day_of_week: 0, day_name: 'Sunday',    is_business_day: false, start_time: '00:00', end_time: '00:00' },
+      { day_of_week: 1, day_name: 'Monday',    is_business_day: true,  start_time: '09:00', end_time: '17:00' },
+      { day_of_week: 2, day_name: 'Tuesday',   is_business_day: true,  start_time: '09:00', end_time: '17:00' },
+      { day_of_week: 3, day_name: 'Wednesday', is_business_day: true,  start_time: '09:00', end_time: '17:00' },
+      { day_of_week: 4, day_name: 'Thursday',  is_business_day: true,  start_time: '09:00', end_time: '17:00' },
+      { day_of_week: 5, day_name: 'Friday',    is_business_day: true,  start_time: '09:00', end_time: '17:00' },
+      { day_of_week: 6, day_name: 'Saturday',  is_business_day: false, start_time: '00:00', end_time: '00:00' }
+    ];
+    
+    for (const day of defaultHours) {
+      await DatabaseService.query(
+        `INSERT INTO ${dbSchema}.sn_business_hours (day_of_week, day_name, is_business_day, start_time, end_time, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+         ON CONFLICT (day_of_week) DO UPDATE SET is_business_day = $3, start_time = $4, end_time = $5, updated_at = NOW()`,
+        [day.day_of_week, day.day_name, day.is_business_day, day.start_time, day.end_time]
+      );
+    }
+    
+    return res.json({ success: true, message: 'Business hours seeded successfully', data: defaultHours });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { message: `Failed to seed business hours: ${err.message}` } });
+  }
+});
+
+// ── PUT /business-hours — Bulk update all 7 days ─────────────────────────
+router.put('/business-hours', async (req, res) => {
+  try {
+    const { hours } = req.body;
+    if (!hours || !Array.isArray(hours) || hours.length !== 7) {
+      return res.status(400).json({ success: false, error: { message: 'Exactly 7 day entries are required.' } });
+    }
+
+    for (const day of hours) {
+      if (day.day_of_week == null || !day.day_name) {
+        return res.status(400).json({ success: false, error: { message: `Invalid day entry: day_of_week and day_name are required.` } });
+      }
+      await DatabaseService.query(
+        `UPDATE ${dbSchema}.sn_business_hours
+         SET is_business_day = $2, start_time = $3, end_time = $4, updated_at = NOW()
+         WHERE day_of_week = $1`,
+        [day.day_of_week, Boolean(day.is_business_day), day.start_time || '09:00', day.end_time || '17:00']
+      );
+    }
+
+    const updated = await loadBusinessHours();
+    return res.json({ success: true, data: updated, message: 'Business hours updated successfully.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { message: `Failed to update business hours: ${err.message}` } });
   }
 });
 

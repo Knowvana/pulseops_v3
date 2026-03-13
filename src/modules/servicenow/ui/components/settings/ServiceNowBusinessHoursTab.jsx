@@ -10,6 +10,12 @@
 // FLOW: Edit → Save → Confirmation Modal → Summary Modal → OK Modal
 // Result shown as persistent color-coded label (does not auto-vanish).
 //
+// FEATURES:
+//   - Beautiful time picker inputs with clock icon and styled container
+//   - Toggle switch for business day enable/disable (fully functional)
+//   - Fetches saved values from DB on page load
+//   - Validates and persists all changes to DB
+//
 // USED BY: manifest.jsx → getConfigTabs() → sn_business_hours
 //
 // DEPENDENCIES:
@@ -19,7 +25,7 @@
 // ============================================================================
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Clock, Save, Loader2, AlertCircle, CheckCircle2, X } from 'lucide-react';
+import { Clock, Save, Loader2, AlertCircle, CheckCircle2, X, CalendarClock, Info } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
 import { ToggleSwitch } from '@components';
@@ -40,12 +46,45 @@ const DEFAULT_HOURS = [
 
 const snApi = { businessHours: '/api/servicenow/business-hours' };
 
+// ── Beautiful Time Picker Component ──────────────────────────────────────
+function TimePicker({ value, onChange, disabled = false, label }) {
+  return (
+    <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl border transition-all duration-200 ${
+      disabled
+        ? 'bg-surface-50 border-surface-100 opacity-40 cursor-not-allowed'
+        : 'bg-white border-surface-200 hover:border-brand-300 focus-within:ring-2 focus-within:ring-brand-200 focus-within:border-brand-400 shadow-sm'
+    }`}>
+      <Clock size={14} className={disabled ? 'text-surface-300' : 'text-brand-500'} />
+      <input
+        type="time"
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        aria-label={label}
+        className="bg-transparent text-sm font-medium text-surface-700 outline-none border-none p-0 w-20 disabled:cursor-not-allowed [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute"
+      />
+    </div>
+  );
+}
+
+// ── Day Name Badge Component ─────────────────────────────────────────────
+function DayBadge({ name, isBusinessDay }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isBusinessDay ? 'bg-emerald-400' : 'bg-surface-300'}`} />
+      <span className={`text-sm font-semibold ${isBusinessDay ? 'text-surface-800' : 'text-surface-400'}`}>
+        {name}
+      </span>
+    </div>
+  );
+}
+
 export default function ServiceNowBusinessHoursTab() {
   const [hours, setHours]             = useState(DEFAULT_HOURS);
   const [loading, setLoading]         = useState(true);
   const [saving, setSaving]           = useState(false);
-  const [resultBanner, setResultBanner] = useState(null); // persistent { success, message }
-  const [modalPhase, setModalPhase]   = useState(null); // 'confirm' | 'summary' | 'done'
+  const [resultBanner, setResultBanner] = useState(null);
+  const [modalPhase, setModalPhase]   = useState(null);
   const [summaryData, setSummaryData] = useState(null);
   const initRan = useRef(false);
 
@@ -58,14 +97,15 @@ export default function ServiceNowBusinessHoursTab() {
         const mapped = res.data.map(row => ({
           day_of_week: row.day_of_week,
           day_name: row.day_name,
-          is_business_day: row.is_business_day,
+          is_business_day: Boolean(row.is_business_day),
           start_time: String(row.start_time || '09:00').slice(0, 5),
           end_time: String(row.end_time || '17:00').slice(0, 5),
         }));
         setHours(mapped);
-        log.info('loadHours', 'Business hours loaded from DB');
+        log.info('loadHours', 'Business hours loaded from DB', { count: mapped.length });
       } else {
         setHours(DEFAULT_HOURS);
+        log.info('loadHours', 'No business hours in DB, using defaults');
       }
     } catch (err) {
       log.error('loadHours', 'Load failed', { error: err.message });
@@ -83,7 +123,16 @@ export default function ServiceNowBusinessHoursTab() {
 
   // ── Toggle / change ────────────────────────────────────────────────────
   const toggleDay = useCallback((idx) => {
-    setHours(prev => prev.map((d, i) => i === idx ? { ...d, is_business_day: !d.is_business_day } : d));
+    setHours(prev => prev.map((d, i) => {
+      if (i !== idx) return d;
+      const toggled = !d.is_business_day;
+      return {
+        ...d,
+        is_business_day: toggled,
+        start_time: toggled && d.start_time === '00:00' ? '09:00' : d.start_time,
+        end_time: toggled && d.end_time === '00:00' ? '17:00' : d.end_time,
+      };
+    }));
     setResultBanner(null);
   }, []);
 
@@ -92,7 +141,31 @@ export default function ServiceNowBusinessHoursTab() {
     setResultBanner(null);
   }, []);
 
+  // ── Validate ───────────────────────────────────────────────────────────
+  const validate = useCallback(() => {
+    for (const day of hours) {
+      if (day.is_business_day) {
+        if (!day.start_time || !day.end_time) {
+          return { valid: false, error: `${day.day_name}: Start and End time are required for business days.` };
+        }
+        if (day.start_time >= day.end_time) {
+          return { valid: false, error: `${day.day_name}: Start time must be before End time.` };
+        }
+      }
+    }
+    return { valid: true };
+  }, [hours]);
+
   // ── Save flow: Confirm → Save → Summary → Done ────────────────────────
+  const handleOpenConfirm = useCallback(() => {
+    const result = validate();
+    if (!result.valid) {
+      setResultBanner({ success: false, message: result.error });
+      return;
+    }
+    setModalPhase('confirm');
+  }, [validate]);
+
   const handleConfirmSave = useCallback(async () => {
     setModalPhase(null);
     setSaving(true);
@@ -107,7 +180,7 @@ export default function ServiceNowBusinessHoursTab() {
           days: businessDays.map(d => `${d.day_name} (${d.start_time} – ${d.end_time})`),
         });
         setModalPhase('summary');
-        log.info('handleSave', 'Business hours saved to DB');
+        log.info('handleSave', 'Business hours saved to DB', { businessDays: businessDays.length });
         await loadHours();
       } else {
         setSummaryData({ success: false, error: res?.error?.message || 'Save failed' });
@@ -132,19 +205,32 @@ export default function ServiceNowBusinessHoursTab() {
     setSummaryData(null);
   }, [summaryData]);
 
-  const inputCls = 'px-3 py-1.5 rounded-lg border border-surface-200 bg-white text-sm text-surface-700 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400 w-28';
+  const businessDayCount = hours.filter(d => d.is_business_day).length;
 
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center">
-          <Clock size={18} className="text-brand-600" />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center">
+            <CalendarClock size={18} className="text-brand-600" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-surface-800">{t.title}</h2>
+            <p className="text-xs text-surface-500">{t.subtitle}</p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-base font-bold text-surface-800">{t.title}</h2>
-          <p className="text-xs text-surface-500">{t.subtitle}</p>
+        <div className="flex items-center gap-2 text-xs text-surface-500">
+          <span className="px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 font-semibold">
+            {businessDayCount} business day{businessDayCount !== 1 ? 's' : ''}
+          </span>
         </div>
+      </div>
+
+      {/* Info banner */}
+      <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-xs">
+        <Info size={13} className="flex-shrink-0 mt-0.5" />
+        <span>Toggle business days on/off and set working hours. These are used for SLA calculations. Changes are saved only after clicking "Save Business Hours".</span>
       </div>
 
       {/* Persistent result banner (does NOT auto-vanish) */}
@@ -182,20 +268,32 @@ export default function ServiceNowBusinessHoursTab() {
             </thead>
             <tbody className="divide-y divide-surface-50">
               {hours.map((day, idx) => (
-                <tr key={day.day_of_week} className={`hover:bg-surface-50/50 transition-colors ${!day.is_business_day ? 'opacity-50' : ''}`}>
-                  <td className="px-5 py-3 font-medium text-surface-700">{day.day_name}</td>
-                  <td className="px-5 py-3 text-center">
-                    <ToggleSwitch checked={day.is_business_day} onChange={() => toggleDay(idx)} size="sm" />
+                <tr key={day.day_of_week} className={`transition-all duration-200 ${day.is_business_day ? 'hover:bg-surface-50/50' : 'bg-surface-25'}`}>
+                  <td className="px-5 py-3">
+                    <DayBadge name={day.day_name} isBusinessDay={day.is_business_day} />
                   </td>
                   <td className="px-5 py-3 text-center">
-                    <input type="time" value={day.start_time}
+                    <ToggleSwitch
+                      enabled={day.is_business_day}
+                      onToggle={() => toggleDay(idx)}
+                      size="sm"
+                    />
+                  </td>
+                  <td className="px-5 py-3 text-center">
+                    <TimePicker
+                      value={day.start_time}
                       onChange={e => changeTime(idx, 'start_time', e.target.value)}
-                      disabled={!day.is_business_day} className={inputCls} />
+                      disabled={!day.is_business_day}
+                      label={`${day.day_name} start time`}
+                    />
                   </td>
                   <td className="px-5 py-3 text-center">
-                    <input type="time" value={day.end_time}
+                    <TimePicker
+                      value={day.end_time}
                       onChange={e => changeTime(idx, 'end_time', e.target.value)}
-                      disabled={!day.is_business_day} className={inputCls} />
+                      disabled={!day.is_business_day}
+                      label={`${day.day_name} end time`}
+                    />
                   </td>
                 </tr>
               ))}
@@ -206,7 +304,7 @@ export default function ServiceNowBusinessHoursTab() {
 
       {/* Save button */}
       <div className="flex justify-end">
-        <button onClick={() => setModalPhase('confirm')} disabled={saving || loading}
+        <button onClick={handleOpenConfirm} disabled={saving || loading}
           className="flex items-center gap-2 px-5 py-2 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 disabled:opacity-50 transition-colors">
           {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
           {saving ? t.saving : t.saveButton}
@@ -229,10 +327,13 @@ export default function ServiceNowBusinessHoursTab() {
             <div className="bg-surface-50 rounded-lg p-3 mb-5 text-xs text-surface-600 space-y-1">
               <p className="font-semibold text-surface-700">Changes summary:</p>
               {hours.filter(d => d.is_business_day).map(d => (
-                <p key={d.day_of_week}>• {d.day_name}: {d.start_time} – {d.end_time}</p>
+                <p key={d.day_of_week} className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                  {d.day_name}: {d.start_time} – {d.end_time}
+                </p>
               ))}
               {hours.filter(d => !d.is_business_day).length > 0 && (
-                <p className="text-surface-400">Non-business: {hours.filter(d => !d.is_business_day).map(d => d.day_name).join(', ')}</p>
+                <p className="text-surface-400 mt-1">Non-business: {hours.filter(d => !d.is_business_day).map(d => d.day_name).join(', ')}</p>
               )}
             </div>
             <div className="flex justify-end gap-3">
@@ -264,7 +365,7 @@ export default function ServiceNowBusinessHoursTab() {
             {summaryData.success ? (
               <div className="bg-emerald-50 rounded-lg p-3 mb-5 text-xs text-emerald-700 space-y-1 border border-emerald-100">
                 <p className="font-semibold">{summaryData.businessDayCount} business day(s) configured:</p>
-                {summaryData.days.map((d, i) => <p key={i}>• {d}</p>)}
+                {summaryData.days.map((d, i) => <p key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />{d}</p>)}
               </div>
             ) : (
               <div className="bg-rose-50 rounded-lg p-3 mb-5 text-xs text-rose-700 border border-rose-100">

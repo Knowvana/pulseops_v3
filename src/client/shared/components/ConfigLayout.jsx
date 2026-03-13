@@ -28,7 +28,20 @@
 // ARCHITECTURE: Fully reusable, accepts any number of tabs. Each module can
 // pass its own tab configuration with custom content components.
 // ============================================================================
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, createContext, useContext, useCallback } from 'react';
+
+// ── Context for cross-tab navigation ─────────────────────────────────────────
+const ConfigLayoutContext = createContext(null);
+
+/**
+ * Hook for child tab components to navigate to another config tab.
+ * Usage: const { navigateToTab } = useConfigLayout();
+ *        navigateToTab('slaColumnMapping');
+ */
+export function useConfigLayout() {
+  const ctx = useContext(ConfigLayoutContext);
+  return ctx || { navigateToTab: () => {} };
+}
 
 function flattenTabs(tabs) {
   return tabs.flatMap(tab => (tab.type === 'section') ? (tab.children || []) : [tab]);
@@ -84,12 +97,29 @@ export default function ConfigLayout({ title, subtitle, icon: HeaderIcon, tabs =
     );
   };
 
+  // ── Cross-tab navigation callback ───────────────────────────────────────
+  const navigateToTab = useCallback((tabId) => {
+    const target = allLeafTabs.find(t => t.id === tabId);
+    if (!target) return;
+    // Auto-expand parent section if target is inside a collapsed section
+    for (const tab of tabs) {
+      if (tab.type === 'section' && (tab.children || []).some(c => c.id === tabId)) {
+        setExpandedSections(prev => ({ ...prev, [tab.id]: true }));
+        break;
+      }
+    }
+    setActiveTab(tabId);
+  }, [allLeafTabs, tabs]);
+
+  const ctxValue = useMemo(() => ({ navigateToTab }), [navigateToTab]);
+
   // Support both JSX elements and render functions for lazy rendering
   const activeContent = activeTabObj?.content
     ? (typeof activeTabObj.content === 'function' ? activeTabObj.content() : activeTabObj.content)
     : null;
 
   return (
+    <ConfigLayoutContext.Provider value={ctxValue}>
     <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden animate-fade-in">
       {/* Header */}
       {title && (
@@ -166,5 +196,6 @@ export default function ConfigLayout({ title, subtitle, icon: HeaderIcon, tabs =
         </div>
       </div>
     </div>
+    </ConfigLayoutContext.Provider>
   );
 }

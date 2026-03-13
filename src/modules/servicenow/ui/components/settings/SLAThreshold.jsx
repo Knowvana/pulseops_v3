@@ -5,6 +5,13 @@
 // platform's CRUD modal conventions (ConfirmationModal → Confirm/Progress/Summary).
 // Supports create, edit, delete, and enable/disable actions with business-level
 // debug logging to aid troubleshooting.
+//
+// ENHANCEMENTS:
+//   - Checks SLA column mapping from DB on mount; shows SetupRequiredOverlay
+//     if column mapping is not configured, with button to navigate to SLA Column
+//     Mapping tab via useConfigLayout.
+//   - Auto-fetches all priorities from ServiceNow API on mount (no manual click).
+//   - Priorities grid only shows after column mapping check passes.
 // ============================================================================
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
@@ -15,9 +22,10 @@ import {
   Info,
   RefreshCw,
   ShieldCheck,
+  Columns,
 } from 'lucide-react';
-import { createLogger, ConfirmationModal } from '@shared';
-import { ToggleSwitch } from '@components';
+import { createLogger, ConfirmationModal, useConfigLayout } from '@shared';
+import { ToggleSwitch, SetupRequiredOverlay } from '@components';
 import ApiClient from '@shared/services/apiClient';
 import uiText from '../../config/uiText.json';
 
@@ -26,6 +34,7 @@ const t = uiText.sla;
 const snApi = {
   slaConfig: '/api/servicenow/config/sla',
   slaPriorities: '/api/servicenow/config/sla/priorities',
+  incidentConfig: '/api/servicenow/config/incidents',
 };
 
 const defaultForm = {
@@ -38,6 +47,8 @@ const defaultForm = {
 const normalizeValue = (value) => String(value ?? '').trim();
 
 export default function SLAThresholds() {
+  const { navigateToTab } = useConfigLayout();
+
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statusBanner, setStatusBanner] = useState(null);
@@ -45,9 +56,40 @@ export default function SLAThresholds() {
   const [priorityFetch, setPriorityFetch] = useState({ loading: false, error: null, lastFetched: null });
   const [modalState, setModalState] = useState({ open: false, priority: null, existing: null });
   const [formState, setFormState] = useState(defaultForm);
+
+  // Column mapping check
+  const [columnMappingOk, setColumnMappingOk] = useState(null); // null = checking, true/false
+  const [columnMappingLoading, setColumnMappingLoading] = useState(true);
+
   const initRan = useRef(false);
 
   const resetStatusBanner = useCallback(() => setStatusBanner(null), []);
+
+  // ── Check column mapping from DB ──────────────────────────────────────
+  const checkColumnMapping = useCallback(async () => {
+    setColumnMappingLoading(true);
+    try {
+      const res = await ApiClient.get(snApi.incidentConfig);
+      if (res?.success) {
+        const d = res.data;
+        const hasMappings = Boolean(d.createdColumn && d.closedColumn && d.priorityColumn);
+        setColumnMappingOk(hasMappings);
+        log.info('checkColumnMapping', 'Column mapping check', {
+          createdColumn: d.createdColumn,
+          closedColumn: d.closedColumn,
+          priorityColumn: d.priorityColumn,
+          hasMappings,
+        });
+      } else {
+        setColumnMappingOk(false);
+      }
+    } catch (err) {
+      log.error('checkColumnMapping', 'Failed to check column mapping', { error: err.message });
+      setColumnMappingOk(false);
+    } finally {
+      setColumnMappingLoading(false);
+    }
+  }, []);
 
   const loadSla = useCallback(async () => {
     log.debug('loadSla', 'Fetching persisted SLA thresholds');
@@ -70,12 +112,6 @@ export default function SLAThresholds() {
     }
   }, []);
 
-  useEffect(() => {
-    if (initRan.current) return;
-    initRan.current = true;
-    loadSla();
-  }, [loadSla]);
-
   const fetchPriorities = useCallback(async () => {
     log.debug('fetchPriorities', 'Requesting ServiceNow incident priorities');
     setPriorityFetch({ loading: true, error: null, lastFetched: null });
@@ -96,6 +132,15 @@ export default function SLAThresholds() {
       setPriorityFetch({ loading: false, error: err.message, lastFetched: null });
     }
   }, []);
+
+  // ── Init: check column mapping, load SLA, auto-fetch priorities ───────
+  useEffect(() => {
+    if (initRan.current) return;
+    initRan.current = true;
+    checkColumnMapping();
+    loadSla();
+    fetchPriorities();
+  }, [checkColumnMapping, loadSla, fetchPriorities]);
 
   const combinedRows = useMemo(() => {
     if (!priorities.length) return [];
@@ -247,8 +292,8 @@ export default function SLAThresholds() {
           <div className="flex items-center gap-2">
             <ToggleSwitch
               size="sm"
-              checked={formState.enabled}
-              onChange={() => setFormState(prev => ({ ...prev, enabled: !prev.enabled }))}
+              enabled={formState.enabled}
+              onToggle={() => setFormState(prev => ({ ...prev, enabled: !prev.enabled }))}
             />
             <span className="text-xs text-surface-600">{formState.enabled ? 'Enabled' : 'Disabled'}</span>
           </div>
@@ -283,7 +328,7 @@ export default function SLAThresholds() {
     );
   };
 
-  if (loading) {
+  if (loading || columnMappingLoading) {
     return (
       <div className="p-8 flex items-center justify-center">
         <Loader2 size={22} className="text-brand-400 animate-spin" />
@@ -292,7 +337,19 @@ export default function SLAThresholds() {
   }
 
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="relative space-y-5 animate-fade-in">
+      {/* SetupRequiredOverlay when column mapping is not configured */}
+      <SetupRequiredOverlay
+        isOpen={columnMappingOk === false}
+        icon={Columns}
+        header="SLA Column Mapping Required"
+        messageDetail="SLA column mapping (Created, Closed, and Priority columns) must be configured before you can manage SLA thresholds. Please configure the mapping first."
+        actionIcon={Columns}
+        actionText="Go to SLA Column Mapping"
+        onAction={() => navigateToTab('slaColumnMapping')}
+        variant="warning"
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -301,7 +358,7 @@ export default function SLAThresholds() {
           </div>
           <div>
             <h2 className="text-base font-bold text-surface-800">Incident SLA Thresholds</h2>
-            <p className="text-xs text-surface-500">Sync priorities from ServiceNow, then configure response/resolution targets.</p>
+            <p className="text-xs text-surface-500">Priorities are auto-fetched from ServiceNow. Configure response/resolution targets per priority.</p>
           </div>
         </div>
         <button
@@ -317,7 +374,7 @@ export default function SLAThresholds() {
       {/* Info banner */}
       <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-xs">
         <Info size={13} className="flex-shrink-0 mt-0.5" />
-        <span>Priorities are sourced directly from ServiceNow (sys_choice). SLA targets can only be configured for fetched priorities.</span>
+        <span>Priorities are sourced directly from ServiceNow (sys_choice) and fetched automatically. SLA targets can only be configured for fetched priorities.</span>
       </div>
 
       {/* Priority fetch status */}
@@ -326,10 +383,10 @@ export default function SLAThresholds() {
         {priorityFetch.loading && <span>Contacting ServiceNow…</span>}
         {!priorityFetch.loading && priorityFetch.error && <span className="text-rose-600">{priorityFetch.error}</span>}
         {!priorityFetch.loading && !priorityFetch.error && priorityFetch.lastFetched && (
-          <span>Last fetched: {new Date(priorityFetch.lastFetched).toLocaleString()}</span>
+          <span>Last fetched: {new Date(priorityFetch.lastFetched).toLocaleString()} — {priorities.length} priorities loaded</span>
         )}
         {!priorityFetch.loading && !priorityFetch.error && !priorityFetch.lastFetched && (
-          <span>Priorities not loaded yet. Click “Fetch Priorities”.</span>
+          <span>Priorities not loaded yet. Click "Fetch Priorities" or wait for auto-fetch.</span>
         )}
       </div>
 
@@ -349,7 +406,9 @@ export default function SLAThresholds() {
       {/* Priority grid */}
       {priorities.length === 0 ? (
         <div className="border border-dashed border-surface-300 rounded-2xl bg-surface-50/60 p-6 text-center">
-          <p className="text-sm text-surface-600">Fetch priorities from ServiceNow to begin configuring SLA thresholds.</p>
+          <p className="text-sm text-surface-600">
+            {priorityFetch.loading ? 'Fetching priorities from ServiceNow…' : 'No priorities loaded. Click "Fetch Priorities" to load from ServiceNow.'}
+          </p>
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
@@ -382,9 +441,9 @@ export default function SLAThresholds() {
                   <td className="px-4 py-2.5 text-center">
                     <ToggleSwitch
                       size="sm"
-                      checked={row.enabled}
+                      enabled={row.enabled}
                       disabled={!row.id}
-                      onChange={() => handleToggleEnabled(row)}
+                      onToggle={() => handleToggleEnabled(row)}
                     />
                   </td>
                   <td className="px-4 py-2.5 text-center">

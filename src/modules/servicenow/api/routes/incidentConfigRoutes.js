@@ -61,13 +61,14 @@ router.put('/config/incidents/columns', async (req, res) => {
 // ── PUT /config/incidents/sla-mapping — Save SLA column mapping only ────
 router.put('/config/incidents/sla-mapping', async (req, res) => {
   try {
-    const { createdColumn, closedColumn, priorityColumn } = req.body;
+    const { createdColumn, closedColumn, priorityColumn, responseColumn } = req.body;
     if (!createdColumn || !closedColumn) {
       return res.status(400).json({ success: false, error: { message: 'Both createdColumn and closedColumn are required.' } });
     }
     const current = await loadIncidentConfig();
     const updated = { ...current, createdColumn, closedColumn };
-    if (priorityColumn) updated.priorityColumn = priorityColumn;
+    if (priorityColumn !== undefined) updated.priorityColumn = priorityColumn;
+    if (responseColumn !== undefined) updated.responseColumn = responseColumn;
     await saveModuleConfig('incident_config', updated, 'Incident table configuration');
     return res.json({ success: true, message: 'SLA column mapping saved successfully.' });
   } catch (err) {
@@ -215,6 +216,59 @@ router.get('/schema/columns', async (req, res) => {
   }
 });
 
+// ── GET /schema/columns/:columnName/values — Fetch sample values for a column ─
+router.get('/schema/columns/:columnName/values', async (req, res) => {
+  try {
+    const conn = loadConnectionConfig();
+    if (!conn.isConfigured) {
+      return res.status(400).json({ success: false, error: { message: 'ServiceNow connection is not configured.' } });
+    }
+
+    const { columnName } = req.params;
+    if (!columnName || /[^a-zA-Z0-9_]/.test(columnName)) {
+      return res.status(400).json({ success: false, error: { message: 'Invalid column name.' } });
+    }
+
+    // Build assignment group filter if configured
+    const incidentConfig = await loadIncidentConfig();
+    const agQuery = buildAssignmentGroupQuery(incidentConfig.assignmentGroup);
+    const baseFilter = agQuery
+      ? `${columnName}ISNOTEMPTY^${agQuery}^ORDERBYDESCsys_created_on`
+      : `${columnName}ISNOTEMPTY^ORDERBYDESCsys_created_on`;
+
+    const query = [
+      `sysparm_query=${baseFilter}`,
+      `sysparm_fields=${columnName}`,
+      'sysparm_limit=100',
+    ].join('&');
+
+    const snowResp = await snowRequest(conn, 'table/incident', query);
+    if (snowResp.statusCode < 200 || snowResp.statusCode >= 300) {
+      const message = snowResp.data?.error?.message || `ServiceNow responded with HTTP ${snowResp.statusCode}`;
+      return res.status(snowResp.statusCode || 502).json({ success: false, error: { message } });
+    }
+
+    const records = snowResp.data?.result || [];
+
+    // Extract unique values, keep first 5
+    const seen = new Set();
+    const values = [];
+    for (const record of records) {
+      const raw = snowVal(record[columnName]);
+      const val = raw != null ? String(raw).trim() : '';
+      if (val && !seen.has(val)) {
+        seen.add(val);
+        values.push(val);
+        if (values.length >= 5) break;
+      }
+    }
+
+    return res.json({ success: true, data: { column: columnName, values, total: values.length } });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { message: `Failed to fetch column values: ${err.message}` } });
+  }
+});
+
 // ═════════════════════════════════════════════════════════════════════════════
 // SLA CONFIGURATION (DB-backed CRUD)
 // ═════════════════════════════════════════════════════════════════════════════
@@ -232,6 +286,11 @@ router.get('/config/sla', async (req, res) => {
 });
 
 // ── GET /config/sla/priorities — Fetch ServiceNow incident priority choices ──
+// Uses progressive fallback:
+//   1. sys_choice with language=en + inactive=false
+//   2. sys_choice without language filter
+//   3. sys_choice without inactive filter
+//   4. Distinct priority values from actual incident records
 router.get('/config/sla/priorities', async (req, res) => {
   try {
     const conn = loadConnectionConfig();
@@ -239,34 +298,106 @@ router.get('/config/sla/priorities', async (req, res) => {
       return res.status(400).json({ success: false, error: { message: 'ServiceNow connection is not configured.' } });
     }
 
-    const query = [
-      'sysparm_query=name=incident^element=priority^language=en^inactive=false^ORDERBYsequence',
-      'sysparm_fields=value,label,sequence,dependent_value',
-      'sysparm_limit=50',
-    ].join('&');
+    // Read the configured priority column (default: 'priority')
+    const incidentConfig = await loadIncidentConfig();
+    const priorityElement = incidentConfig.priorityColumn || 'priority';
 
-    const snowResp = await snowRequest(conn, 'table/sys_choice', query);
-    if (snowResp.statusCode < 200 || snowResp.statusCode >= 300) {
-      const message = snowResp.data?.error?.message || `ServiceNow responded with HTTP ${snowResp.statusCode}`;
-      return res.status(snowResp.statusCode || 502).json({ success: false, error: { message } });
+    // Progressive sys_choice queries — from strict to relaxed
+    const sysChoiceQueries = [
+      `sysparm_query=name=incident^element=${priorityElement}^language=en^inactive=false^ORDERBYsequence`,
+      `sysparm_query=name=incident^element=${priorityElement}^inactive=false^ORDERBYsequence`,
+      `sysparm_query=name=incident^element=${priorityElement}^ORDERBYsequence`,
+    ];
+
+    let choices = [];
+    let source = 'none';
+
+    for (let i = 0; i < sysChoiceQueries.length; i++) {
+      const query = [
+        sysChoiceQueries[i],
+        'sysparm_fields=value,label,sequence,dependent_value',
+        'sysparm_limit=50',
+      ].join('&');
+
+      console.log(`[priorities] Attempt ${i + 1}: querying sys_choice with element=${priorityElement}`);
+      const snowResp = await snowRequest(conn, 'table/sys_choice', query);
+
+      if (snowResp.statusCode >= 200 && snowResp.statusCode < 300) {
+        const results = snowResp.data?.result || [];
+        console.log(`[priorities] Attempt ${i + 1}: sys_choice returned ${results.length} result(s)`);
+
+        if (results.length > 0) {
+          choices = results
+            .map(choice => ({
+              value: snowVal(choice.value)?.trim(),
+              label: snowVal(choice.label) || snowVal(choice.value) || 'Priority',
+              sequence: Number(snowVal(choice.sequence)) || null,
+              dependentValue: snowVal(choice.dependent_value) || null,
+            }))
+            .filter(choice => !!choice.value);
+          source = `sys_choice (attempt ${i + 1})`;
+          break;
+        }
+      } else {
+        console.log(`[priorities] Attempt ${i + 1}: HTTP ${snowResp.statusCode}`);
+      }
     }
 
-    const choices = (snowResp.data?.result || [])
-      .map(choice => ({
-        value: snowVal(choice.value)?.trim(),
-        label: snowVal(choice.label) || snowVal(choice.value) || 'Priority',
-        sequence: Number(snowVal(choice.sequence)) || null,
-        dependentValue: snowVal(choice.dependent_value) || null,
-      }))
-      .filter(choice => !!choice.value)
-      .sort((a, b) => {
-        const seqDiff = (a.sequence || 0) - (b.sequence || 0);
-        if (seqDiff !== 0) return seqDiff;
-        return a.value.localeCompare(b.value, undefined, { numeric: true });
-      });
+    // Fallback: fetch distinct priority values from actual incident records
+    if (choices.length === 0) {
+      console.log(`[priorities] sys_choice returned 0 results, falling back to incident records for field: ${priorityElement}`);
+      const fallbackQuery = [
+        `sysparm_query=${priorityElement}ISNOTEMPTY^ORDERBYDESCsys_created_on`,
+        `sysparm_fields=${priorityElement}`,
+        'sysparm_limit=200',
+      ].join('&');
 
-    return res.json({ success: true, data: { choices, total: choices.length } });
+      const fallbackResp = await snowRequest(conn, 'table/incident', fallbackQuery);
+      if (fallbackResp.statusCode >= 200 && fallbackResp.statusCode < 300) {
+        const records = fallbackResp.data?.result || [];
+        console.log(`[priorities] Incident fallback returned ${records.length} record(s)`);
+
+        // Extract unique priority values
+        const seen = new Map();
+        for (const record of records) {
+          const raw = snowVal(record[priorityElement]);
+          if (raw != null) {
+            const val = String(raw).trim();
+            if (val && !seen.has(val)) {
+              seen.set(val, val);
+            }
+          }
+        }
+
+        // Build choices from unique values, sorted numerically
+        const uniqueValues = [...seen.keys()].sort((a, b) => {
+          const numA = parseInt(a, 10);
+          const numB = parseInt(b, 10);
+          if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+          return a.localeCompare(b, undefined, { numeric: true });
+        });
+
+        choices = uniqueValues.map((val, idx) => ({
+          value: val,
+          label: `Priority ${val}`,
+          sequence: idx + 1,
+          dependentValue: null,
+        }));
+        source = 'incident_records';
+      }
+    }
+
+    // Sort choices by sequence
+    choices.sort((a, b) => {
+      const seqDiff = (a.sequence || 0) - (b.sequence || 0);
+      if (seqDiff !== 0) return seqDiff;
+      return a.value.localeCompare(b.value, undefined, { numeric: true });
+    });
+
+    console.log(`[priorities] Final result: ${choices.length} priorities from ${source}`);
+    return res.json({ success: true, data: { choices, total: choices.length, source } });
   } catch (err) {
+    console.error(`[priorities] Error: ${err.message}`);
     return res.status(500).json({ success: false, error: { message: `Failed to fetch ServiceNow priorities: ${err.message}` } });
   }
 });

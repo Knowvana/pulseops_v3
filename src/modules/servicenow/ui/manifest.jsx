@@ -117,6 +117,12 @@ const servicenowManifest = {
       content: () => <ServiceNowAssignmentGroupTab />,
     },
     {
+      id:      cfgText.tabs.businessHours.id,
+      label:   cfgText.tabs.businessHours.label,
+      icon:    CalendarClock,
+      content: () => <ServiceNowBusinessHoursTab />,
+    },
+    {
       type: 'section',
       id: 'incident_configuration_section',
       label: 'Incident Configuration',
@@ -150,12 +156,6 @@ const servicenowManifest = {
       icon:    RefreshCw,
       separator: true,
       content: () => <ServiceNowSyncTab />,
-    },
-    {
-      id:      cfgText.tabs.businessHours.id,
-      label:   cfgText.tabs.businessHours.label,
-      icon:    CalendarClock,
-      content: () => <ServiceNowBusinessHoursTab />,
     },
     {
       id:      cfgText.tabs.settings.id,

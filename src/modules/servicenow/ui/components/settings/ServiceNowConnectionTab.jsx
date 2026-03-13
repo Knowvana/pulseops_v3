@@ -32,6 +32,7 @@ import ApiClient from '@shared/services/apiClient';
 const snApi = {
   config:     '/api/servicenow/config',
   configTest: '/api/servicenow/config/test',
+  stats:      '/api/servicenow/stats',
   sync:       '/api/servicenow/sync',
   schemaColumns: '/api/servicenow/schema/columns',
 };
@@ -212,6 +213,18 @@ export default function ServiceNowConnectionTab() {
   const [fetchError, setFetchError]       = useState(null);
   const autoConnectDone = useRef(false);
 
+  const updateIncidentCountFromStats = useCallback(async () => {
+    try {
+      const statsRes = await ApiClient.get(snApi.stats);
+      if (statsRes?.success && typeof statsRes.data?.total === 'number') {
+        setIncidentCount(statsRes.data.total);
+        log.info('updateIncidentCountFromStats', 'Incident total loaded from stats API', { total: statsRes.data.total });
+      }
+    } catch (err) {
+      log.warn('updateIncidentCountFromStats', 'Failed to load incident total from stats API', { error: err.message });
+    }
+  }, []);
+
   // ── Load config and auto-connect ────────────────────────────────────────
   const loadConfigAndConnect = useCallback(async (force = false) => {
     if (!force && autoConnectDone.current) return;
@@ -246,7 +259,11 @@ export default function ServiceNowConnectionTab() {
           setConnStatus(testRes.data.success ? 'connected' : 'not_connected');
           setLastTestedAt(testRes.data.testedAt || new Date().toISOString());
           if (testRes.data.apis) setApiStatuses(testRes.data.apis);
-          if (testRes.data.incidentCount != null) setIncidentCount(testRes.data.incidentCount);
+          if (testRes.data.incidentCount != null) {
+            setIncidentCount(testRes.data.incidentCount);
+          } else if (testRes.data.success) {
+            updateIncidentCountFromStats();
+          }
           log.info('loadConfigAndConnect', 'Auto-connect result', { status: testRes.data.success });
         } else {
           setConnStatus('not_connected');
@@ -292,7 +309,11 @@ export default function ServiceNowConnectionTab() {
         setConnStatus(res.data.success ? 'connected' : 'not_connected');
         setLastTestedAt(res.data.testedAt || new Date().toISOString());
         if (res.data.apis) setApiStatuses(res.data.apis);
-        if (res.data.incidentCount != null) setIncidentCount(res.data.incidentCount);
+        if (res.data.incidentCount != null) {
+          setIncidentCount(res.data.incidentCount);
+        } else if (res.data.success) {
+          updateIncidentCountFromStats();
+        }
       } else {
         setConnStatus('not_connected');
       }
@@ -346,6 +367,7 @@ export default function ServiceNowConnectionTab() {
       if (res?.success) {
         setSyncResult({ success: true, message: t.syncSuccess || 'Data synchronized successfully' });
         log.info('handleSyncData', 'Sync completed', { count: res.data?.count });
+        updateIncidentCountFromStats();
       } else {
         setSyncResult({ success: false, message: res?.error?.message || 'Sync failed' });
       }
@@ -382,6 +404,12 @@ export default function ServiceNowConnectionTab() {
                   {t.lastTestedLabel || 'Last tested'}: {new Date(lastTestedAt).toLocaleString()}
                 </p>
               )}
+              {!connecting && incidentCount != null && (
+                <p className="text-xs text-surface-500 mt-0.5 flex items-center gap-1">
+                  <Hash size={12} className="text-brand-500" />
+                  {t.incidentCountLabel || 'Incidents fetched'}: {incidentCount.toLocaleString()}
+                </p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -414,33 +442,7 @@ export default function ServiceNowConnectionTab() {
           </div>
         )}
 
-        {/* Per-API status + Incident Count */}
-        {!connecting && isConnected && (
-          <div className="grid grid-cols-4 gap-2">
-            {[
-              { key: 'incidents', label: 'Incidents API', icon: Bug },
-              { key: 'ritms', label: 'RITMs API', icon: FileText },
-              { key: 'changes', label: 'Changes API', icon: GitPullRequest },
-            ].map(({ key, label, icon: Icon }) => {
-              const st = apiStatuses[key];
-              const ok = st?.status === 'connected';
-              return (
-                <div key={key} className="flex items-center gap-2 p-2 rounded-lg bg-surface-50 border border-surface-100">
-                  <Icon size={14} className="text-surface-500" />
-                  <span className="text-xs font-medium text-surface-700 flex-1">{label}</span>
-                  {ok ? <CheckCircle2 size={12} className="text-emerald-500" /> : <AlertCircle size={12} className="text-rose-400" />}
-                </div>
-              );
-            })}
-            <div className="flex items-center gap-2 p-2 rounded-lg bg-brand-50 border border-brand-100">
-              <Hash size={14} className="text-brand-500" />
-              <span className="text-xs font-medium text-surface-700 flex-1">Incidents</span>
-              <span className="text-xs font-bold text-brand-700">
-                {incidentCount != null ? incidentCount.toLocaleString() : '—'}
-              </span>
-            </div>
-          </div>
-        )}
+        {/* Per-API status grid removed per UX request to reduce redundancy */}
       </div>
 
       {/* Connection Form */}
@@ -496,6 +498,7 @@ export default function ServiceNowConnectionTab() {
             </button>
           </div>
         </div>
+
       </div>
 
       {/* Result Messages */}

@@ -1,12 +1,10 @@
 // ============================================================================
 // ServiceNowIncidentConfigTab — PulseOps V3 ServiceNow Module
 //
-// PURPOSE: Incident configuration tab with four sections, each with its own
-//   save button for independent persistence:
+// PURPOSE: Incident configuration tab with one section:
 //   1. Column Mapping — rich grid with metadata from sys_dictionary + sample values
-//   2. SLA Column Mapping — map created/closed columns for SLA calculation
-//   3. Assignment Group — filter incidents by assignment group
-//   4. SLA Configuration — CRUD for SLA thresholds per priority
+//
+// NOTE: Assignment Group has been moved to ServiceNowConnectionTab as a connection parameter.
 //
 // DATA: All config is persisted to database via per-section REST API endpoints.
 // ============================================================================
@@ -14,9 +12,9 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Columns, Save, Loader2, AlertCircle, CheckCircle2,
-  RefreshCw, Users, Clock, Search, Lock, Info, ChevronUp,
+  RefreshCw, Search, Lock, Info, ChevronUp,
 } from 'lucide-react';
-import { createLogger, ConfirmationModal } from '@shared';
+import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
 
 const log = createLogger('ServiceNowIncidentConfigTab.jsx');
@@ -24,10 +22,7 @@ const log = createLogger('ServiceNowIncidentConfigTab.jsx');
 const snApi = {
   incidentConfig:       '/api/servicenow/config/incidents',
   incidentColumns:      '/api/servicenow/config/incidents/columns',
-  incidentSlaMapping:   '/api/servicenow/config/incidents/sla-mapping',
-  incidentAssignGroup:  '/api/servicenow/config/incidents/assignment-group',
   snowColumns:          '/api/servicenow/schema/columns',
-  searchGroups:         '/api/servicenow/search/assignment-groups',
 };
 
 // Priority badge styles
@@ -117,27 +112,10 @@ export default function ServiceNowIncidentConfigTab() {
 
   // Incident config
   const [selectedColumns, setSelectedColumns] = useState([]);
-  const [createdColumn, setCreatedColumn]     = useState('opened_at');
-  const [closedColumn, setClosedColumn]       = useState('closed_at');
-  const [assignmentGroup, setAssignmentGroup] = useState('');
 
   // Per-section saving & messages
   const [savingColumns, setSavingColumns] = useState(false);
-  const [savingSlaMap, setSavingSlaMap]   = useState(false);
-  const [savingGroup, setSavingGroup]     = useState(false);
   const [msgColumns, setMsgColumns]       = useState(null);
-  const [msgSlaMap, setMsgSlaMap]         = useState(null);
-  const [groupResult, setGroupResult]     = useState(null);
-  const [showGroupConfirm, setShowGroupConfirm] = useState(false);
-
-  // Assignment group live search
-  const [groupSearchText, setGroupSearchText]     = useState('');
-  const [groupSearchResults, setGroupSearchResults] = useState([]);
-  const [groupSearching, setGroupSearching]       = useState(false);
-  const [groupSearchComplete, setGroupSearchComplete] = useState(false);
-  const [showGroupDropdown, setShowGroupDropdown] = useState(false);
-  const groupDropdownRef = useRef(null);
-  const groupInputRef = useRef(null);
 
   const initRan = useRef(false);
 
@@ -147,8 +125,6 @@ export default function ServiceNowIncidentConfigTab() {
     return () => clearTimeout(timer);
   };
   useEffect(() => { if (msgColumns) return autoDismiss(setMsgColumns); }, [msgColumns]);
-  useEffect(() => { if (msgSlaMap) return autoDismiss(setMsgSlaMap); }, [msgSlaMap]);
-  // groupResult should persist until manually updated
 
   // ── Load data ─────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -157,9 +133,6 @@ export default function ServiceNowIncidentConfigTab() {
       const configRes = await ApiClient.get(snApi.incidentConfig);
       if (configRes?.success) {
         setSelectedColumns(configRes.data.selectedColumns || []);
-        setCreatedColumn(configRes.data.createdColumn || 'opened_at');
-        setClosedColumn(configRes.data.closedColumn || 'closed_at');
-        setAssignmentGroup(configRes.data.assignmentGroup || '');
       }
     } catch (err) {
       log.error('loadData', 'Failed to load config', { error: err.message });
@@ -191,39 +164,6 @@ export default function ServiceNowIncidentConfigTab() {
     loadData();
     fetchSnowColumns();
   }, [loadData, fetchSnowColumns]);
-
-  // ── Assignment group live search (debounced) ───────────────────────────────
-  useEffect(() => {
-    const trimmed = groupSearchText.trim();
-    if (!trimmed) {
-      setGroupSearchResults([]);
-      setGroupSearchComplete(false);
-      return;
-    }
-    const timer = setTimeout(async () => {
-      setGroupSearching(true);
-      try {
-        const res = await ApiClient.get(`${snApi.searchGroups}?q=${encodeURIComponent(trimmed)}`);
-        if (res?.success) {
-          setGroupSearchResults(res.data.groups || []);
-          setGroupSearchComplete(true);
-        }
-      } catch { /* ignore */ }
-      finally { setGroupSearching(false); }
-    }, 350);
-    return () => clearTimeout(timer);
-  }, [groupSearchText]);
-
-  // Close group dropdown on outside click
-  useEffect(() => {
-    const handler = (e) => {
-      if (groupDropdownRef.current && !groupDropdownRef.current.contains(e.target)) {
-        setShowGroupDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
 
   // ── Filtered columns ──────────────────────────────────────────────────────
   const filteredColumns = useMemo(() => {
@@ -266,54 +206,6 @@ export default function ServiceNowIncidentConfigTab() {
     }
   }, [selectedColumns]);
 
-  // ── Save: SLA Column Mapping ──────────────────────────────────────────────
-  const handleSaveSlaMapping = useCallback(async () => {
-    setSavingSlaMap(true);
-    setMsgSlaMap(null);
-    try {
-      const res = await ApiClient.put(snApi.incidentSlaMapping, { createdColumn, closedColumn });
-      if (res?.success) {
-        setMsgSlaMap({ type: 'success', text: 'SLA column mapping saved successfully.' });
-      } else {
-        setMsgSlaMap({ type: 'error', text: res?.error?.message || 'Failed to save SLA mapping.' });
-      }
-    } catch {
-      setMsgSlaMap({ type: 'error', text: 'Failed to save SLA mapping.' });
-    } finally {
-      setSavingSlaMap(false);
-    }
-  }, [createdColumn, closedColumn]);
-
-  // ── Save: Assignment Group ────────────────────────────────────────────────
-  const saveAssignmentGroup = useCallback(async () => {
-    log.info('saveAssignmentGroup', 'Persisting assignment group selection', { assignmentGroup: assignmentGroup || 'ALL_GROUPS' });
-    console.info('Saving assignment group to sn_incident_config.assignment_group', assignmentGroup || 'ALL_GROUPS');
-    setSavingGroup(true);
-    try {
-      const res = await ApiClient.put(snApi.incidentAssignGroup, { assignmentGroup });
-      if (res?.success) {
-        const storedGroup = res.data?.assignmentGroup ?? assignmentGroup ?? '';
-        console.info('Assignment group stored in sn_incident_config.assignment_group', storedGroup || 'ALL_GROUPS');
-        log.info('saveAssignmentGroup', 'Assignment group saved to database', {
-          storedGroup: storedGroup || 'ALL_GROUPS',
-          targetTable: 'sn_incident_config.assignment_group',
-        });
-        setGroupResult({ type: 'success', text: 'Assignment group saved successfully.' });
-        return { assignmentGroup: storedGroup, targetTable: 'sn_incident_config.assignment_group' };
-      }
-      const errorMsg = res?.error?.message || 'Failed to save assignment group.';
-      setGroupResult({ type: 'error', text: errorMsg });
-      throw new Error(errorMsg);
-    } catch (err) {
-      log.error('saveAssignmentGroup', 'Save failed', { error: err.message });
-      console.error('Assignment group save failed', err);
-      setGroupResult(prev => prev ?? { type: 'error', text: err.message || 'Failed to save assignment group.' });
-      throw err;
-    } finally {
-      setSavingGroup(false);
-    }
-  }, [assignmentGroup]);
-
   // ── Column toggle ─────────────────────────────────────────────────────────
   const toggleColumn = (colName) => {
     if (colName === 'number') return; // mandatory
@@ -348,7 +240,7 @@ export default function ServiceNowIncidentConfigTab() {
       <div className="bg-white rounded-xl border border-surface-200 shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-bold text-surface-700">Incident Column Mapping</h3>
+            <h3 className="text-sm font-bold text-surface-700">Select Columns to Display for ServiceNow Incidents</h3>
             <p className="text-xs text-surface-400 mt-0.5">
               Select which ServiceNow columns to display.
               {columnSource && (
@@ -420,7 +312,7 @@ export default function ServiceNowIncidentConfigTab() {
           ) : (
             <>
               {/* Column grid — scrollable */}
-              <div className="max-h-[280px] overflow-y-auto border border-surface-100 rounded-lg scrollbar-thin scrollbar-thumb-brand-500 scrollbar-track-surface-100">
+              <div className="max-h-[400px] overflow-y-auto border border-surface-100 rounded-lg scrollbar-thin scrollbar-thumb-brand-500 scrollbar-track-surface-100">
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-surface-50 z-10">
                     <tr className="border-b border-surface-200">
@@ -524,190 +416,7 @@ export default function ServiceNowIncidentConfigTab() {
           )}
         </div>
       </div>
-
-      {/* ═══ Section 2: SLA Column Mapping ════════════════════════════════════ */}
-      <div className="bg-white rounded-xl border border-surface-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <Clock size={14} className="text-brand-600" />
-              <h3 className="text-sm font-bold text-surface-700">SLA Column Mapping</h3>
-            </div>
-            <p className="text-xs text-surface-400 mt-0.5">Map the columns used for Resolution SLA calculation.</p>
-          </div>
-          <SectionSaveButton saving={savingSlaMap} onClick={handleSaveSlaMapping} label="Save Mapping" />
-        </div>
-        <SectionMessage message={msgSlaMap} />
-        <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-semibold text-surface-600 mb-1">Created Column</label>
-            <select
-              value={createdColumn}
-              onChange={e => setCreatedColumn(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-surface-200 text-sm text-surface-700 bg-white focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
-            >
-              {snowColumns.length > 0 ? snowColumns.map(col => (
-                <option key={col.name} value={col.name}>
-                  {col.label ? `${col.name} (${col.label})` : col.name}
-                </option>
-              )) : (
-                <>
-                  <option value="opened_at">opened_at</option>
-                  <option value="sys_created_on">sys_created_on</option>
-                </>
-              )}
-            </select>
-            <p className="text-[10px] text-surface-400 mt-1">Column representing when the incident was created.</p>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-surface-600 mb-1">Closed Column</label>
-            <select
-              value={closedColumn}
-              onChange={e => setClosedColumn(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-surface-200 text-sm text-surface-700 bg-white focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
-            >
-              {snowColumns.length > 0 ? snowColumns.map(col => (
-                <option key={col.name} value={col.name}>
-                  {col.label ? `${col.name} (${col.label})` : col.name}
-                </option>
-              )) : (
-                <>
-                  <option value="closed_at">closed_at</option>
-                  <option value="resolved_at">resolved_at</option>
-                </>
-              )}
-            </select>
-            <p className="text-[10px] text-surface-400 mt-1">Column representing when the incident was resolved/closed.</p>
-          </div>
-        </div>
       </div>
-
-      {/* ═══ Section 3: Assignment Group ══════════════════════════════════════ */}
-      <div className="bg-white rounded-xl border border-surface-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <Users size={14} className="text-brand-600" />
-              <h3 className="text-sm font-bold text-surface-700">Assignment Group</h3>
-            </div>
-            <p className="text-xs text-surface-400 mt-0.5">Filter all incident API calls to only fetch incidents from this group.</p>
-          </div>
-          <SectionSaveButton saving={savingGroup} onClick={() => setShowGroupConfirm(true)} label="Save Group" />
-        </div>
-        <SectionMessage message={groupResult} />
-        <div className="p-5">
-          <div className="max-w-2xl" ref={groupDropdownRef}>
-            <div className="grid gap-2 md:grid-cols-[360px,minmax(0,1fr)] md:items-center md:gap-4">
-              <div className="relative w-full md:flex-none">
-                {(groupSearchComplete && !groupSearching && groupSearchText.trim()) ? (
-                  <CheckCircle2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-500 pointer-events-none" />
-                ) : (
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-400 pointer-events-none" />
-                )}
-              <input
-                ref={groupInputRef}
-                type="text"
-                value={assignmentGroup || groupSearchText}
-                onChange={e => {
-                  setGroupSearchText(e.target.value);
-                  setAssignmentGroup('');
-                  setGroupSearchComplete(false);
-                  setShowGroupDropdown(true);
-                }}
-                onFocus={() => setShowGroupDropdown(true)}
-                placeholder="Search assignment groups from ServiceNow..."
-                className="w-full pl-9 pr-9 py-2 rounded-lg border border-surface-200 text-sm text-surface-700 placeholder-surface-400 focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
-              />
-              {groupSearching && <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-500 animate-spin pointer-events-none" />}
-              {assignmentGroup && !groupSearching && (
-                <button onClick={() => { setAssignmentGroup(''); setGroupSearchText(''); }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-400 hover:text-rose-500 transition-colors">
-                  <Trash2 size={13} />
-                </button>
-              )}
-              </div>
-              {groupSearchText.trim() && (
-                <div className="flex md:justify-start">
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-white bg-gradient-to-r from-emerald-500 to-teal-400 px-3 py-1 rounded-full shadow-sm whitespace-nowrap">
-                    {groupSearching
-                      ? 'Searching…'
-                      : `Found ${groupSearchResults.length} ${groupSearchResults.length === 1 ? 'Entry' : 'Entries'}`}
-                    {!groupSearching && (
-                      <span className="opacity-80">— “{groupSearchText.trim()}”</span>
-                    )}
-                  </span>
-                </div>
-              )}
-            </div>
-            {/* Fixed-position dropdown results — won't be clipped by parent overflow */}
-            {showGroupDropdown && groupSearchResults.length > 0 && groupInputRef.current && (
-              <div 
-                className="fixed z-50 bg-white rounded-lg border border-surface-200 shadow-lg max-h-[200px] overflow-y-auto"
-                style={{
-                  width: groupInputRef.current.offsetWidth,
-                  left: groupInputRef.current.getBoundingClientRect().left,
-                  top: groupInputRef.current.getBoundingClientRect().bottom + 4,
-                }}
-              >
-                {groupSearchResults.map(g => (
-                  <button key={g.sysId} onClick={() => {
-                    setAssignmentGroup(g.name);
-                    setGroupSearchText('');
-                    setShowGroupDropdown(false);
-                  }}
-                    className="w-full text-left px-3 py-2.5 hover:bg-brand-50 transition-colors border-b border-surface-50 last:border-b-0 text-sm">
-                    <span className="text-xs font-semibold text-surface-700">{g.name}</span>
-                    {g.description && (
-                      <span className="block text-[10px] text-surface-400 mt-0.5 truncate">{g.description}</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-            {showGroupDropdown && groupSearchText && !groupSearching && groupSearchResults.length === 0 && groupInputRef.current && (
-              <div 
-                className="fixed z-50 bg-white rounded-lg border border-surface-200 shadow-lg px-3 py-3 text-xs text-surface-400 text-center"
-                style={{
-                  width: groupInputRef.current.offsetWidth,
-                  left: groupInputRef.current.getBoundingClientRect().left,
-                  top: groupInputRef.current.getBoundingClientRect().bottom + 4,
-                }}
-              >
-                No groups found matching &quot;{groupSearchText}&quot;
-              </div>
-            )}
-            {assignmentGroup && (
-              <p className="text-[10px] text-emerald-600 mt-1.5 flex items-center gap-1">
-                <CheckCircle2 size={10} /> Selected: <span className="font-semibold">{assignmentGroup}</span>
-              </p>
-            )}
-          </div>
-          <p className="text-[10px] text-surface-400 mt-1.5">
-            Search for assignment groups from your ServiceNow instance. Leave empty to fetch incidents from all groups.
-          </p>
-        </div>
-      </div>
-    </div>
-
-    <ConfirmationModal
-      isOpen={showGroupConfirm}
-      onClose={() => setShowGroupConfirm(false)}
-      title="Save Assignment Group"
-      actionDescription="update the assignment group filter"
-      actionTarget="ServiceNow Incident configuration"
-      actionDetails={[
-        { label: 'Assignment Group', value: assignmentGroup || 'All Groups' },
-        { label: 'Target Column', value: 'sn_incident_config.assignment_group' },
-      ]}
-      confirmLabel="Save Group"
-      variant="info"
-      action={saveAssignmentGroup}
-      onSuccess={() => setShowGroupConfirm(false)}
-      buildSummary={(result) => [
-        { label: 'Assignment Group', value: result?.assignmentGroup || assignmentGroup || 'All Groups' },
-        { label: 'Stored In', value: result?.targetTable || 'sn_incident_config.assignment_group' },
-      ]}
-    />
     </>
   );
 }

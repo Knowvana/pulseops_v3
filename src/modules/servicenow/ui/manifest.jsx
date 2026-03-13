@@ -30,7 +30,7 @@
 // ============================================================================
 
 import React from 'react';
-import { Headset, LayoutDashboard, BarChart3, Sliders, Wifi, Clock, RefreshCw, ListFilter, ClipboardList, CalendarClock, Settings, Database, Columns, ShieldCheck, FileText, ListChecks, TrendingUp } from 'lucide-react';
+import { Headset, LayoutDashboard, BarChart3, Sliders, Wifi, Clock, RefreshCw, ListFilter, ClipboardList, CalendarClock, Settings, Database, Columns, ShieldCheck, FileText, ListChecks, TrendingUp, Users } from 'lucide-react';
 import moduleConstants from './config/constants.json';
 import uiText from './config/uiText.json';
 
@@ -45,7 +45,9 @@ import RitmReportsView          from './views/RitmReportsView';
 
 // ── Config Tab Components (lazy-mounted via render functions) ─────────────────
 import ServiceNowConnectionTab         from './components/settings/ServiceNowConnectionTab';
+import ServiceNowAssignmentGroupTab    from './components/settings/ServiceNowAssignmentGroupTab';
 import ServiceNowIncidentConfigTab     from './components/settings/ServiceNowIncidentConfigTab';
+import ServiceNowSLAColumnMappingTab   from './components/settings/ServiceNowSLAColumnMappingTab';
 import ServiceNowSlaTab                from './components/settings/ServiceNowSlaTab';
 import ServiceNowSyncTab               from './components/settings/ServiceNowSyncTab';
 import ServiceNowBusinessHoursTab   from './components/settings/ServiceNowBusinessHoursTab';
@@ -109,21 +111,44 @@ const servicenowManifest = {
       content: () => <ServiceNowConnectionTab />,
     },
     {
-      id:      cfgText.tabs.incidentConfig.id,
-      label:   cfgText.tabs.incidentConfig.label,
-      icon:    Columns,
-      content: () => <ServiceNowIncidentConfigTab />,
+      id:      'assignmentGroup',
+      label:   'Assignment Group',
+      icon:    Users,
+      content: () => <ServiceNowAssignmentGroupTab />,
     },
     {
-      id:      cfgText.tabs.sla.id,
-      label:   cfgText.tabs.sla.label,
-      icon:    Clock,
-      content: () => <ServiceNowSlaTab />,
+      type: 'section',
+      id: 'incident_configuration_section',
+      label: 'Incident Configuration',
+      icon: Columns,
+      defaultExpanded: true,
+      separator: true,
+      children: [
+        {
+          id:      cfgText.tabs.incidentConfig.id,
+          label:   cfgText.tabs.incidentConfig.label,
+          icon:    Columns,
+          content: () => <ServiceNowIncidentConfigTab />,
+        },
+        {
+          id:      'slaColumnMapping',
+          label:   'SLA Column Mapping',
+          icon:    Clock,
+          content: () => <ServiceNowSLAColumnMappingTab />,
+        },
+        {
+          id:      cfgText.tabs.sla.id,
+          label:   cfgText.tabs.sla.label,
+          icon:    Clock,
+          content: () => <ServiceNowSlaTab />,
+        },
+      ],
     },
     {
       id:      cfgText.tabs.sync.id,
       label:   cfgText.tabs.sync.label,
       icon:    RefreshCw,
+      separator: true,
       content: () => <ServiceNowSyncTab />,
     },
     {

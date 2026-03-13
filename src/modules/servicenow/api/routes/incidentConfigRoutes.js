@@ -231,6 +231,46 @@ router.get('/config/sla', async (req, res) => {
   }
 });
 
+// ── GET /config/sla/priorities — Fetch ServiceNow incident priority choices ──
+router.get('/config/sla/priorities', async (req, res) => {
+  try {
+    const conn = loadConnectionConfig();
+    if (!conn.isConfigured) {
+      return res.status(400).json({ success: false, error: { message: 'ServiceNow connection is not configured.' } });
+    }
+
+    const query = [
+      'sysparm_query=name=incident^element=priority^language=en^inactive=false^ORDERBYsequence',
+      'sysparm_fields=value,label,sequence,dependent_value',
+      'sysparm_limit=50',
+    ].join('&');
+
+    const snowResp = await snowRequest(conn, 'table/sys_choice', query);
+    if (snowResp.statusCode < 200 || snowResp.statusCode >= 300) {
+      const message = snowResp.data?.error?.message || `ServiceNow responded with HTTP ${snowResp.statusCode}`;
+      return res.status(snowResp.statusCode || 502).json({ success: false, error: { message } });
+    }
+
+    const choices = (snowResp.data?.result || [])
+      .map(choice => ({
+        value: snowVal(choice.value)?.trim(),
+        label: snowVal(choice.label) || snowVal(choice.value) || 'Priority',
+        sequence: Number(snowVal(choice.sequence)) || null,
+        dependentValue: snowVal(choice.dependent_value) || null,
+      }))
+      .filter(choice => !!choice.value)
+      .sort((a, b) => {
+        const seqDiff = (a.sequence || 0) - (b.sequence || 0);
+        if (seqDiff !== 0) return seqDiff;
+        return a.value.localeCompare(b.value, undefined, { numeric: true });
+      });
+
+    return res.json({ success: true, data: { choices, total: choices.length } });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { message: `Failed to fetch ServiceNow priorities: ${err.message}` } });
+  }
+});
+
 // ── POST /config/sla — Create a new SLA row ─────────────────────────────
 router.post('/config/sla', async (req, res) => {
   try {

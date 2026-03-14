@@ -28,7 +28,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Clock, Save, Loader2, AlertCircle, CheckCircle2, X, CalendarClock, Info } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
-import { ToggleSwitch } from '@components';
+import { ToggleSwitch, PageSpinner } from '@components';
 import uiText from '../../config/uiText.json';
 
 const log = createLogger('ServiceNowBusinessHoursTab.jsx');
@@ -85,7 +85,6 @@ export default function ServiceNowBusinessHoursTab() {
   const [saving, setSaving]           = useState(false);
   const [resultBanner, setResultBanner] = useState(null);
   const [modalPhase, setModalPhase]   = useState(null);
-  const [summaryData, setSummaryData] = useState(null);
   const initRan = useRef(false);
 
   // ── Load from DB ──────────────────────────────────────────────────────
@@ -174,36 +173,19 @@ export default function ServiceNowBusinessHoursTab() {
       const res = await ApiClient.put(snApi.businessHours, { hours });
       if (res?.success) {
         const businessDays = hours.filter(d => d.is_business_day);
-        setSummaryData({
-          success: true,
-          businessDayCount: businessDays.length,
-          days: businessDays.map(d => `${d.day_name} (${d.start_time} – ${d.end_time})`),
-        });
-        setModalPhase('summary');
+        setResultBanner({ success: true, message: `Business hours updated successfully — ${businessDays.length} business day(s) configured.` });
         log.info('handleSave', 'Business hours saved to DB', { businessDays: businessDays.length });
         await loadHours();
       } else {
-        setSummaryData({ success: false, error: res?.error?.message || 'Save failed' });
-        setModalPhase('summary');
+        setResultBanner({ success: false, message: res?.error?.message || 'Failed to save business hours.' });
       }
     } catch (err) {
-      setSummaryData({ success: false, error: err.message });
-      setModalPhase('summary');
+      setResultBanner({ success: false, message: err.message });
       log.error('handleSave', 'Save failed', { error: err.message });
     } finally {
       setSaving(false);
     }
   }, [hours, loadHours]);
-
-  const handleSummaryOk = useCallback(() => {
-    if (summaryData?.success) {
-      setResultBanner({ success: true, message: 'Business hours updated successfully.' });
-    } else {
-      setResultBanner({ success: false, message: summaryData?.error || 'Failed to save business hours.' });
-    }
-    setModalPhase(null);
-    setSummaryData(null);
-  }, [summaryData]);
 
   const businessDayCount = hours.filter(d => d.is_business_day).length;
 
@@ -250,12 +232,11 @@ export default function ServiceNowBusinessHoursTab() {
         </div>
       )}
 
+      {/* Modal loading spinner */}
+      {loading && <PageSpinner modal message="Loading business hours..." />}
+
       {/* Table */}
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 size={22} className="text-brand-400 animate-spin" />
-        </div>
-      ) : (
+      {!loading && (
         <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
           <table className="w-full text-sm">
             <thead>
@@ -348,38 +329,6 @@ export default function ServiceNowBusinessHoursTab() {
         </div>
       )}
 
-      {/* ── Summary Modal ──────────────────────────────────────────────── */}
-      {modalPhase === 'summary' && summaryData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-surface-200">
-            <div className="flex items-center gap-3 mb-4">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${summaryData.success ? 'bg-emerald-50' : 'bg-rose-50'}`}>
-                {summaryData.success ? <CheckCircle2 size={20} className="text-emerald-600" /> : <AlertCircle size={20} className="text-rose-600" />}
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-surface-800">
-                  {summaryData.success ? 'Business Hours Updated' : 'Update Failed'}
-                </h3>
-              </div>
-            </div>
-            {summaryData.success ? (
-              <div className="bg-emerald-50 rounded-lg p-3 mb-5 text-xs text-emerald-700 space-y-1 border border-emerald-100">
-                <p className="font-semibold">{summaryData.businessDayCount} business day(s) configured:</p>
-                {summaryData.days.map((d, i) => <p key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />{d}</p>)}
-              </div>
-            ) : (
-              <div className="bg-rose-50 rounded-lg p-3 mb-5 text-xs text-rose-700 border border-rose-100">
-                {summaryData.error}
-              </div>
-            )}
-            <div className="flex justify-end">
-              <button onClick={handleSummaryOk} className="px-5 py-2 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 transition-colors">
-                OK
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

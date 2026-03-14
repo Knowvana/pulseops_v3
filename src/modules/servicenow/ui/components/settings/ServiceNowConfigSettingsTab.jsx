@@ -17,7 +17,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Settings, Save, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
-import { ConfirmDialog, ToggleSwitch } from '@components';
+import { ConfirmDialog, ToggleSwitch, PageSpinner } from '@components';
 import uiText from '../../config/uiText.json';
 
 const log = createLogger('ServiceNowConfigSettingsTab.jsx');
@@ -176,11 +176,9 @@ export default function ServiceNowConfigSettingsTab() {
         </div>
       )}
 
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 size={22} className="text-brand-400 animate-spin" />
-        </div>
-      ) : (
+      {loading && <PageSpinner modal message="Loading settings..." />}
+
+      {!loading && (
         <>
           {/* Report Columns */}
           <div className="bg-white rounded-2xl border border-surface-200 shadow-sm p-5 space-y-4">

@@ -672,6 +672,20 @@ router.get('/reports/sla/incidents', async (req, res) => {
         totalIncidents: incidents.length, summaryByPriority,
         incidents: incidentSlaData,
         incidentConfig: { createdColumn: incidentConfig.createdColumn, closedColumn: incidentConfig.closedColumn, priorityColumn: incidentConfig.priorityColumn },
+        // Add business hours and SLA configuration for reference
+        businessHours: businessHours.map(day => ({
+          dayOfWeek: day.day_of_week,
+          isBusinessDay: day.is_business_day,
+          startTime: day.start_time,
+          endTime: day.end_time
+        })),
+        slaThresholds: Object.entries(slaThresholds).map(([key, val]) => ({
+          priority: key,
+          priorityValue: val.priorityValue,
+          responseMinutes: val.responseMinutes,
+          resolutionMinutes: val.resolutionMinutes,
+          enabled: true
+        }))
       },
     });
   } catch (err) {

@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { createLogger, ConfirmationModal } from '@shared';
 import ApiClient from '@shared/services/apiClient';
+import { PageSpinner } from '@components';
 // Module-local API URLs — no dependency on platform urls.json
 const snApi = {
   config: '/api/servicenow/config',
@@ -130,18 +131,11 @@ export default function ServiceNowSyncTab() {
   }, [sync, fullConfig, loadConfig]);
 
   // ── Render ──────────────────────────────────────────────────────────────
-  if (loading) {
-    return (
-      <div className="p-8 flex items-center justify-center">
-        <Loader2 size={20} className="text-brand-400 animate-spin" />
-      </div>
-    );
-  }
-
   const lastSync = fullConfig?.sync?.lastSync;
 
   return (
     <div className="p-5 space-y-5 max-w-xl">
+      {loading && <PageSpinner modal message="Loading sync settings..." />}
       {/* Info banner */}
       <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-xs">
         <Info size={13} className="flex-shrink-0 mt-0.5" />

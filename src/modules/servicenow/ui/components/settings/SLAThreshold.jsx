@@ -24,8 +24,8 @@ import {
   ShieldCheck,
   Columns,
 } from 'lucide-react';
-import { createLogger, ConfirmationModal, useConfigLayout } from '@shared';
-import { ToggleSwitch, SetupRequiredOverlay } from '@components';
+import { createLogger, useConfigLayout } from '@shared';
+import { ToggleSwitch, SetupRequiredOverlay, PageSpinner } from '@components';
 import ApiClient from '@shared/services/apiClient';
 import uiText from '../../config/uiText.json';
 
@@ -56,10 +56,13 @@ export default function SLAThresholds() {
   const [priorityFetch, setPriorityFetch] = useState({ loading: false, error: null, lastFetched: null });
   const [modalState, setModalState] = useState({ open: false, priority: null, existing: null });
   const [formState, setFormState] = useState(defaultForm);
+  const [modalSaving, setModalSaving] = useState(false);
+  const [modalResult, setModalResult] = useState(null); // { success, message }
 
   // Column mapping check
   const [columnMappingOk, setColumnMappingOk] = useState(null); // null = checking, true/false
   const [columnMappingLoading, setColumnMappingLoading] = useState(true);
+  const [priorityColumnName, setPriorityColumnName] = useState(null);
 
   const initRan = useRef(false);
 
@@ -74,6 +77,7 @@ export default function SLAThresholds() {
         const d = res.data;
         const hasMappings = Boolean(d.createdColumn && d.closedColumn && d.priorityColumn);
         setColumnMappingOk(hasMappings);
+        setPriorityColumnName(d.priorityColumn || null);
         log.info('checkColumnMapping', 'Column mapping check', {
           createdColumn: d.createdColumn,
           closedColumn: d.closedColumn,
@@ -180,25 +184,29 @@ export default function SLAThresholds() {
       sortOrder: existing?.sort_order ?? priorityRow.sequence ?? 99,
       enabled: existing?.enabled ?? true,
     });
+    setModalSaving(false);
+    setModalResult(null);
     setModalState({ open: true, priority: priorityRow, existing });
   }, [rows]);
 
   const closeModal = useCallback(() => {
     setModalState({ open: false, priority: null, existing: null });
+    setModalResult(null);
   }, []);
 
-  const validateForm = useCallback(() => {
+  const handleSavePriority = useCallback(async () => {
+    if (!modalState.priority) return;
     if (Number(formState.responseMinutes) <= 0) {
-      throw new Error('Response minutes must be greater than 0.');
+      setModalResult({ success: false, message: 'Response minutes must be greater than 0.' });
+      return;
     }
     if (Number(formState.resolutionMinutes) <= 0) {
-      throw new Error('Resolution minutes must be greater than 0.');
+      setModalResult({ success: false, message: 'Resolution minutes must be greater than 0.' });
+      return;
     }
-  }, [formState]);
 
-  const handleSavePriority = useCallback(async () => {
-    if (!modalState.priority) throw new Error('No priority selected.');
-    validateForm();
+    setModalSaving(true);
+    setModalResult(null);
 
     const payload = {
       priority: modalState.priority.label || modalState.priority.value,
@@ -209,132 +217,165 @@ export default function SLAThresholds() {
       sortOrder: Number(formState.sortOrder) || modalState.priority.sequence || 99,
     };
 
-    log.debug('handleSavePriority', 'Persisting SLA target', {
-      priorityValue: payload.priorityValue,
-      hasExisting: Boolean(modalState.existing),
-    });
+    try {
+      const request = modalState.existing
+        ? ApiClient.put(`${snApi.slaConfig}/${modalState.existing.id}`, payload)
+        : ApiClient.post(snApi.slaConfig, payload);
 
-    const request = modalState.existing
-      ? ApiClient.put(`${snApi.slaConfig}/${modalState.existing.id}`, payload)
-      : ApiClient.post(snApi.slaConfig, payload);
-
-    const res = await request;
-    if (!res?.success) {
-      throw new Error(res?.error?.message || 'Failed to save SLA target.');
+      const res = await request;
+      if (res?.success) {
+        setModalResult({ success: true, message: `SLA ${modalState.existing ? 'updated' : 'created'} for ${payload.priority} (${payload.priorityValue}).` });
+        await loadSla();
+      } else {
+        setModalResult({ success: false, message: res?.error?.message || 'Failed to save SLA target.' });
+      }
+    } catch (err) {
+      setModalResult({ success: false, message: err.message });
+    } finally {
+      setModalSaving(false);
     }
-
-    setStatusBanner({ success: true, message: `SLA updated for priority ${payload.priorityValue}.` });
-    await loadSla();
-    return payload;
-  }, [formState, loadSla, modalState, validateForm]);
+  }, [formState, loadSla, modalState]);
 
   const handleToggleEnabled = useCallback(async (row) => {
     if (!row.id) {
       setStatusBanner({ success: false, message: 'Configure the SLA before changing its enabled state.' });
       return;
     }
-    log.debug('handleToggleEnabled', 'Toggling enabled state', { id: row.id, next: !row.enabled });
+    const newEnabled = !row.enabled;
+    log.debug('handleToggleEnabled', 'Toggling enabled state', { id: row.id, next: newEnabled });
+    
+    // Optimistic update: update local state immediately
+    setRows(prev => prev.map(r => 
+      r.id === row.id ? { ...r, enabled: newEnabled } : r
+    ));
+    
     try {
-      const res = await ApiClient.put(`${snApi.slaConfig}/${row.id}`, { enabled: !row.enabled });
+      const res = await ApiClient.put(`${snApi.slaConfig}/${row.id}`, { enabled: newEnabled });
       if (!res?.success) {
+        // Revert on error
+        setRows(prev => prev.map(r => 
+          r.id === row.id ? { ...r, enabled: row.enabled } : r
+        ));
         throw new Error(res?.error?.message || 'Failed to update enabled flag.');
       }
-      await loadSla();
+      // Show success message
+      setStatusBanner({ 
+        success: true, 
+        message: `SLA ${newEnabled ? 'enabled' : 'disabled'} for priority ${row.priority_value}` 
+      });
     } catch (err) {
       log.error('handleToggleEnabled', 'Failed to toggle enabled state', { error: err.message });
       setStatusBanner({ success: false, message: err.message });
     }
-  }, [loadSla]);
-
-  const actionDetails = useMemo(() => {
-    if (!modalState.priority) return [];
-    return [
-      { label: 'Priority', value: `${modalState.priority.label} (${modalState.priority.value})` },
-      {
-        label: 'Response target (minutes)',
-        value: (
-          <input
-            type="number"
-            min={1}
-            value={formState.responseMinutes}
-            onChange={e => setFormState(prev => ({ ...prev, responseMinutes: e.target.value }))}
-            className="w-24 px-2.5 py-1.5 rounded border border-surface-200 text-xs text-surface-700 focus:outline-none focus:ring-2 focus:ring-brand-200"
-          />
-        ),
-      },
-      {
-        label: 'Resolution target (minutes)',
-        value: (
-          <input
-            type="number"
-            min={1}
-            value={formState.resolutionMinutes}
-            onChange={e => setFormState(prev => ({ ...prev, resolutionMinutes: e.target.value }))}
-            className="w-24 px-2.5 py-1.5 rounded border border-surface-200 text-xs text-surface-700 focus:outline-none focus:ring-2 focus:ring-brand-200"
-          />
-        ),
-      },
-      {
-        label: 'Sort order',
-        value: (
-          <input
-            type="number"
-            min={1}
-            value={formState.sortOrder}
-            onChange={e => setFormState(prev => ({ ...prev, sortOrder: e.target.value }))}
-            className="w-24 px-2.5 py-1.5 rounded border border-surface-200 text-xs text-surface-700 focus:outline-none focus:ring-2 focus:ring-brand-200"
-          />
-        ),
-      },
-      {
-        label: 'Enabled',
-        value: (
-          <div className="flex items-center gap-2">
-            <ToggleSwitch
-              size="sm"
-              enabled={formState.enabled}
-              onToggle={() => setFormState(prev => ({ ...prev, enabled: !prev.enabled }))}
-            />
-            <span className="text-xs text-surface-600">{formState.enabled ? 'Enabled' : 'Disabled'}</span>
-          </div>
-        ),
-      },
-    ];
-  }, [formState, modalState.priority]);
-
-  const buildSummary = useCallback((data) => ([
-    { label: 'Priority', value: `${data.priority} (${data.priorityValue})` },
-    { label: 'Response (m)', value: data.responseMinutes },
-    { label: 'Resolution (m)', value: data.resolutionMinutes },
-    { label: 'Enabled', value: data.enabled ? 'Yes' : 'No' },
-  ]), []);
+  }, []);
 
   const renderModal = () => {
-    if (!modalState.open) return null;
+    if (!modalState.open || !modalState.priority) return null;
+    const p = modalState.priority;
+    const isUpdate = Boolean(modalState.existing);
     return (
-      <ConfirmationModal
-        isOpen
-        onClose={closeModal}
-        title={`Configure SLA — ${modalState.priority?.label || modalState.priority?.value}`}
-        actionDescription={modalState.existing ? 'update the SLA target' : 'create a new SLA target'}
-        actionTarget="ServiceNow priority mapping"
-        actionDetails={actionDetails}
-        confirmLabel={modalState.existing ? 'Update' : 'Create'}
-        variant="info"
-        action={handleSavePriority}
-        onSuccess={closeModal}
-        buildSummary={buildSummary}
-      />
-    );
-  };
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-surface-200">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-surface-200">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-brand-50 flex items-center justify-center">
+                <Info size={20} className="text-brand-600" />
+              </div>
+              <h3 className="text-lg font-bold text-surface-800">Configure SLA — {p.label || p.value}</h3>
+            </div>
+            <button onClick={closeModal} className="p-1 rounded-lg hover:bg-surface-100 transition-colors">
+              <span className="text-surface-400 text-lg">×</span>
+            </button>
+          </div>
 
-  if (loading || columnMappingLoading) {
-    return (
-      <div className="p-8 flex items-center justify-center">
-        <Loader2 size={22} className="text-brand-400 animate-spin" />
+          {/* Body */}
+          <div className="px-6 py-5 space-y-4">
+            <p className="text-sm text-surface-600">
+              This will <strong>{isUpdate ? 'update' : 'create'} the SLA target</strong> in ServiceNow priority mapping
+            </p>
+
+            {/* Form fields — aligned grid */}
+            <div className="bg-surface-50 rounded-lg border border-surface-200 p-4">
+              <table className="w-full text-sm">
+                <tbody>
+                  <tr>
+                    <td className="py-1.5 pr-4 text-xs font-medium text-surface-500 whitespace-nowrap align-middle">Priority:</td>
+                    <td className="py-1.5 text-xs font-semibold text-surface-800">{p.label} ({p.value})</td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-4 text-xs font-medium text-surface-500 whitespace-nowrap align-middle">Response target (min):</td>
+                    <td className="py-1.5">
+                      <input type="number" min={1} value={formState.responseMinutes}
+                        onChange={e => setFormState(prev => ({ ...prev, responseMinutes: e.target.value }))}
+                        disabled={modalSaving}
+                        className="w-28 px-2.5 py-1.5 rounded-lg border border-surface-200 text-xs text-surface-700 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-50" />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-4 text-xs font-medium text-surface-500 whitespace-nowrap align-middle">Resolution target (min):</td>
+                    <td className="py-1.5">
+                      <input type="number" min={1} value={formState.resolutionMinutes}
+                        onChange={e => setFormState(prev => ({ ...prev, resolutionMinutes: e.target.value }))}
+                        disabled={modalSaving}
+                        className="w-28 px-2.5 py-1.5 rounded-lg border border-surface-200 text-xs text-surface-700 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-50" />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-4 text-xs font-medium text-surface-500 whitespace-nowrap align-middle">Sort order:</td>
+                    <td className="py-1.5">
+                      <input type="number" min={1} value={formState.sortOrder}
+                        onChange={e => setFormState(prev => ({ ...prev, sortOrder: e.target.value }))}
+                        disabled={modalSaving}
+                        className="w-28 px-2.5 py-1.5 rounded-lg border border-surface-200 text-xs text-surface-700 focus:outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-50" />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-4 text-xs font-medium text-surface-500 whitespace-nowrap align-middle">Enabled:</td>
+                    <td className="py-1.5">
+                      <div className="flex items-center gap-2">
+                        <ToggleSwitch size="sm" enabled={formState.enabled}
+                          onToggle={() => setFormState(prev => ({ ...prev, enabled: !prev.enabled }))}
+                          disabled={modalSaving} />
+                        <span className="text-xs text-surface-600">{formState.enabled ? 'Enabled' : 'Disabled'}</span>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Result label (shown inline, no second modal) */}
+            {modalResult && (
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium ${
+                modalResult.success
+                  ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                  : 'bg-rose-50 border border-rose-200 text-rose-700'
+              }`}>
+                {modalResult.success ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+                {modalResult.message}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="flex justify-end gap-3 px-6 py-4 border-t border-surface-200">
+            <button onClick={closeModal}
+              className="px-4 py-2 rounded-lg text-xs font-semibold text-surface-600 bg-surface-100 hover:bg-surface-200 transition-colors">
+              {modalResult?.success ? 'Close' : 'Cancel'}
+            </button>
+            {!modalResult?.success && (
+              <button onClick={handleSavePriority} disabled={modalSaving}
+                className="flex items-center gap-1.5 px-5 py-2 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 transition-colors">
+                {modalSaving && <Loader2 size={12} className="animate-spin" />}
+                {modalSaving ? 'Saving...' : (isUpdate ? 'Update' : 'Create')}
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     );
-  }
+  };
 
   return (
     <div className="relative space-y-5 animate-fade-in">
@@ -358,7 +399,40 @@ export default function SLAThresholds() {
           </div>
           <div>
             <h2 className="text-base font-bold text-surface-800">Incident SLA Thresholds</h2>
-            <p className="text-xs text-surface-500">Priorities are auto-fetched from ServiceNow. Configure response/resolution targets per priority.</p>
+            <p className="text-xs text-surface-500">Priorities are fetched from ServiceNow.Configure response/resolution targets per priority.</p>
+            {/* Priority fetch status - inline after header */}
+            <div className={`flex items-center gap-2 mt-2 text-xs font-medium ${
+              priorityFetch.loading 
+                ? 'bg-amber-50 text-amber-700 border border-amber-200 px-3 py-2 rounded-lg'
+                : priorityFetch.error
+                ? 'text-orange-600'
+                : priorityFetch.lastFetched
+                ? 'text-emerald-600'
+                : 'text-surface-500'
+            }`}>
+              <ShieldCheck size={12} className={
+                priorityFetch.loading 
+                  ? 'text-amber-600'
+                  : priorityFetch.error
+                  ? 'text-orange-600'
+                  : priorityFetch.lastFetched
+                  ? 'text-emerald-600'
+                  : 'text-surface-500'
+              } />
+              {priorityFetch.loading && (
+                <>
+                  <Loader2 size={10} className="animate-spin" />
+                  <span>Contacting ServiceNow…</span>
+                </>
+              )}
+              {!priorityFetch.loading && priorityFetch.error && <span>{priorityFetch.error}</span>}
+              {!priorityFetch.loading && !priorityFetch.error && priorityFetch.lastFetched && (
+                <span>Last fetched: {new Date(priorityFetch.lastFetched).toLocaleString()} — {priorities.length} priorities loaded</span>
+              )}
+              {!priorityFetch.loading && !priorityFetch.error && !priorityFetch.lastFetched && (
+                <span>Priorities not loaded yet. Click "Fetch Priorities" or wait for auto-fetch.</span>
+              )}
+            </div>
           </div>
         </div>
         <button
@@ -371,35 +445,21 @@ export default function SLAThresholds() {
         </button>
       </div>
 
-      {/* Info banner */}
-      <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-xs">
-        <Info size={13} className="flex-shrink-0 mt-0.5" />
-        <span>Priorities are sourced directly from ServiceNow (sys_choice) and fetched automatically. SLA targets can only be configured for fetched priorities.</span>
-      </div>
 
-      {/* Priority fetch status */}
-      <div className="flex items-center gap-3 rounded-xl border border-surface-200 bg-white px-4 py-3 text-xs text-surface-600">
-        <ShieldCheck size={14} className="text-brand-500" />
-        {priorityFetch.loading && <span>Contacting ServiceNow…</span>}
-        {!priorityFetch.loading && priorityFetch.error && <span className="text-rose-600">{priorityFetch.error}</span>}
-        {!priorityFetch.loading && !priorityFetch.error && priorityFetch.lastFetched && (
-          <span>Last fetched: {new Date(priorityFetch.lastFetched).toLocaleString()} — {priorities.length} priorities loaded</span>
-        )}
-        {!priorityFetch.loading && !priorityFetch.error && !priorityFetch.lastFetched && (
-          <span>Priorities not loaded yet. Click "Fetch Priorities" or wait for auto-fetch.</span>
-        )}
-      </div>
 
-      {/* Status banner */}
-      {statusBanner && (
-        <div className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs border ${
-          statusBanner.success
-            ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-            : 'bg-rose-50 border-rose-200 text-rose-700'
-        }`}>
-          {statusBanner.success ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
-          <span>{statusBanner.message}</span>
-          <button onClick={resetStatusBanner} className="ml-auto text-surface-400 hover:text-surface-600">×</button>
+      {/* Priority column mapping info */}
+      {priorityColumnName && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-violet-200 bg-violet-50 text-xs text-violet-700">
+          <Columns size={14} className="text-violet-500 flex-shrink-0" />
+          <span>
+            Priority column mapped to: <strong className="font-bold">{priorityColumnName}</strong>
+          </span>
+          <button
+            onClick={() => navigateToTab('slaColumnMapping')}
+            className="ml-auto text-[11px] font-semibold text-violet-600 hover:text-violet-800 underline underline-offset-2 transition-colors"
+          >
+            Update Column Mapping
+          </button>
         </div>
       )}
 
@@ -456,9 +516,9 @@ export default function SLAThresholds() {
                   <td className="px-4 py-2.5 text-center">
                     <button
                       onClick={() => openConfigureModal(row)}
-                      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-brand-50 text-brand-700 border border-brand-100 hover:bg-brand-100 transition-colors"
+                      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-brand-600 text-white hover:bg-brand-700 transition-colors disabled:opacity-60"
                     >
-                      {row.configured ? 'Update' : 'Configure'}
+                      {row.configured ? 'Edit SLA' : 'Configure'}
                     </button>
                   </td>
                 </tr>
@@ -476,7 +536,30 @@ export default function SLAThresholds() {
         </div>
       )}
 
+      {/* Status banner - moved to end */}
+      {statusBanner && (
+        <div className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs border ${
+          statusBanner.success
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+            : 'bg-rose-50 border-rose-200 text-rose-700'
+        }`}>
+          {statusBanner.success ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+          <span>{statusBanner.message}</span>
+          <button onClick={resetStatusBanner} className="ml-auto text-surface-400 hover:text-surface-600">×</button>
+        </div>
+      )}
+
       {renderModal()}
+      
+      {/* Local modal overlay for fetching priorities */}
+      {priorityFetch.loading && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center backdrop-blur-sm rounded-2xl">
+          <div className="flex flex-col items-center gap-3 bg-white px-6 py-4 rounded-xl shadow-xl border-2 border-brand-200 ring-4 ring-brand-100">
+            <Loader2 size={28} className="animate-spin text-brand-600" />
+            <span className="text-sm font-medium text-surface-700">Fetching priorities from ServiceNow...</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

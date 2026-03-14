@@ -18,6 +18,7 @@ export default function PageSpinner({
   message,
   size = 'md',
   className = '',
+  modal = false,
 }) {
   const sizeStyles = {
     sm: { wrapper: 'py-4', icon: 20, text: 'text-xs' },
@@ -26,6 +27,17 @@ export default function PageSpinner({
   };
 
   const s = sizeStyles[size] || sizeStyles.md;
+
+  if (modal) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm animate-fade-in">
+        <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-4 border border-surface-200">
+          <Loader size={32} className="animate-spin text-brand-500" />
+          {message && <p className="text-sm text-surface-500 font-medium">{message}</p>}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`flex flex-col items-center justify-center gap-3 ${s.wrapper} ${className}`}>

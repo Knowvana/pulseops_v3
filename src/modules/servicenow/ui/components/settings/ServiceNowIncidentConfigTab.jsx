@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
+import { PageSpinner } from '@components';
 
 const log = createLogger('ServiceNowIncidentConfigTab.jsx');
 
@@ -214,16 +215,9 @@ export default function ServiceNowIncidentConfigTab() {
     );
   };
 
-    if (loading) {
-    return (
-      <div className="p-8 flex items-center justify-center">
-        <Loader2 size={22} className="text-brand-400 animate-spin" />
-      </div>
-    );
-  }
-
   return (
     <>
+      {loading && <PageSpinner modal message="Loading incident configuration..." />}
       <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div>

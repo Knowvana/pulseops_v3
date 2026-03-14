@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
-import { ConfirmDialog } from '@components';
+import { ConfirmDialog, PageSpinner } from '@components';
 import uiText from '../../config/uiText.json';
 
 const log = createLogger('ServiceNowDataManagementTab.jsx');
@@ -171,11 +171,9 @@ export default function ServiceNowDataManagementTab() {
         </div>
       )}
 
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 size={22} className="text-brand-400 animate-spin" />
-        </div>
-      ) : (
+      {loading && <PageSpinner modal message="Loading data management..." />}
+
+      {!loading && (
         <>
           {/* Schema Status */}
           <div className="bg-white rounded-2xl border border-surface-200 shadow-sm p-5 space-y-4">

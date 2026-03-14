@@ -28,6 +28,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Clock, RefreshCw, Loader2, AlertCircle, CheckCircle2, Info, Eye, Star } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
+import { PageSpinner } from '@components';
 import uiText from '../../config/uiText.json';
 
 const log = createLogger('ServiceNowSLAColumnMappingTab.jsx');
@@ -106,24 +107,29 @@ function ColumnSelect({ value, onChange, columns, placeholder = '— Not Configu
   );
 }
 
-// ── Sample Values Preview ──────────────────────────────────────────────────
-function SampleValuesPreview({ columnName, sampleData }) {
+// Date-like heuristic: value looks like a datetime string
+const looksLikeDate = (val) => /^\d{4}-\d{2}-\d{2}/.test(String(val || ''));
+
+// ── Sample Values Preview ──────────────────────────────────────────────────────
+// maxValues: limit how many values to display (default 5)
+// inline: if true, renders without outer margin (for embedding in flex row)
+function SampleValuesPreview({ columnName, sampleData, maxValues = 5, inline = false }) {
   if (!columnName || columnName === NOT_CONFIGURED) return null;
 
   const { loading, values, error } = sampleData || {};
 
   if (loading) {
     return (
-      <div className="mt-2 flex items-center gap-2 text-xs text-surface-400">
+      <div className={`${inline ? '' : 'mt-2'} flex items-center gap-2 text-xs text-surface-400`}>
         <Loader2 size={11} className="animate-spin" />
-        <span>Loading sample values…</span>
+        <span>Loading…</span>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="mt-2 flex items-center gap-1.5 text-xs text-rose-500">
+      <div className={`${inline ? '' : 'mt-2'} flex items-center gap-1.5 text-xs text-rose-500`}>
         <AlertCircle size={11} />
         <span>{error}</span>
       </div>
@@ -132,19 +138,27 @@ function SampleValuesPreview({ columnName, sampleData }) {
 
   if (!values || values.length === 0) return null;
 
+  const displayValues = values.slice(0, maxValues);
+  const hasDateValues = displayValues.some(looksLikeDate);
+
   return (
-    <div className="mt-2.5">
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <Eye size={11} className="text-surface-400" />
-        <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wide">Sample Values</span>
-      </div>
+    <div className={inline ? '' : 'mt-2.5'}>
+      {!inline && (
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <Eye size={11} className="text-surface-400" />
+          <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wide">Sample Values</span>
+        </div>
+      )}
       <div className="flex flex-wrap gap-1.5">
-        {values.map((val, idx) => (
+        {displayValues.map((val, idx) => (
           <span
             key={idx}
-            className="inline-flex items-center px-2.5 py-1 rounded-lg bg-gradient-to-r from-surface-50 to-surface-100 border border-surface-200 text-xs font-medium text-surface-700 shadow-sm"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gradient-to-r from-surface-50 to-surface-100 border border-surface-200 text-xs font-medium text-surface-700 shadow-sm"
           >
             {val}
+            {hasDateValues && looksLikeDate(val) && (
+              <span className="text-[9px] font-semibold text-surface-400 uppercase">UTC</span>
+            )}
           </span>
         ))}
       </div>
@@ -341,16 +355,10 @@ export default function ServiceNowSLAColumnMappingTab() {
     }
   }, [responseColumn, createdColumn, closedColumn]);
 
-  if (configLoading) {
-    return (
-      <div className="p-8 flex items-center justify-center">
-        <Loader2 size={22} className="text-brand-400 animate-spin" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Modal loading spinner */}
+      {configLoading && <PageSpinner modal message="Loading SLA column mapping..." />}
       {/* Header */}
       <div>
         <div className="flex items-center gap-2 mb-1">
@@ -401,7 +409,7 @@ export default function ServiceNowSLAColumnMappingTab() {
               expectedDefault={EXPECTED_DEFAULTS.createdColumn}
             />
             <p className="text-[10px] text-surface-400 mt-1">When the incident was created.</p>
-            <SampleValuesPreview columnName={createdColumn} sampleData={sampleCache[createdColumn]} />
+            <SampleValuesPreview columnName={createdColumn} sampleData={sampleCache[createdColumn]} maxValues={1} />
           </div>
 
           {/* Closed Column */}
@@ -415,7 +423,7 @@ export default function ServiceNowSLAColumnMappingTab() {
               expectedDefault={EXPECTED_DEFAULTS.closedColumn}
             />
             <p className="text-[10px] text-surface-400 mt-1">When the incident was resolved/closed.</p>
-            <SampleValuesPreview columnName={closedColumn} sampleData={sampleCache[closedColumn]} />
+            <SampleValuesPreview columnName={closedColumn} sampleData={sampleCache[closedColumn]} maxValues={1} />
           </div>
 
           {/* Spacer */}
@@ -433,31 +441,39 @@ export default function ServiceNowSLAColumnMappingTab() {
           <SectionSaveButton saving={savingPriority} onClick={handleSavePriority} label="Save Priority" />
         </div>
         <SectionMessage message={msgPriority} />
-        <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="p-5 space-y-3">
           {/* Priority Column Label */}
-          <div className="md:col-span-2">
+          <div>
             <div className="px-3 py-2 rounded-lg bg-violet-50 border border-violet-100">
               <p className="text-xs font-semibold text-violet-700">Priority Mapping</p>
               <p className="text-[11px] text-violet-600 mt-0.5">The priority column is used by SLA thresholds to match incidents to their SLA targets.</p>
             </div>
           </div>
 
-          {/* Priority Column */}
-          <div>
-            <label className="block text-xs font-semibold text-surface-600 mb-1">Priority Column</label>
-            <ColumnSelect
-              value={priorityColumn}
-              onChange={handleColumnChange(setPriorityColumn)}
-              columns={snowColumns}
-              placeholder="— Not Configured —"
-              expectedDefault={EXPECTED_DEFAULTS.priorityColumn}
-            />
-            <p className="text-[10px] text-surface-400 mt-1">The ServiceNow incident field that holds the priority value (e.g., priority, urgency).</p>
-            <SampleValuesPreview columnName={priorityColumn} sampleData={sampleCache[priorityColumn]} />
+          {/* Priority Column + Sample Values side by side */}
+          <div className="flex items-start gap-4">
+            <div className="w-64 flex-shrink-0">
+              <label className="block text-xs font-semibold text-surface-600 mb-1">Priority Column</label>
+              <ColumnSelect
+                value={priorityColumn}
+                onChange={handleColumnChange(setPriorityColumn)}
+                columns={snowColumns}
+                placeholder="— Not Configured —"
+                expectedDefault={EXPECTED_DEFAULTS.priorityColumn}
+              />
+              <p className="text-[10px] text-surface-400 mt-1">The ServiceNow incident field that holds the priority value.</p>
+            </div>
+            {/* Sample values shown inline to the right */}
+            {priorityColumn !== NOT_CONFIGURED && (
+              <div className="flex-1 pt-5">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <Eye size={11} className="text-surface-400" />
+                  <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wide">Sample Values</span>
+                </div>
+                <SampleValuesPreview columnName={priorityColumn} sampleData={sampleCache[priorityColumn]} maxValues={5} inline />
+              </div>
+            )}
           </div>
-
-          {/* Spacer */}
-          <div />
         </div>
       </div>
 
@@ -491,7 +507,7 @@ export default function ServiceNowSLAColumnMappingTab() {
               expectedDefault={EXPECTED_DEFAULTS.responseColumn}
             />
             <p className="text-[10px] text-surface-400 mt-1">When the first response was sent (optional).</p>
-            <SampleValuesPreview columnName={responseColumn} sampleData={sampleCache[responseColumn]} />
+            <SampleValuesPreview columnName={responseColumn} sampleData={sampleCache[responseColumn]} maxValues={1} />
           </div>
 
           {/* Spacer */}

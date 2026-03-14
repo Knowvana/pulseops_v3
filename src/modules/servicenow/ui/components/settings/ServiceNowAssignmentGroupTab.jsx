@@ -24,6 +24,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Users, Search, Loader2, AlertCircle, CheckCircle2, Trash2 } from 'lucide-react';
 import { createLogger, ConfirmationModal } from '@shared';
 import ApiClient from '@shared/services/apiClient';
+import { PageSpinner } from '@components';
 
 const log = createLogger('ServiceNowAssignmentGroupTab.jsx');
 
@@ -168,16 +169,9 @@ export default function ServiceNowAssignmentGroupTab() {
     }
   }, [assignmentGroup]);
 
-  if (loading) {
-    return (
-      <div className="p-8 flex items-center justify-center">
-        <Loader2 size={22} className="text-brand-400 animate-spin" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 animate-fade-in p-5">
+      {loading && <PageSpinner modal message="Loading assignment group..." />}
       {/* Header */}
       <div>
         <div className="flex items-center gap-2 mb-1">

@@ -417,48 +417,105 @@ export default function ServiceNowSlaReport() {
 
       {!loading && data && (
         <>
-          {/* ── Stats Cards ─────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            <StatCard
-              label="Total Incidents"
-              value={stats.total}
-              icon={FileText}
-              color="text-brand-600"
-              bgColor="bg-brand-50"
-              subtext={`${data?.startDate || ''} — ${data?.endDate || ''}`}
-            />
-            <StatCard
-              label="SLA Met"
-              value={stats.met}
-              icon={CheckCircle2}
-              color="text-emerald-600"
-              bgColor="bg-emerald-50"
-              subtext="Within target"
-            />
-            <StatCard
-              label="SLA Breached"
-              value={stats.breached}
-              icon={XCircle}
-              color="text-rose-600"
-              bgColor="bg-rose-50"
-              subtext="Exceeded target"
-            />
-            <StatCard
-              label="Pending"
-              value={stats.pending}
-              icon={Clock}
-              color="text-surface-500"
-              bgColor="bg-surface-100"
-              subtext="Awaiting resolution"
-            />
-            <StatCard
-              label="Overall Compliance"
-              value={stats.compliance !== null ? `${stats.compliance}%` : '—'}
-              icon={TrendingUp}
-              color={stats.compliance >= 90 ? 'text-emerald-600' : stats.compliance >= 70 ? 'text-amber-600' : 'text-rose-600'}
-              bgColor={stats.compliance >= 90 ? 'bg-emerald-50' : stats.compliance >= 70 ? 'bg-amber-50' : 'bg-rose-50'}
-              subtext="Met / (Met + Breached)"
-            />
+          {/* ── First Row: Reference Information and Stats ──────────────────────────────── */}
+          <div className="grid lg:grid-cols-2 gap-4">
+            {/* First Column: Reference Information */}
+            <div className="bg-white rounded-xl border-2 border-surface-300 shadow-sm p-5">
+              <h2 className="text-sm font-bold text-surface-800 mb-4 flex items-center gap-2">
+                <Clock size={16} className="text-brand-500" />
+                Report Configuration Reference
+              </h2>
+              <div className="grid lg:grid-cols-2 gap-6">
+                {/* Business Hours */}
+                <div className="border border-surface-200 rounded-lg p-3">
+                  <h3 className="text-xs font-semibold text-surface-700 uppercase tracking-wider mb-3">Business Days</h3>
+                  <div className="space-y-1.5">
+                    {data.businessHours && data.businessHours.length > 0 ? (
+                      data.businessHours
+                        .filter(day => day.isBusinessDay)
+                        .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
+                        .map(day => {
+                          const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                          return (
+                            <div key={day.dayOfWeek} className="flex items-center justify-between text-xs py-1 border-b border-surface-100">
+                              <span className="text-surface-600 font-medium">{dayNames[day.dayOfWeek]}</span>
+                              <span className="text-surface-500">{day.startTime} - {day.endTime}</span>
+                            </div>
+                          );
+                        })
+                    ) : (
+                      <p className="text-xs text-surface-400 italic">No business hours configured (24/7)</p>
+                    )}
+                  </div>
+                </div>
+                
+                {/* SLA Thresholds */}
+                <div className="border border-surface-200 rounded-lg p-3">
+                  <h3 className="text-xs font-semibold text-surface-700 uppercase tracking-wider mb-3">SLA Targets (Resolution)</h3>
+                  <div className="space-y-1.5">
+                    {data.slaThresholds && data.slaThresholds.length > 0 ? (
+                      data.slaThresholds
+                        .sort((a, b) => (a.priorityValue || a.priority) - (b.priorityValue || b.priority))
+                        .map(sla => (
+                          <div key={sla.priority} className="flex items-center justify-between text-xs py-1 border-b border-surface-100">
+                            <span className="text-surface-600 font-medium">
+                              {sla.priority} 
+                              {sla.priorityValue && sla.priorityValue !== sla.priority && ` (${sla.priorityValue})`}
+                            </span>
+                            <span className="text-surface-500">{formatMinutes(sla.resolutionMinutes)}</span>
+                          </div>
+                        ))
+                    ) : (
+                      <p className="text-xs text-surface-400 italic">No SLA thresholds configured</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Second Column: Stats Cards */}
+            <div className="grid grid-cols-3 gap-2">
+              <StatCard
+                label="Total Incidents"
+                value={stats.total}
+                icon={FileText}
+                color="text-brand-600"
+                bgColor="bg-brand-50"
+                subtext={`${data?.startDate || ''} — ${data?.endDate || ''}`}
+              />
+              <StatCard
+                label="SLA Met"
+                value={stats.met}
+                icon={CheckCircle2}
+                color="text-emerald-600"
+                bgColor="bg-emerald-50"
+                subtext="Within target"
+              />
+              <StatCard
+                label="SLA Breached"
+                value={stats.breached}
+                icon={XCircle}
+                color="text-rose-600"
+                bgColor="bg-rose-50"
+                subtext="Exceeded target"
+              />
+              <StatCard
+                label="Pending"
+                value={stats.pending}
+                icon={Clock}
+                color="text-surface-500"
+                bgColor="bg-surface-100"
+                subtext="Awaiting resolution"
+              />
+              <StatCard
+                label="Overall Compliance"
+                value={stats.compliance !== null ? `${stats.compliance}%` : '—'}
+                icon={TrendingUp}
+                color={stats.compliance >= 90 ? 'text-emerald-600' : stats.compliance >= 70 ? 'text-amber-600' : 'text-rose-600'}
+                bgColor={stats.compliance >= 90 ? 'bg-emerald-50' : stats.compliance >= 70 ? 'bg-amber-50' : 'bg-rose-50'}
+                subtext="Met / (Met + Breached)"
+              />
+            </div>
           </div>
 
           {/* ── Priority Summary Table ──────────────────────────────────────── */}

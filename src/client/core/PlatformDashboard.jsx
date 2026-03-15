@@ -191,7 +191,10 @@ export default function PlatformDashboard({ user, onLogout }) {
   const handleSideNavSelect = useCallback((viewId) => {
     log.info('handleSideNavSelect', `Navigating to view: ${viewId} (module: ${activeModuleId})`);
     if (activeModuleId) {
-      navigate(`/${activeModuleId}/${viewId}`);
+      // Support viewId with query params e.g. 'config?tab=slaColumnMapping'
+      const [view, queryString] = viewId.split('?');
+      const path = `/${activeModuleId}/${view}${queryString ? `?${queryString}` : ''}`;
+      navigate(path);
     }
   }, [activeModuleId, navigate]);
 

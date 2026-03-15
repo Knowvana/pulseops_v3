@@ -23,7 +23,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus, Edit3, XCircle, CheckCircle2, AlertCircle,
-  Loader2, ClipboardList, Clock, Trash2, Search, RefreshCw, Users,
+  Loader2, ClipboardList, Clock, Trash2, Search, RefreshCw, Users, MessageSquare,
 } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
@@ -38,6 +38,8 @@ const snApi = {
   incidentUpdate: (id) => `/api/servicenow/incidents/${id}`,
   openIncidents: '/api/servicenow/incidents/open',
   searchGroups: '/api/servicenow/search/assignment-groups',
+  autoAckTest: '/api/servicenow/auto-acknowledge/test',
+  autoAckConfig: '/api/servicenow/config/auto-acknowledge',
 };
 
 // ServiceNow Impact/Urgency values (3-level)
@@ -125,6 +127,11 @@ export default function ServiceNowTestIncidents() {
   const [openIncidents, setOpenIncidents]       = useState([]);
   const [openIncidentsLoading, setOpenIncidentsLoading] = useState(false);
 
+  // Auto Acknowledge test state
+  const [ackIncident, setAckIncident] = useState('');
+  const [ackMessage, setAckMessage] = useState('');
+  const [acknowledging, setAcknowledging] = useState(false);
+
   // Operations log
   const [operations, setOperations] = useState([]);
 
@@ -153,6 +160,13 @@ export default function ServiceNowTestIncidents() {
     if (initRan.current) return;
     initRan.current = true;
     fetchOpenIncidents();
+    // Load auto acknowledge default message
+    (async () => {
+      try {
+        const res = await ApiClient.get(snApi.autoAckConfig);
+        if (res?.success && res.data?.message) setAckMessage(res.data.message);
+      } catch { /* ignore */ }
+    })();
   }, [fetchOpenIncidents]);
 
   // ── Assignment group search (debounced) ─────────────────────────────────
@@ -286,7 +300,7 @@ export default function ServiceNowTestIncidents() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         {/* ── Create Panel ─────────────────────────────────────────────── */}
         <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
           <div className="px-5 py-3 border-b border-surface-100 bg-emerald-50/50 flex items-center gap-2">
@@ -473,6 +487,66 @@ export default function ServiceNowTestIncidents() {
               className={`${btnPrimary} bg-rose-600 text-white hover:bg-rose-700 w-full justify-center`}>
               {closing ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
               {closing ? t.closing : t.closeButton}
+            </button>
+          </div>
+        </div>
+        {/* ── Auto Acknowledge Panel ────────────────────────────────── */}
+        <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-surface-100 bg-brand-50/50 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <MessageSquare size={15} className="text-brand-600" />
+              <h3 className="text-sm font-bold text-surface-700">Auto Acknowledge</h3>
+            </div>
+            <button onClick={fetchOpenIncidents} disabled={openIncidentsLoading}
+              className="p-1 rounded text-surface-400 hover:text-brand-600 hover:bg-brand-50 transition-colors disabled:opacity-40"
+              title="Refresh open incidents">
+              <RefreshCw size={12} className={openIncidentsLoading ? 'animate-spin' : ''} />
+            </button>
+          </div>
+          <div className="p-5 space-y-3">
+            <div>
+              <label className="text-xs font-semibold text-surface-600 mb-1 block">Select Incident</label>
+              {openIncidentsLoading ? (
+                <div className="flex items-center gap-2 px-3 py-2 text-xs text-surface-400">
+                  <Loader2 size={12} className="animate-spin" /> Loading open incidents...
+                </div>
+              ) : (
+                <select value={ackIncident} onChange={e => setAckIncident(e.target.value)} className={selectCls}>
+                  <option value="">— Select an incident —</option>
+                  {openIncidents.map(inc => (
+                    <option key={inc.number} value={inc.sysId || inc.sys_id || ''}>
+                      {inc.number} — P{inc.priority} — {(inc.shortDescription || '').slice(0, 50)}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-surface-600 mb-1 block">Acknowledge Message</label>
+              <textarea value={ackMessage} onChange={e => setAckMessage(e.target.value)}
+                placeholder="Enter acknowledge message..." rows={2}
+                className={`${inputCls} resize-none`} />
+              <p className="text-[10px] text-surface-400 mt-0.5">Pre-filled from Auto Acknowledge configuration.</p>
+            </div>
+            <button onClick={async () => {
+              if (!ackIncident || !ackMessage.trim()) return;
+              setAcknowledging(true);
+              try {
+                const res = await ApiClient.post(snApi.autoAckTest, { incidentSysId: ackIncident, message: ackMessage });
+                if (res?.success) {
+                  addOp('AUTO ACK', true, res.message || 'Auto acknowledge comment posted.', { number: ackIncident });
+                } else {
+                  addOp('AUTO ACK', false, res?.error?.message || 'Failed.');
+                }
+              } catch (err) {
+                addOp('AUTO ACK', false, err.message);
+              } finally {
+                setAcknowledging(false);
+              }
+            }} disabled={acknowledging || !ackIncident || !ackMessage.trim()}
+              className={`${btnPrimary} bg-brand-600 text-white hover:bg-brand-700 w-full justify-center`}>
+              {acknowledging ? <Loader2 size={14} className="animate-spin" /> : <MessageSquare size={14} />}
+              {acknowledging ? 'Acknowledging...' : 'Test Auto Acknowledge'}
             </button>
           </div>
         </div>

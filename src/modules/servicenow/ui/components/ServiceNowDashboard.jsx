@@ -24,7 +24,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Headset, RefreshCw, AlertTriangle, Activity, CheckCircle2,
-  Clock, AlertCircle, ArrowRight, Wifi, WifiOff, Loader2,
+  Clock, AlertCircle, ArrowRight, Wifi, WifiOff, Loader2, MessageSquare,
 } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
@@ -123,6 +123,7 @@ export default function ServiceNowDashboard({ onNavigate }) {
   const [syncing, setSyncing]         = useState(false);
   const [error, setError]             = useState(null);
   const [syncMessage, setSyncMessage] = useState(null); // { type: 'success'|'error', text, summary }
+  const [autoAckLog, setAutoAckLog]   = useState([]);
   const initRan = useRef(false);
 
   // ── Fetch dashboard stats ─────────────────────────────────────────────────
@@ -154,6 +155,12 @@ export default function ServiceNowDashboard({ onNavigate }) {
       if (syncRes?.success) setSyncStatus(syncRes.data);
       if (cfgRes?.success) setConfigData(cfgRes.data);
       if (incCfgRes?.success) setIncidentConfig(incCfgRes.data);
+
+      // Fetch today's auto-acknowledged incidents
+      try {
+        const ackRes = await ApiClient.get('/api/servicenow/auto-acknowledge/log');
+        if (ackRes?.success) setAutoAckLog(ackRes.data || []);
+      } catch { /* ignore */ }
     } catch (err) {
       log.error('fetchStats', 'Unexpected error', { error: err.message });
       setError(uiText.common.fetchError);
@@ -442,6 +449,54 @@ export default function ServiceNowDashboard({ onNavigate }) {
           </div>
         )}
       </div>
+
+      {/* Auto Acknowledged Incidents Today */}
+      {autoAckLog.length > 0 && (
+        <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-surface-100 bg-brand-50/50">
+            <div className="flex items-center gap-2">
+              <MessageSquare size={14} className="text-brand-600" />
+              <h3 className="text-sm font-bold text-surface-700">Auto Acknowledged Today</h3>
+              <span className="px-1.5 py-0.5 rounded-full bg-brand-100 text-brand-700 text-[10px] font-bold">{autoAckLog.length}</span>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-surface-100 bg-surface-50/30">
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-surface-500 uppercase tracking-wide">Incident</th>
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-surface-500 uppercase tracking-wide">Description</th>
+                  <th className="text-center px-4 py-2 text-xs font-semibold text-surface-500 uppercase tracking-wide">Priority</th>
+                  <th className="text-center px-4 py-2 text-xs font-semibold text-surface-500 uppercase tracking-wide">Status</th>
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-surface-500 uppercase tracking-wide">Time</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-surface-50">
+                {autoAckLog.slice(0, 10).map((entry, idx) => (
+                  <tr key={entry.id || idx} className="hover:bg-surface-50/50 transition-colors">
+                    <td className="px-4 py-2.5 font-mono text-xs text-brand-600 font-semibold">{entry.incident_number}</td>
+                    <td className="px-4 py-2.5 text-surface-700 text-xs max-w-[280px] truncate">{entry.short_description || '—'}</td>
+                    <td className="px-4 py-2.5 text-center text-xs text-surface-600">{entry.priority || '—'}</td>
+                    <td className="px-4 py-2.5 text-center">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                        entry.status === 'success'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-rose-50 text-rose-700 border border-rose-200'
+                      }`}>
+                        {entry.status === 'success' ? <CheckCircle2 size={10} /> : <AlertCircle size={10} />}
+                        {entry.status === 'success' ? 'Done' : 'Failed'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-surface-500 text-xs">
+                      {entry.acknowledged_at ? new Date(entry.acknowledged_at).toLocaleTimeString() : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -20,6 +20,7 @@ import {
   buildAssignmentGroupQuery, snowRequest, snowVal,
   DatabaseService, dbSchema,
 } from './helpers.js';
+import { convertToTimezone, getEffectiveTimezone, parseSnowDateUTC } from './timezoneRoutes.js';
 
 // Import logger for DEBUG level logging
 import { logger } from '#shared/logger.js';
@@ -83,39 +84,32 @@ function addBusinessMinutes(startDate, targetMinutes, hoursMap) {
   let current = new Date(startDate);
   let remaining = targetMinutes;
   let guard = 0;
-  const debugLog = process.env.DEBUG_SLA === 'true';
-  if (debugLog) console.log(`[addBusinessMinutes] Start: ${current.toISOString()}, Target: ${targetMinutes} min, hoursMap keys: ${Object.keys(hoursMap)}`);
   
   while (remaining > 0 && guard++ < 10000) {
-    const dow = current.getDay();
+    const dow = current.getUTCDay();
     const hours = hoursMap[dow];
     if (!hours) { 
-      current.setDate(current.getDate() + 1); 
-      current.setHours(0, 0, 0, 0); 
-      if (debugLog) console.log(`[addBusinessMinutes] Day ${dow} not business day, moving to next day`);
+      current.setUTCDate(current.getUTCDate() + 1); 
+      current.setUTCHours(0, 0, 0, 0); 
       continue; 
     }
-    const workStart = new Date(current); workStart.setHours(hours.start, hours.startMin, 0, 0);
-    const workEnd = new Date(current); workEnd.setHours(hours.end, hours.endMin, 0, 0);
+    const workStart = new Date(current); workStart.setUTCHours(hours.start, hours.startMin, 0, 0);
+    const workEnd = new Date(current); workEnd.setUTCHours(hours.end, hours.endMin, 0, 0);
     if (current < workStart) { 
       current = new Date(workStart);
-      if (debugLog) console.log(`[addBusinessMinutes] Before work start, adjusted to ${current.toISOString()}`);
       continue;
     }
     if (current >= workEnd) { 
-      current.setDate(current.getDate() + 1); 
-      current.setHours(0, 0, 0, 0); 
-      if (debugLog) console.log(`[addBusinessMinutes] Past work end, moving to next day`);
+      current.setUTCDate(current.getUTCDate() + 1); 
+      current.setUTCHours(0, 0, 0, 0); 
       continue; 
     }
     const minutesUntilEnd = (workEnd - current) / 60000;
     const chunk = Math.min(remaining, minutesUntilEnd);
     current = new Date(current.getTime() + chunk * 60000);
     remaining -= chunk;
-    if (debugLog) console.log(`[addBusinessMinutes] Added ${chunk} min, current: ${current.toISOString()}, remaining: ${remaining}`);
-    if (remaining > 0) { current.setDate(current.getDate() + 1); current.setHours(0, 0, 0, 0); }
+    if (remaining > 0) { current.setUTCDate(current.getUTCDate() + 1); current.setUTCHours(0, 0, 0, 0); }
   }
-  if (debugLog) console.log(`[addBusinessMinutes] Final result: ${current.toISOString()}`);
   return current;
 }
 
@@ -132,18 +126,18 @@ function calcBusinessMinutesBetween(start, end, hoursMap) {
   const cursor = new Date(start);
   let guard = 0;
   while (cursor < end && guard++ < 10000) {
-    const dow = cursor.getDay();
+    const dow = cursor.getUTCDay();
     const hours = hoursMap[dow];
-    if (!hours) { cursor.setDate(cursor.getDate() + 1); cursor.setHours(0, 0, 0, 0); continue; }
-    const dayStart = new Date(cursor); dayStart.setHours(hours.start, hours.startMin, 0, 0);
-    const dayEnd = new Date(cursor); dayEnd.setHours(hours.end, hours.endMin, 0, 0);
+    if (!hours) { cursor.setUTCDate(cursor.getUTCDate() + 1); cursor.setUTCHours(0, 0, 0, 0); continue; }
+    const dayStart = new Date(cursor); dayStart.setUTCHours(hours.start, hours.startMin, 0, 0);
+    const dayEnd = new Date(cursor); dayEnd.setUTCHours(hours.end, hours.endMin, 0, 0);
     const effectiveStart = cursor > dayStart ? cursor : dayStart;
     const effectiveEnd = end < dayEnd ? end : dayEnd;
     if (effectiveStart < effectiveEnd) {
       bizMinutes += (effectiveEnd - effectiveStart) / 60000;
     }
-    cursor.setDate(cursor.getDate() + 1);
-    cursor.setHours(0, 0, 0, 0);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+    cursor.setUTCHours(0, 0, 0, 0);
   }
   return Math.round(bizMinutes);
 }
@@ -282,14 +276,17 @@ router.get('/reports', async (req, res) => {
       const pLabel = p === '1' ? '1 - Critical' : p === '2' ? '2 - High' : p === '3' ? '3 - Medium' : '4 - Low';
       const threshold = slaThresholds[pLabel]?.resolutionMinutes || (p === '1' ? 120 : p === '2' ? 360 : p === '3' ? 960 : 2400);
 
-      if (openedAt && resolvedAt) {
-        const resHours = Math.round((new Date(resolvedAt) - new Date(openedAt)) / 3600000 * 10) / 10;
+      const openedDate = parseSnowDateUTC(openedAt);
+      const resolvedDate = parseSnowDateUTC(resolvedAt);
+
+      if (openedDate && resolvedDate) {
+        const resHours = Math.round((resolvedDate - openedDate) / 3600000 * 10) / 10;
         if (!resolutionByPriority[pKey]) resolutionByPriority[pKey] = { total: 0, count: 0 };
         resolutionByPriority[pKey].total += resHours;
         resolutionByPriority[pKey].count++;
         if ((resHours * 60) > threshold) slaBreaches++;
-      } else if (openedAt && !['6', '7', '8'].includes(s)) {
-        const openMinutes = (Date.now() - new Date(openedAt).getTime()) / 60000;
+      } else if (openedDate && !['6', '7', '8'].includes(s)) {
+        const openMinutes = (Date.now() - openedDate.getTime()) / 60000;
         if (openMinutes > threshold) slaBreaches++;
       }
     }
@@ -356,16 +353,18 @@ router.get('/reports/incidents', async (req, res) => {
       byState[String(snowVal(inc.state) || 'unknown')] = (byState[String(snowVal(inc.state) || 'unknown')] || 0) + 1;
       byCategory[snowVal(inc.category) || 'General'] = (byCategory[snowVal(inc.category) || 'General'] || 0) + 1;
     }
+    const effectiveTz = await getEffectiveTimezone();
     return res.json({
       success: true,
       data: {
         totalCount: incidents.length, totalClosed: closed.length,
         reportingPeriod: { start: startDate || null, end: endDate || null },
+        timezone: effectiveTz,
         byPriority, byState, byCategory,
         incidents: incidents.slice(0, 100).map(i => ({
           number: snowVal(i.number), shortDescription: snowVal(i.short_description), priority: snowVal(i.priority),
           state: snowVal(i.state), category: snowVal(i.category), assignmentGroup: snowVal(i.assignment_group),
-          openedAt: snowVal(i.opened_at),
+          openedAt: convertToTimezone(snowVal(i.opened_at), effectiveTz),
         })),
       },
     });
@@ -394,16 +393,18 @@ router.get('/reports/ritms', async (req, res) => {
       byState[String(r.state || 'unknown')] = (byState[String(r.state || 'unknown')] || 0) + 1;
       byCatalogItem[r.cat_item || 'General'] = (byCatalogItem[r.cat_item || 'General'] || 0) + 1;
     }
+    const effectiveTz = await getEffectiveTimezone();
     return res.json({
       success: true,
       data: {
         totalCount: ritms.length,
         reportingPeriod: { start: startDate || null, end: endDate || null },
+        timezone: effectiveTz,
         byPriority, byState, byCatalogItem,
         ritms: ritms.slice(0, 100).map(r => ({
           number: r.number, shortDescription: r.short_description, priority: r.priority,
           state: r.state, catalogItem: r.cat_item, assignmentGroup: r.assignment_group,
-          openedAt: r.opened_at, fulfillmentTime: null,
+          openedAt: convertToTimezone(r.opened_at, effectiveTz), fulfillmentTime: null,
         })),
       },
     });
@@ -453,14 +454,16 @@ router.get('/reports/sla', async (req, res) => {
       }
       const openedAt = snowVal(inc.opened_at);
       const resolvedAt = snowVal(inc.resolved_at) || snowVal(inc.closed_at);
-      if (openedAt) {
+      const openedDate = parseSnowDateUTC(openedAt);
+      const resolvedDate = parseSnowDateUTC(resolvedAt);
+      if (openedDate) {
         const threshold = slaThresholds[pLabel] || { resolutionMinutes: 480 };
-        if (resolvedAt) {
-          const resolutionMinutes = (new Date(resolvedAt) - new Date(openedAt)) / 60000;
+        if (resolvedDate) {
+          const resolutionMinutes = (resolvedDate - openedDate) / 60000;
           if (resolutionMinutes <= threshold.resolutionMinutes) incidentSlaByPriority[pLabel].resolutionMet++;
           else incidentSlaByPriority[pLabel].resolutionBreached++;
         } else if (!['6', '7', '8'].includes(String(snowVal(inc.state)))) {
-          const openMinutes = (Date.now() - new Date(openedAt).getTime()) / 60000;
+          const openMinutes = (Date.now() - openedDate.getTime()) / 60000;
           if (openMinutes > threshold.resolutionMinutes) incidentSlaByPriority[pLabel].resolutionBreached++;
           else incidentSlaByPriority[pLabel].resolutionMet++;
         }
@@ -609,52 +612,49 @@ router.get('/reports/sla/incidents', async (req, res) => {
         resolutionMinutes: threshold.resolutionMinutes
       });
       
-      const createdAt = snowVal(inc[incidentConfig.createdColumn]);
-      const closedAt = snowVal(inc[incidentConfig.closedColumn]) || snowVal(inc.resolved_at);
+      const createdAtRaw = snowVal(inc[incidentConfig.createdColumn]);
+      const closedAtRaw = snowVal(inc[incidentConfig.closedColumn]) || snowVal(inc.resolved_at);
+
+      // Parse all ServiceNow timestamps as UTC (they come without Z suffix)
+      const createdDate = parseSnowDateUTC(createdAtRaw);
+      const closedDate = parseSnowDateUTC(closedAtRaw);
 
       let resolutionMinutes = null;
       let slaMet = null;
       let expectedClosure = null;
 
-      // Calculate expected closure using business hours
-      if (createdAt) {
-        // DEBUG: Log calculation inputs
-        logger.debug(`[SLA] Calculating expected closure for ${inc.number}`, {
-          incident: inc.number,
-          createdAt,
-          targetMinutes: threshold.resolutionMinutes,
-          businessHoursConfigured: Object.keys(hoursMap).length > 0,
-          businessDays: Object.keys(hoursMap)
-        });
-        
-        expectedClosure = addBusinessMinutes(new Date(createdAt), threshold.resolutionMinutes, hoursMap);
-        if (expectedClosure) {
-          expectedClosure = expectedClosure.toISOString();
-          
-          // DEBUG: Log calculation result
-          logger.debug(`[SLA] Expected closure calculated for ${inc.number}`, {
-            incident: inc.number,
-            expectedClosure,
-            totalBusinessDaysAdded: Math.ceil(threshold.resolutionMinutes / 480) // Approximate business days
-          });
-        }
+      // Calculate expected closure using business hours (all in UTC)
+      if (createdDate && !isNaN(createdDate.getTime())) {
+        expectedClosure = addBusinessMinutes(createdDate, threshold.resolutionMinutes, hoursMap);
+        if (expectedClosure) expectedClosure = expectedClosure.toISOString();
       }
 
-      // Calculate actual resolution time in business minutes
-      if (createdAt && closedAt) {
-        resolutionMinutes = calcBusinessMinutesBetween(new Date(createdAt), new Date(closedAt), hoursMap);
+      // Calculate actual resolution time in business minutes (all in UTC)
+      if (createdDate && closedDate && !isNaN(createdDate.getTime()) && !isNaN(closedDate.getTime())) {
+        resolutionMinutes = calcBusinessMinutesBetween(createdDate, closedDate, hoursMap);
         slaMet = resolutionMinutes <= threshold.resolutionMinutes;
       }
 
       return {
         number: snowVal(inc.number), shortDescription: snowVal(inc.short_description),
         priority: normalizedPriority || priorityRaw, state: snowVal(inc.state), assignedTo: snowVal(inc.assigned_to),
-        createdAt, closedAt, resolutionMinutes, targetMinutes: threshold.resolutionMinutes, slaMet, expectedClosure,
+        createdAt: createdDate ? createdDate.toISOString() : createdAtRaw,
+        closedAt: closedDate ? closedDate.toISOString() : closedAtRaw,
+        resolutionMinutes, targetMinutes: threshold.resolutionMinutes, slaMet, expectedClosure,
       };
     });
 
+    // Apply timezone conversion to all date fields
+    const effectiveTz = await getEffectiveTimezone();
+    const tzIncidents = incidentSlaData.map(inc => ({
+      ...inc,
+      createdAt: convertToTimezone(inc.createdAt, effectiveTz),
+      closedAt: convertToTimezone(inc.closedAt, effectiveTz),
+      expectedClosure: convertToTimezone(inc.expectedClosure, effectiveTz),
+    }));
+
     const summaryByPriority = {};
-    for (const inc of incidentSlaData) {
+    for (const inc of tzIncidents) {
       if (!summaryByPriority[inc.priority]) {
         summaryByPriority[inc.priority] = { total: 0, met: 0, breached: 0, pending: 0, targetMinutes: inc.targetMinutes };
       }
@@ -668,9 +668,10 @@ router.get('/reports/sla/incidents', async (req, res) => {
       success: true,
       data: {
         period, startDate, endDate: now.toISOString().slice(0, 10),
-        generatedAt: new Date().toISOString(),
+        generatedAt: convertToTimezone(new Date().toISOString(), effectiveTz),
+        timezone: effectiveTz,
         totalIncidents: incidents.length, summaryByPriority,
-        incidents: incidentSlaData,
+        incidents: tzIncidents,
         incidentConfig: { createdColumn: incidentConfig.createdColumn, closedColumn: incidentConfig.closedColumn, priorityColumn: incidentConfig.priorityColumn },
         // Add business hours and SLA configuration for reference
         businessHours: businessHours.map(day => ({
@@ -690,6 +691,197 @@ router.get('/reports/sla/incidents', async (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: `SLA report failed: ${err.message}` } });
+  }
+});
+
+// ── GET /reports/sla/incidents/response — Incident Response SLA Report ───
+router.get('/reports/sla/incidents/response', async (req, res) => {
+  try {
+    const conn = loadConnectionConfig();
+    if (!conn.isConfigured) {
+      return res.status(400).json({ success: false, error: { message: 'ServiceNow connection is not configured.' } });
+    }
+
+    const { period = 'monthly' } = req.query;
+    const incidentConfig = await loadIncidentConfig();
+
+    // Require responseColumn to be configured
+    const responseCol = incidentConfig.responseColumn;
+    if (!responseCol) {
+      return res.status(400).json({ success: false, error: { message: 'Response SLA column is not configured. Go to Configuration → SLA Column Mapping to set it up.' } });
+    }
+
+    const now = new Date();
+    let rangeStart, rangeEnd;
+
+    if (period === 'daily') {
+      rangeStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      rangeEnd = new Date(rangeStart); rangeEnd.setUTCDate(rangeEnd.getUTCDate() + 1);
+    } else if (period === 'weekly') {
+      rangeStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      const day = rangeStart.getUTCDay();
+      const diff = day === 0 ? 6 : day - 1;
+      rangeStart.setUTCDate(rangeStart.getUTCDate() - diff);
+      rangeEnd = new Date(rangeStart); rangeEnd.setUTCDate(rangeEnd.getUTCDate() + 7);
+    } else if (period === 'monthly') {
+      rangeStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      rangeEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    } else {
+      const from = req.query.from;
+      const to = req.query.to;
+      if (from) rangeStart = new Date(`${from}T00:00:00Z`);
+      if (to) { rangeEnd = new Date(`${to}T00:00:00Z`); rangeEnd.setUTCDate(rangeEnd.getUTCDate() + 1); }
+      if (!rangeStart || !rangeEnd) {
+        rangeStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        rangeEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+      }
+    }
+
+    const startDate = rangeStart.toISOString().slice(0, 10);
+    const endDateExclusive = rangeEnd.toISOString().slice(0, 10);
+
+    const queryParts = [`${incidentConfig.createdColumn}>=${startDate}`, `${incidentConfig.createdColumn}<${endDateExclusive}`, 'ORDERBYDESCnumber'];
+    const agQuery = buildAssignmentGroupQuery(incidentConfig.assignmentGroup);
+    if (agQuery) queryParts.unshift(agQuery);
+
+    const fields = ['sys_id', 'number', 'short_description', 'priority', 'state', 'assigned_to',
+      incidentConfig.createdColumn, responseCol, 'resolved_at'].filter(Boolean);
+
+    const result = await snowRequest(conn, 'table/incident',
+      `sysparm_limit=500&sysparm_fields=${[...new Set(fields)].join(',')}&sysparm_query=${queryParts.join('^')}`
+    );
+
+    let incidents = [];
+    if (result.statusCode >= 200 && result.statusCode < 300 && result.data?.result) {
+      incidents = result.data.result;
+    }
+
+    // Load SLA thresholds
+    let slaThresholds = {};
+    let slaByPriorityValue = {};
+    try {
+      const slaResult = await DatabaseService.query(
+        `SELECT * FROM ${dbSchema}.sn_sla_config WHERE enabled = true ORDER BY sort_order`
+      );
+      for (const row of slaResult.rows) {
+        const entry = { priority: row.priority, priorityValue: row.priority_value, responseMinutes: Number(row.response_minutes), resolutionMinutes: Number(row.resolution_minutes) };
+        slaThresholds[row.priority] = entry;
+        slaByPriorityValue[row.priority_value] = entry;
+      }
+    } catch { /* use empty */ }
+
+    // Load business hours
+    const businessHours = await loadBusinessHours();
+    const hoursMap = buildBusinessHoursMap(businessHours);
+
+    logger.debug(`[Response SLA] Report config`, { period, totalIncidents: incidents.length, responseCol });
+
+    // Fetch first comment/work note timestamp from sys_journal_field for each incident
+    // sys_journal_field stores all journal entries (comments + work_notes) for records
+    // ServiceNow returns sys_created_on in UTC — timezone conversion happens later
+    const incidentFirstResponseMap = {};
+    for (const inc of incidents) {
+      const sysId = snowVal(inc.sys_id);
+      try {
+        // Query sys_journal_field for both comments AND work_notes (element IN comments,work_notes)
+        const auditResult = await snowRequest(conn, 'table/sys_journal_field',
+          `sysparm_query=element_id=${sysId}^elementINcomments,work_notes&sysparm_fields=sys_created_on,element&sysparm_limit=1&sysparm_orderby=sys_created_on`
+        );
+        if (auditResult.statusCode >= 200 && auditResult.statusCode < 300 && auditResult.data?.result?.[0]) {
+          const firstResponseTime = snowVal(auditResult.data.result[0].sys_created_on);
+          incidentFirstResponseMap[sysId] = firstResponseTime;
+          logger.debug(`[Response SLA] First response for ${snowVal(inc.number)}`, { 
+            sysId, firstResponseTime, element: snowVal(auditResult.data.result[0].element)
+          });
+        }
+      } catch (err) {
+        logger.debug(`[Response SLA] Failed to fetch journal for ${sysId}`, { error: err.message });
+      }
+    }
+
+    const incidentSlaData = incidents.map(inc => {
+      const priorityRaw = snowVal(inc[incidentConfig.priorityColumn || 'priority']);
+      const normalizedPriority = normalizePriorityValue(priorityRaw);
+
+      const threshold = (normalizedPriority && slaByPriorityValue[normalizedPriority]) ||
+                       slaByPriorityValue[priorityRaw] ||
+                       slaThresholds[priorityRaw] ||
+                       { priority: priorityRaw, responseMinutes: 60, resolutionMinutes: 480 };
+
+      const createdAtRaw = snowVal(inc[incidentConfig.createdColumn]);
+      const sysId = snowVal(inc.sys_id);
+      const respondedAtRaw = incidentFirstResponseMap[sysId]; // First comment/work note timestamp from sys_journal_field
+
+      // Parse all ServiceNow timestamps as UTC (they come without Z suffix)
+      const createdDate = parseSnowDateUTC(createdAtRaw);
+      const respondedDate = parseSnowDateUTC(respondedAtRaw);
+
+      let responseMinutes = null;
+      let slaMet = null;
+      let expectedResponse = null;
+
+      // Calculate expected response using business hours (all in UTC)
+      if (createdDate && !isNaN(createdDate.getTime())) {
+        expectedResponse = addBusinessMinutes(createdDate, threshold.responseMinutes, hoursMap);
+        if (expectedResponse) expectedResponse = expectedResponse.toISOString();
+      }
+
+      // Calculate actual response time in business minutes (all in UTC)
+      if (createdDate && respondedDate && !isNaN(createdDate.getTime()) && !isNaN(respondedDate.getTime())) {
+        responseMinutes = calcBusinessMinutesBetween(createdDate, respondedDate, hoursMap);
+        slaMet = responseMinutes <= threshold.responseMinutes;
+      }
+
+      return {
+        number: snowVal(inc.number), shortDescription: snowVal(inc.short_description),
+        priority: normalizedPriority || priorityRaw, state: snowVal(inc.state), assignedTo: snowVal(inc.assigned_to),
+        createdAt: createdDate ? createdDate.toISOString() : createdAtRaw,
+        respondedAt: respondedDate ? respondedDate.toISOString() : respondedAtRaw,
+        responseMinutes, targetMinutes: threshold.responseMinutes, slaMet, expectedResponse,
+      };
+    });
+
+    // Apply timezone conversion to all date fields
+    const effectiveTz = await getEffectiveTimezone();
+    const tzIncidents = incidentSlaData.map(inc => ({
+      ...inc,
+      createdAt: convertToTimezone(inc.createdAt, effectiveTz),
+      respondedAt: convertToTimezone(inc.respondedAt, effectiveTz),
+      expectedResponse: convertToTimezone(inc.expectedResponse, effectiveTz),
+    }));
+
+    const summaryByPriority = {};
+    for (const inc of tzIncidents) {
+      if (!summaryByPriority[inc.priority]) {
+        summaryByPriority[inc.priority] = { total: 0, met: 0, breached: 0, pending: 0, targetMinutes: inc.targetMinutes };
+      }
+      summaryByPriority[inc.priority].total++;
+      if (inc.slaMet === true) summaryByPriority[inc.priority].met++;
+      else if (inc.slaMet === false) summaryByPriority[inc.priority].breached++;
+      else summaryByPriority[inc.priority].pending++;
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        period, startDate, endDate: now.toISOString().slice(0, 10),
+        generatedAt: convertToTimezone(new Date().toISOString(), effectiveTz),
+        timezone: effectiveTz,
+        totalIncidents: incidents.length, summaryByPriority,
+        incidents: tzIncidents,
+        incidentConfig: { createdColumn: incidentConfig.createdColumn, responseColumn: responseCol, priorityColumn: incidentConfig.priorityColumn },
+        businessHours: businessHours.map(day => ({
+          dayOfWeek: day.day_of_week, isBusinessDay: day.is_business_day,
+          startTime: day.start_time, endTime: day.end_time
+        })),
+        slaThresholds: Object.entries(slaThresholds).map(([key, val]) => ({
+          priority: key, priorityValue: val.priorityValue,
+          responseMinutes: val.responseMinutes, resolutionMinutes: val.resolutionMinutes, enabled: true
+        }))
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { message: `Response SLA report failed: ${err.message}` } });
   }
 });
 

@@ -399,7 +399,7 @@ export default function SLAThresholds() {
           </div>
           <div>
             <h2 className="text-base font-bold text-surface-800">Incident SLA Thresholds</h2>
-            <p className="text-xs text-surface-500">Priorities are fetched from ServiceNow.Configure response/resolution targets per priority.</p>
+            <p className="text-xs text-surface-500">Priorities are fetched from ServiceNow. Configure response/resolution targets per priority.</p>
             {/* Priority fetch status - inline after header */}
             <div className={`flex items-center gap-2 mt-2 text-xs font-medium ${
               priorityFetch.loading 

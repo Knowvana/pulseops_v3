@@ -8,7 +8,7 @@
     "dev": "concurrently -n UI,API -c cyan,green \"npm run dev:ui\" \"npm run dev:api:watch\"",
     "dev:ui": "vite",
     "dev:api": "node src/apiserver/server.js",
-    "dev:api:watch": "node --watch-path=src/apiserver --watch-path=src/modules --watch-preserve-output src/apiserver/server.js",
+    "dev:api:watch": "node --watch-path=src/apiserver --watch-preserve-output src/apiserver/server.js",
     "build": "vite build",
     "build:module": "node scripts/build-module.js",
     "preview": "vite preview",

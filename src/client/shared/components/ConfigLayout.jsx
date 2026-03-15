@@ -28,7 +28,8 @@
 // ARCHITECTURE: Fully reusable, accepts any number of tabs. Each module can
 // pass its own tab configuration with custom content components.
 // ============================================================================
-import React, { useMemo, useState, createContext, useContext, useCallback } from 'react';
+import React, { useMemo, useState, createContext, useContext, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 // ── Context for cross-tab navigation ─────────────────────────────────────────
 const ConfigLayoutContext = createContext(null);
@@ -48,9 +49,12 @@ function flattenTabs(tabs) {
 }
 
 export default function ConfigLayout({ title, subtitle, icon: HeaderIcon, tabs = [], defaultTab }) {
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
   const allLeafTabs = useMemo(() => flattenTabs(tabs), [tabs]);
   const firstLeafId = allLeafTabs[0]?.id;
-  const [activeTab, setActiveTab] = useState(defaultTab || firstLeafId);
+  const resolvedDefault = (tabParam && allLeafTabs.some(t => t.id === tabParam)) ? tabParam : (defaultTab || firstLeafId);
+  const [activeTab, setActiveTab] = useState(resolvedDefault);
   const [expandedSections, setExpandedSections] = useState(() => {
     const initial = {};
     tabs.forEach(tab => {
@@ -60,6 +64,20 @@ export default function ConfigLayout({ title, subtitle, icon: HeaderIcon, tabs =
     });
     return initial;
   });
+
+  // React to ?tab= URL param changes (e.g. navigating from a report view)
+  useEffect(() => {
+    if (tabParam && allLeafTabs.some(t => t.id === tabParam) && tabParam !== activeTab) {
+      setActiveTab(tabParam);
+      // Auto-expand parent section if the target tab is inside a collapsed section
+      for (const tab of tabs) {
+        if (tab.type === 'section' && (tab.children || []).some(c => c.id === tabParam)) {
+          setExpandedSections(prev => ({ ...prev, [tab.id]: true }));
+          break;
+        }
+      }
+    }
+  }, [tabParam, allLeafTabs, tabs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const activeTabObj = allLeafTabs.find(t => t.id === activeTab);
 

@@ -28,9 +28,12 @@ export default function LeftSideNavBar({
   onSelectItem,
   collapsed: controlledCollapsed,
   onToggleCollapse,
+  width = 240,
+  onWidthChange,
 }) {
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const [expandedSections, setExpandedSections] = useState({ 'section-4': true }); // Reports section (index 4) expanded by default
+  const [isDragging, setIsDragging] = useState(false);
   const isCollapsed = controlledCollapsed !== undefined ? controlledCollapsed : internalCollapsed;
   const toggleCollapse = onToggleCollapse || (() => setInternalCollapsed(!internalCollapsed));
 
@@ -42,12 +45,64 @@ export default function LeftSideNavBar({
     }));
   };
 
+  // Handle drag start on resizer
+  const handleMouseDown = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  // Handle drag move with requestAnimationFrame for smooth performance
+  React.useEffect(() => {
+    if (!isDragging) return;
+
+    let animationFrameId = null;
+    let lastX = 0;
+
+    const handleMouseMove = (e) => {
+      lastX = e.clientX;
+      
+      // Use requestAnimationFrame to batch updates and prevent layout thrashing
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      
+      animationFrameId = requestAnimationFrame(() => {
+        const newWidth = lastX;
+        // Constrain width between 180px (min) and 400px (max)
+        if (newWidth >= 180 && newWidth <= 400) {
+          onWidthChange?.(newWidth);
+        }
+      });
+    };
+
+    const handleMouseUp = () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      setIsDragging(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, onWidthChange]);
+
   return (
-    <aside className={`
-      flex flex-col bg-white border-r border-surface-200/80
-      transition-all duration-300 ease-in-out
-      ${isCollapsed ? 'w-16' : 'w-60'}
-    `}>
+    <aside 
+      className={`
+        flex flex-col bg-white border-r border-surface-200/80 relative
+        transition-all duration-300 ease-in-out
+        ${isDragging ? 'select-none' : ''}
+      `}
+      style={{ width: isCollapsed ? '64px' : `${width}px` }}
+    >
       {/* Header with title and collapse toggle */}
       <div className={`flex items-center border-b border-surface-100 ${isCollapsed ? 'justify-center px-2 py-4' : 'justify-between px-5 pt-5 pb-3'}`}>
         {!isCollapsed && title && (
@@ -134,7 +189,7 @@ export default function LeftSideNavBar({
               onClick={() => onSelectItem?.(item.id)}
               title={isCollapsed ? item.label : undefined}
               className={`
-                w-full flex items-center gap-3 rounded-lg
+                w-full flex items-start gap-3 rounded-lg
                 transition-all duration-200 group
                 ${isCollapsed ? 'justify-center px-2 py-2.5' : isIndented ? 'pl-7 pr-3 py-2' : 'px-3 py-2.5'}
                 ${isActive
@@ -146,11 +201,16 @@ export default function LeftSideNavBar({
               {Icon && (
                 <Icon
                   size={isIndented ? 14 : 18}
-                  className={`flex-shrink-0 ${isActive ? 'text-brand-600' : 'text-surface-400 group-hover:text-surface-600'}`}
+                  className={`flex-shrink-0 mt-0.5 ${isActive ? 'text-brand-600' : 'text-surface-400 group-hover:text-surface-600'}`}
                 />
               )}
               {!isCollapsed && (
-                <span className={`${isIndented ? 'text-xs' : 'text-sm'} font-medium truncate`}>{item.label}</span>
+                <span 
+                  className={`${isIndented ? 'text-xs' : 'text-sm'} font-medium line-clamp-2 break-words text-left`}
+                  title={item.label}
+                >
+                  {item.label}
+                </span>
               )}
               {!isCollapsed && item.badge && (
                 <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-brand-100 text-brand-600">
@@ -161,6 +221,23 @@ export default function LeftSideNavBar({
           );
         })}
       </nav>
+
+      {/* Draggable resizer handle — only visible when not collapsed */}
+      {!isCollapsed && (
+        <div
+          onMouseDown={handleMouseDown}
+          className={`
+            absolute right-0 top-0 bottom-0 w-1 cursor-col-resize
+            transition-all duration-200
+            ${isDragging 
+              ? 'bg-gradient-to-b from-brand-500 to-brand-600 shadow-lg' 
+              : 'bg-surface-200 hover:bg-gradient-to-b hover:from-brand-400 hover:to-brand-500'
+            }
+          `}
+          style={{ willChange: isDragging ? 'width' : 'auto' }}
+          title="Drag to resize sidebar"
+        />
+      )}
     </aside>
   );
 }

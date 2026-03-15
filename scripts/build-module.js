@@ -132,6 +132,15 @@ console.log(`[build-module] Step 3/3: Copying API directory...`);
 if (fs.existsSync(apiDir) && fs.existsSync(path.join(apiDir, 'index.js'))) {
   const outApiDir = path.join(outDir, 'api');
   copyDirSync(apiDir, outApiDir);
+
+  // ── Cache-bust all relative imports in ALL API .js files ───────────────────
+  // Node.js ESM caches modules by resolved URL. Adding ?t=<buildTimestamp> to
+  // every relative import across all .js files forces Node to re-evaluate the
+  // entire module graph on each hot-reload, enabling true zero-restart hot-reload.
+  const buildTimestamp = Date.now();
+  cacheBustImports(outApiDir, buildTimestamp);
+  console.log(`[build-module] Cache-busted all API imports (stamp: ${buildTimestamp})`);
+
   console.log(`[build-module] API directory copied to output.`);
 } else {
   console.log(`[build-module] No API directory found — UI-only module.`);
@@ -156,6 +165,50 @@ if (fs.existsSync(path.join(outDir, 'api'))) {
 }
 if (fs.existsSync(path.join(outDir, 'database'))) {
   console.log(`[build-module]   → database/    (DB schema)`);
+}
+
+// ── Step 5: Hot-reload module API routes (zero downtime) ──────────────────
+// Calls POST /api/modules/:id/reload to unload + reload the module's API
+// routes dynamically without restarting the server.
+console.log(`\n[build-module] Hot-reloading module '${moduleId}' API routes...`);
+try {
+  const reloadUrl = `http://localhost:4001/api/modules/${moduleId}/dev-reload`;
+  const resp = await fetch(reloadUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (resp.ok) {
+    const data = await resp.json();
+    console.log(`[build-module] ✓ Hot-reload successful: ${data.message || 'Module reloaded'}`);
+  } else {
+    const status = resp.status;
+    console.log(`[build-module] ⚠ Hot-reload skipped (HTTP ${status}) — server may not be running or module not enabled`);
+  }
+} catch (err) {
+  // Server not running or unreachable — that's fine, module will load on next startup
+  console.log(`[build-module] ⚠ Hot-reload skipped — dev server not running (${err.code || err.message})`);
+}
+
+// ── Utility: Cache-bust all relative imports in .js files ────────────────────
+// Recursively finds all .js files in dir and appends ?t=<stamp> to relative imports.
+// This ensures Node.js ESM treats every file as a new module on each build.
+function cacheBustImports(dir, stamp) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      cacheBustImports(fullPath, stamp);
+    } else if (entry.name.endsWith('.js')) {
+      let content = fs.readFileSync(fullPath, 'utf-8');
+      // Match: from './foo.js' or from "../bar.js" (relative .js imports)
+      const updated = content.replace(
+        /(from\s+['"])(\.\.?\/[^'"]+\.js)(['"])/g,
+        `$1$2?t=${stamp}$3`
+      );
+      if (updated !== content) {
+        fs.writeFileSync(fullPath, updated, 'utf-8');
+      }
+    }
+  }
 }
 
 // ── Utility: Recursive directory copy ────────────────────────────────────────

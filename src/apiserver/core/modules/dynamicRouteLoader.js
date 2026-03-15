@@ -69,7 +69,9 @@ export async function loadModuleRoutes(app, moduleId) {
   }
 
   try {
-    // Convert to file:// URL for Windows compatibility + cache busting
+    // Cache busting: build-module.js stamps all relative imports in dist-modules
+    // with ?t=<buildTimestamp>, so each build produces unique import URLs.
+    // We add our own ?t= here to ensure index.js itself is also freshly loaded.
     const fileUrl = pathToFileURL(apiIndexPath).href + `?t=${Date.now()}`;
     const moduleExports = await import(fileUrl);
 

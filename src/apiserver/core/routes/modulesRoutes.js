@@ -402,6 +402,30 @@ router.post('/:id/disable', authenticate, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// POST /modules/:id/dev-reload — Localhost-only hot-reload (no auth required)
+// Called by build-module.js script after building to dist-modules/
+// Only accessible from localhost — safe for development use
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/:id/dev-reload', async (req, res) => {
+  const ip = req.ip || req.connection?.remoteAddress || '';
+  const isLocalhost = ip === '::1' || ip === '127.0.0.1' || ip === '::ffff:127.0.0.1';
+  if (!isLocalhost) {
+    return res.status(403).json({ success: false, error: { message: 'Dev-reload is only available from localhost.' } });
+  }
+
+  const { id } = req.params;
+  try {
+    const unloadResult = await unloadModuleRoutes(id);
+    const app = getApp(req);
+    const loadResult = await loadModuleRoutes(app, id);
+    logger.info(`[DynamicRouteLoader] Dev hot-reload '${id}': ${loadResult.message}`);
+    return res.json({ success: true, message: `Module '${id}' hot-reloaded. ${loadResult.message}` });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: { message: `Hot-reload failed: ${err.message}` } });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /modules/:id/reload — Force unload + reload of module API routes
 // Useful for development: pick up changes to dist-modules without restart
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,14 +1,14 @@
 // ============================================================================
-// ServiceNowSlaReport — PulseOps V3 ServiceNow Module
+// ServiceNowResponseSlaReport — PulseOps V3 ServiceNow Module
 //
-// PURPOSE: Industry-grade Incident SLA Operational Report. Shows:
+// PURPOSE: Incident Response SLA Operational Report. Shows:
 //   - Comprehensive stats summary (total, by priority, SLA met/breached/pending)
 //   - Date range filter: Daily / Weekly / Monthly / Custom date range
 //   - Detailed SLA calculation columns per incident:
-//     Created, Expected Closure, Actual Closure, Resolution Time,
-//     SLA Target, Time Remaining / Overdue, SLA Status
+//     Created, Expected Response, Actual Response, Response Time,
+//     SLA Target, Variance, SLA Status
 //
-// DATA: Fetches live from GET /api/servicenow/reports/sla/incidents
+// DATA: Fetches live from GET /api/servicenow/reports/sla/incidents/response
 // ============================================================================
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
@@ -16,14 +16,14 @@ import {
   ShieldCheck, Loader2, AlertCircle, CheckCircle2, XCircle,
   Clock, Calendar, CalendarDays, CalendarRange, RefreshCw,
   FileText, TrendingUp, ArrowUpRight, ArrowDownRight, Filter,
-  Download, Search, Globe,
+  Download, Search, ArrowRight, Settings, Globe,
 } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
 
-const log = createLogger('ServiceNowSlaReport');
+const log = createLogger('ServiceNowResponseSlaReport');
 
-const snApi = { slaIncidents: '/api/servicenow/reports/sla/incidents' };
+const snApi = { slaIncidents: '/api/servicenow/reports/sla/incidents/response' };
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const PERIOD_OPTIONS = [
@@ -85,19 +85,13 @@ function getIsoDate(daysAgo = 0) {
 }
 
 // ── Stats Card ───────────────────────────────────────────────────────────────
-function StatCard({ label, value, icon: Icon, color, bgColor, subtext, trend }) {
+function StatCard({ label, value, icon: Icon, color, bgColor, subtext }) {
   return (
     <div className="bg-white rounded-xl border border-surface-200 p-4 shadow-sm">
       <div className="flex items-start justify-between">
         <div className={`w-9 h-9 rounded-lg ${bgColor} flex items-center justify-center flex-shrink-0`}>
           <Icon size={16} className={color} />
         </div>
-        {trend && (
-          <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold ${trend > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-            {trend > 0 ? <ArrowUpRight size={10} /> : <ArrowDownRight size={10} />}
-            {Math.abs(trend)}%
-          </span>
-        )}
       </div>
       <p className="text-2xl font-black text-surface-800 mt-2">{value}</p>
       <p className="text-xs text-surface-500 font-medium mt-0.5">{label}</p>
@@ -111,7 +105,6 @@ function PrioritySummaryTable({ summaryByPriority }) {
   const entries = summaryByPriority ? Object.entries(summaryByPriority) : [];
   if (entries.length === 0) return null;
 
-  // Totals row
   const totals = entries.reduce((acc, [, d]) => ({
     total: acc.total + (d.met || 0) + (d.breached || 0) + (d.pending || 0),
     met: acc.met + (d.met || 0),
@@ -125,7 +118,7 @@ function PrioritySummaryTable({ summaryByPriority }) {
   return (
     <div className="bg-white rounded-xl border border-surface-200 shadow-sm overflow-hidden">
       <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50">
-        <h3 className="text-xs font-bold text-surface-600 uppercase tracking-wide">SLA Summary by Priority</h3>
+        <h3 className="text-xs font-bold text-surface-600 uppercase tracking-wide">Response SLA Summary by Priority</h3>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -158,38 +151,25 @@ function PrioritySummaryTable({ summaryByPriority }) {
                   <td className="px-4 py-2.5 text-right text-xs font-bold text-surface-700">{total}</td>
                   <td className="px-4 py-2.5 text-right text-xs font-bold text-emerald-600">{d.met || 0}</td>
                   <td className="px-4 py-2.5 text-right text-xs font-bold text-rose-600">{d.breached || 0}</td>
-                  <td className="px-4 py-2.5 text-right text-xs font-medium text-surface-400">{d.pending || 0}</td>
-                  <td className="px-4 py-2.5 text-right text-xs text-surface-500">
-                    {d.targetMinutes ? formatMinutes(d.targetMinutes) : '—'}
-                  </td>
-                  <td className="px-4 py-2.5 text-right">
-                    {compliance !== null ? (
-                      <span className={`text-xs font-black ${compColor}`}>{compliance}%</span>
-                    ) : (
-                      <span className="text-xs text-surface-400">—</span>
-                    )}
-                  </td>
+                  <td className="px-4 py-2.5 text-right text-xs font-bold text-surface-400">{d.pending || 0}</td>
+                  <td className="px-4 py-2.5 text-right text-xs font-semibold text-surface-500">{formatMinutes(d.targetMinutes)}</td>
+                  <td className={`px-4 py-2.5 text-right text-xs font-bold ${compColor}`}>{compliance !== null ? `${compliance}%` : '—'}</td>
                 </tr>
               );
             })}
-          </tbody>
-          <tfoot>
-            <tr className="bg-surface-50 border-t-2 border-surface-200">
-              <td className="px-4 py-2.5 text-xs font-black text-surface-700 uppercase">Total</td>
-              <td className="px-4 py-2.5 text-right text-xs font-black text-surface-700">{totals.total}</td>
-              <td className="px-4 py-2.5 text-right text-xs font-black text-emerald-600">{totals.met}</td>
-              <td className="px-4 py-2.5 text-right text-xs font-black text-rose-600">{totals.breached}</td>
-              <td className="px-4 py-2.5 text-right text-xs font-bold text-surface-400">{totals.pending}</td>
+            {/* Totals row */}
+            <tr className="bg-surface-50 font-bold">
+              <td className="px-4 py-2.5 text-xs text-surface-700 uppercase">Total</td>
+              <td className="px-4 py-2.5 text-right text-xs text-surface-800">{totals.total}</td>
+              <td className="px-4 py-2.5 text-right text-xs text-emerald-700">{totals.met}</td>
+              <td className="px-4 py-2.5 text-right text-xs text-rose-700">{totals.breached}</td>
+              <td className="px-4 py-2.5 text-right text-xs text-surface-500">{totals.pending}</td>
               <td className="px-4 py-2.5 text-right text-xs text-surface-500">—</td>
-              <td className="px-4 py-2.5 text-right">
-                {overallCompliance !== null ? (
-                  <span className={`text-xs font-black ${overallCompliance >= 90 ? 'text-emerald-600' : overallCompliance >= 70 ? 'text-amber-600' : 'text-rose-600'}`}>
-                    {overallCompliance}%
-                  </span>
-                ) : <span className="text-xs text-surface-400">—</span>}
+              <td className={`px-4 py-2.5 text-right text-xs ${overallCompliance !== null ? (overallCompliance >= 90 ? 'text-emerald-700' : overallCompliance >= 70 ? 'text-amber-700' : 'text-rose-700') : 'text-surface-500'}`}>
+                {overallCompliance !== null ? `${overallCompliance}%` : '—'}
               </td>
             </tr>
-          </tfoot>
+          </tbody>
         </table>
       </div>
     </div>
@@ -199,38 +179,49 @@ function PrioritySummaryTable({ summaryByPriority }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
-export default function ServiceNowSlaReport() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [period, setPeriod] = useState('monthly');
+export default function ServiceNowResponseSlaReport({ onNavigate }) {
+  const [data, setData]             = useState(null);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState(null);
+  const [notConfigured, setNotConfigured] = useState(false);
+  const [period, setPeriod]         = useState('monthly');
   const [customFrom, setCustomFrom] = useState(getIsoDate(30));
-  const [customTo, setCustomTo] = useState(getIsoDate(0));
+  const [customTo, setCustomTo]     = useState(getIsoDate(0));
   const [searchQuery, setSearchQuery] = useState('');
   const initRan = useRef(false);
 
-  // ── Fetch SLA report data ──────────────────────────────────────────────
-  const fetchSlaReport = useCallback(async (p = period, from = customFrom, to = customTo) => {
+  // ── Fetch report data ───────────────────────────────────────────────────
+  const fetchSlaReport = useCallback(async (p = period, from, to) => {
     setLoading(true);
     setError(null);
+    setNotConfigured(false);
     try {
       let url = `${snApi.slaIncidents}?period=${p}`;
-      if (p === 'custom' && from && to) {
-        url += `&from=${from}&to=${to}`;
-      }
+      if (p === 'custom' && from && to) url += `&from=${from}&to=${to}`;
       const res = await ApiClient.get(url);
       if (res?.success) {
         setData(res.data);
-        log.info('fetchSlaReport', 'SLA report loaded', { period: p, total: res.data.totalIncidents });
+        log.info('fetchSlaReport', 'Response SLA report loaded', { total: res.data.totalIncidents, period: p });
       } else {
-        setError(res?.error?.message || 'Failed to load SLA report.');
+        const msg = res?.error?.message || '';
+        if (msg.toLowerCase().includes('column is not configured') || msg.toLowerCase().includes('sla column mapping')) {
+          setNotConfigured(true);
+        } else {
+          setError(msg || 'Failed to load Response SLA report.');
+        }
       }
     } catch (err) {
-      setError(`Failed to load SLA report: ${err.message}`);
+      const msg = err.message || '';
+      if (msg.toLowerCase().includes('column is not configured') || msg.toLowerCase().includes('sla column mapping')) {
+        setNotConfigured(true);
+      } else {
+        setError(msg || 'Failed to load Response SLA report.');
+        log.error('fetchSlaReport', 'Fetch failed', { error: err.message });
+      }
     } finally {
       setLoading(false);
     }
-  }, [period, customFrom, customTo]);
+  }, [period]);
 
   useEffect(() => {
     if (initRan.current) return;
@@ -238,23 +229,24 @@ export default function ServiceNowSlaReport() {
     fetchSlaReport();
   }, [fetchSlaReport]);
 
-  const handlePeriodChange = (p) => {
-    setPeriod(p);
-    if (p !== 'custom') fetchSlaReport(p);
-  };
+  const handlePeriodChange = useCallback((newPeriod) => {
+    setPeriod(newPeriod);
+    if (newPeriod !== 'custom') fetchSlaReport(newPeriod);
+  }, [fetchSlaReport]);
 
-  const handleCustomApply = () => {
+  const handleCustomApply = useCallback(() => {
     fetchSlaReport('custom', customFrom, customTo);
-  };
+  }, [fetchSlaReport, customFrom, customTo]);
 
-  // ── Computed stats ─────────────────────────────────────────────────────
+  // ── Stats summary ─────────────────────────────────────────────────────
   const stats = useMemo(() => {
     if (!data) return { total: 0, met: 0, breached: 0, pending: 0, compliance: null };
-    const entries = data.summaryByPriority ? Object.values(data.summaryByPriority) : [];
-    const met = entries.reduce((s, d) => s + (d.met || 0), 0);
-    const breached = entries.reduce((s, d) => s + (d.breached || 0), 0);
-    const pending = entries.reduce((s, d) => s + (d.pending || 0), 0);
-    const total = met + breached + pending;
+    const s = data.summaryByPriority || {};
+    let total = 0, met = 0, breached = 0, pending = 0;
+    Object.values(s).forEach(d => {
+      met += d.met || 0; breached += d.breached || 0; pending += d.pending || 0;
+      total += (d.met || 0) + (d.breached || 0) + (d.pending || 0);
+    });
     const resolved = total - pending;
     const compliance = resolved > 0 ? Math.round((met / resolved) * 100) : null;
     return { total, met, breached, pending, compliance };
@@ -271,15 +263,15 @@ export default function ServiceNowSlaReport() {
         <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${inc.shortDescription || ''}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px">${inc.priority}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px">${inc.createdAt ? new Date(inc.createdAt).toLocaleString() : '—'}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px">${inc.expectedClosure ? new Date(inc.expectedClosure).toLocaleString() : '—'}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px">${inc.closedAt ? new Date(inc.closedAt).toLocaleString() : '—'}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:right">${inc.resolutionMinutes != null ? formatMinutes(inc.resolutionMinutes) : '—'}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px">${inc.expectedResponse ? new Date(inc.expectedResponse).toLocaleString() : '—'}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px">${inc.respondedAt ? new Date(inc.respondedAt).toLocaleString() : '—'}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:right">${inc.responseMinutes != null ? formatMinutes(inc.responseMinutes) : '—'}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:right">${formatMinutes(inc.targetMinutes)}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px;font-weight:bold;color:${inc.slaMet === true ? '#059669' : inc.slaMet === false ? '#dc2626' : '#6b7280'}">${inc.slaMet === true ? 'Met' : inc.slaMet === false ? 'Breached' : 'Pending'}</td>
       </tr>
     `).join('');
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>Incident Resolution SLA Report</title></head><body style="font-family:system-ui,sans-serif;padding:24px;color:#1e293b">
-      <h1 style="font-size:18px;margin:0">Incident Resolution SLA Report</h1>
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Incident Response SLA Report</title></head><body style="font-family:system-ui,sans-serif;padding:24px;color:#1e293b">
+      <h1 style="font-size:18px;margin:0">Incident Response SLA Report</h1>
       <p style="font-size:12px;color:#64748b;margin:4px 0 16px">Generated: ${new Date().toLocaleString()} | Period: ${data.startDate} to ${data.endDate} (${period})</p>
       <table style="width:100%;border-collapse:collapse">
         <thead><tr style="background:#f1f5f9">
@@ -287,9 +279,9 @@ export default function ServiceNowSlaReport() {
           <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Description</th>
           <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Priority</th>
           <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Created</th>
-          <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Expected Closure</th>
-          <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Actual Closure</th>
-          <th style="padding:8px;text-align:right;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Resolution</th>
+          <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Expected Response</th>
+          <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Actual Response</th>
+          <th style="padding:8px;text-align:right;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Response Time</th>
           <th style="padding:8px;text-align:right;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Target</th>
           <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">SLA Status</th>
         </tr></thead>
@@ -315,17 +307,42 @@ export default function ServiceNowSlaReport() {
 
   // ── Render ─────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 space-y-5 animate-fade-in">
+    <div className="p-6 space-y-5 animate-fade-in relative">
+      {/* ── Configuration Alert Modal (centered view-modal) ───────────────── */}
+      {notConfigured && !loading && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-surface-50/90 backdrop-blur-sm rounded-xl min-h-[60vh]">
+          <div className="bg-white border border-amber-200 rounded-2xl shadow-xl p-8 max-w-md mx-4 text-center space-y-4 animate-fade-in">
+            <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center mx-auto">
+              <Settings size={28} className="text-amber-500" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-surface-800 mb-1">Response SLA Column Not Configured</h3>
+              <p className="text-sm text-surface-500">
+                The Response SLA column mapping has not been set up yet. Please configure the Response Column in the SLA Column Mapping settings to enable this report.
+              </p>
+            </div>
+            <button
+              onClick={() => onNavigate?.('config?tab=slaColumnMapping')}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-xl transition-colors"
+            >
+              <Clock size={15} />
+              Go to SLA Column Mapping
+              <ArrowRight size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Report Header ──────────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl border border-surface-200 shadow-sm p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center">
-                <ShieldCheck size={20} className="text-white" />
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-teal-500 to-teal-700 flex items-center justify-center">
+                <Clock size={20} className="text-white" />
               </div>
               <div>
-                <h1 className="text-lg font-bold text-surface-800">Incident Resolution SLA Report</h1>
+                <h1 className="text-lg font-bold text-surface-800">Incident Response SLA Report</h1>
                 <div className="flex items-center gap-3 mt-1 flex-wrap">
                   <span className="text-[11px] text-surface-500">
                     <span className="font-semibold text-surface-600">Generated:</span> {data?.generatedAt ? formatDate(data.generatedAt) : new Date().toLocaleString()}
@@ -369,27 +386,26 @@ export default function ServiceNowSlaReport() {
             <button
               onClick={() => fetchSlaReport()}
               disabled={loading}
-              className="p-2 rounded-lg text-surface-400 hover:text-brand-600 hover:bg-brand-50 transition-colors disabled:opacity-40"
-              title="Refresh"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-semibold hover:bg-brand-700 transition-colors disabled:opacity-60"
             >
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+              Refresh
             </button>
             <button
               onClick={handleDownloadPdf}
-              disabled={loading || !data}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-brand-300 text-brand-700 bg-brand-50 hover:bg-brand-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              title="Download Report as PDF"
+              disabled={!data || loading}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-200 text-surface-600 text-xs font-semibold hover:bg-surface-50 transition-colors disabled:opacity-50"
             >
-              <Download size={13} />
-              Download PDF
+              <Download size={12} />
+              PDF
             </button>
           </div>
         </div>
       </div>
 
-      {/* ── Custom Date Range Picker ──────────────────────────────────────── */}
+      {/* ── Custom Date Range ──────────────────────────────────────────────── */}
       {period === 'custom' && (
-        <div className="flex items-end gap-3 bg-white rounded-xl border border-surface-200 p-4 shadow-sm">
+        <div className="flex items-end gap-3 bg-white rounded-xl border border-surface-200 shadow-sm px-5 py-4">
           <div>
             <label className="block text-[10px] font-bold text-surface-500 uppercase tracking-wider mb-1">From</label>
             <input
@@ -430,7 +446,7 @@ export default function ServiceNowSlaReport() {
       {loading && (
         <div className="flex flex-col items-center justify-center py-16">
           <Loader2 size={28} className="text-brand-400 animate-spin mb-3" />
-          <p className="text-sm text-surface-500">Loading SLA data from ServiceNow...</p>
+          <p className="text-sm text-surface-500">Loading Response SLA data from ServiceNow...</p>
         </div>
       )}
 
@@ -441,7 +457,7 @@ export default function ServiceNowSlaReport() {
             {/* First Column: Reference Information */}
             <div className="bg-white rounded-xl border-2 border-surface-300 shadow-sm p-5">
               <h2 className="text-sm font-bold text-surface-800 mb-4 flex items-center gap-2">
-                <Clock size={16} className="text-brand-500" />
+                <Clock size={16} className="text-teal-500" />
                 Report Configuration Reference
               </h2>
               <div className="grid lg:grid-cols-2 gap-6">
@@ -468,9 +484,9 @@ export default function ServiceNowSlaReport() {
                   </div>
                 </div>
                 
-                {/* SLA Thresholds */}
+                {/* SLA Thresholds — Response */}
                 <div className="border border-surface-200 rounded-lg p-3">
-                  <h3 className="text-xs font-semibold text-surface-700 uppercase tracking-wider mb-3">SLA Targets (Resolution)</h3>
+                  <h3 className="text-xs font-semibold text-surface-700 uppercase tracking-wider mb-3">SLA Targets (Response)</h3>
                   <div className="space-y-1.5">
                     {data.slaThresholds && data.slaThresholds.length > 0 ? (
                       data.slaThresholds
@@ -478,10 +494,10 @@ export default function ServiceNowSlaReport() {
                         .map(sla => (
                           <div key={sla.priority} className="flex items-center justify-between text-xs py-1 border-b border-surface-100">
                             <span className="text-surface-600 font-medium">
-                              {sla.priority} 
+                              {sla.priority}
                               {sla.priorityValue && sla.priorityValue !== sla.priority && ` (${sla.priorityValue})`}
                             </span>
-                            <span className="text-surface-500">{formatMinutes(sla.resolutionMinutes)}</span>
+                            <span className="text-surface-500">{formatMinutes(sla.responseMinutes)}</span>
                           </div>
                         ))
                     ) : (
@@ -524,7 +540,7 @@ export default function ServiceNowSlaReport() {
                 icon={Clock}
                 color="text-surface-500"
                 bgColor="bg-surface-100"
-                subtext="Awaiting resolution"
+                subtext="Awaiting response"
               />
               <StatCard
                 label="Overall Compliance"
@@ -584,9 +600,9 @@ export default function ServiceNowSlaReport() {
                       <th className="text-left px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">State</th>
                       <th className="text-left px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">Assigned To</th>
                       <th className="text-left px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">Created</th>
-                      <th className="text-left px-3 py-2.5 text-[10px] font-bold text-brand-600 uppercase tracking-wider whitespace-nowrap bg-brand-50/50">Expected Closure</th>
-                      <th className="text-left px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">Actual Closure</th>
-                      <th className="text-right px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">Resolution</th>
+                      <th className="text-left px-3 py-2.5 text-[10px] font-bold text-teal-600 uppercase tracking-wider whitespace-nowrap bg-teal-50/50">Expected Response</th>
+                      <th className="text-left px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">Actual Response</th>
+                      <th className="text-right px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">Response Time</th>
                       <th className="text-right px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">SLA Target</th>
                       <th className="text-right px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">Variance</th>
                       <th className="text-center px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">SLA Status</th>
@@ -595,11 +611,9 @@ export default function ServiceNowSlaReport() {
                   <tbody className="divide-y divide-surface-50">
                     {filteredIncidents.map((inc, idx) => {
                       const cfg = PRIORITY_CONFIG[inc.priority] || PRIORITY_CONFIG['4 - Low'];
-                      const variance = (inc.targetMinutes != null && inc.resolutionMinutes != null)
-                        ? inc.targetMinutes - inc.resolutionMinutes
+                      const variance = (inc.targetMinutes != null && inc.responseMinutes != null)
+                        ? inc.targetMinutes - inc.responseMinutes
                         : null;
-                      // Expected closure from backend (already calculated with business hours)
-                      const expectedClosure = inc.expectedClosure;
 
                       return (
                         <tr key={idx} className="hover:bg-surface-50/50 transition-colors group">
@@ -616,11 +630,11 @@ export default function ServiceNowSlaReport() {
                           <td className="px-3 py-2 text-xs text-surface-600">{STATE_MAP[inc.state] || inc.state}</td>
                           <td className="px-3 py-2 text-xs text-surface-500 max-w-[120px] truncate">{inc.assignedTo || '—'}</td>
                           <td className="px-3 py-2 text-xs text-surface-500 whitespace-nowrap">{formatDate(inc.createdAt)}</td>
-                          <td className="px-3 py-2 text-xs font-semibold text-brand-700 whitespace-nowrap bg-brand-50/30">
-                            {expectedClosure ? formatDate(expectedClosure) : '—'}
+                          <td className="px-3 py-2 text-xs font-semibold text-teal-700 whitespace-nowrap bg-teal-50/30">
+                            {inc.expectedResponse ? formatDate(inc.expectedResponse) : '—'}
                           </td>
-                          <td className="px-3 py-2 text-xs text-surface-500 whitespace-nowrap">{formatDate(inc.closedAt)}</td>
-                          <td className="px-3 py-2 text-right text-xs font-semibold text-surface-700">{formatMinutes(inc.resolutionMinutes)}</td>
+                          <td className="px-3 py-2 text-xs text-surface-500 whitespace-nowrap">{formatDate(inc.respondedAt)}</td>
+                          <td className="px-3 py-2 text-right text-xs font-semibold text-surface-700">{formatMinutes(inc.responseMinutes)}</td>
                           <td className="px-3 py-2 text-right text-xs text-surface-500">{formatMinutes(inc.targetMinutes)}</td>
                           <td className="px-3 py-2 text-right text-xs font-semibold whitespace-nowrap">
                             {variance !== null ? (

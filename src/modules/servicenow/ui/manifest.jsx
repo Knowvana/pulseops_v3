@@ -30,7 +30,7 @@
 // ============================================================================
 
 import React from 'react';
-import { Headset, LayoutDashboard, BarChart3, Sliders, Wifi, Clock, RefreshCw, ListFilter, ClipboardList, CalendarClock, Settings, Database, Columns, ShieldCheck, FileText, ListChecks, TrendingUp, Users } from 'lucide-react';
+import { Headset, LayoutDashboard, BarChart3, Sliders, Wifi, Clock, RefreshCw, ListFilter, ClipboardList, CalendarClock, Settings, Database, Columns, ShieldCheck, FileText, ListChecks, TrendingUp, Users, MessageSquare, Globe } from 'lucide-react';
 import moduleConstants from './config/constants.json';
 import uiText from './config/uiText.json';
 
@@ -38,10 +38,10 @@ import uiText from './config/uiText.json';
 import ServiceNowDashboard      from './components/ServiceNowDashboard';
 import ServiceNowIncidents      from './components/ServiceNowIncidents';
 import ServiceNowTestIncidents  from './components/ServiceNowTestIncidents';
-import IncidentSlaReportView    from './views/IncidentSlaReportView';
-import IncidentAnalyticsView    from './views/IncidentAnalyticsView';
-import RitmReportsView          from './views/RitmReportsView';
-// SlaComplianceView removed — SLA compliance is now part of Incident SLA Report
+import IncidentSlaReportView            from './views/IncidentSlaReportView';
+import IncidentResponseSlaReportView    from './views/IncidentResponseSlaReportView';
+import IncidentAnalyticsView             from './views/IncidentAnalyticsView';
+import RitmReportsView                   from './views/RitmReportsView';
 
 // ── Config Tab Components (lazy-mounted via render functions) ─────────────────
 import ServiceNowConnectionTab         from './components/settings/ServiceNowConnectionTab';
@@ -53,6 +53,8 @@ import ServiceNowSyncTab               from './components/settings/ServiceNowSyn
 import ServiceNowBusinessHoursTab   from './components/settings/ServiceNowBusinessHoursTab';
 import ServiceNowConfigSettingsTab  from './components/settings/ServiceNowConfigSettingsTab';
 import ServiceNowDataManagementTab  from './components/settings/ServiceNowDataManagementTab';
+import ServiceNowAutoAcknowledgeTab  from './components/settings/ServiceNowAutoAcknowledgeTab';
+import ServiceNowTimezoneTab         from './components/settings/ServiceNowTimezoneTab';
 
 const navText = uiText.navItems;
 const cfgText = uiText.config;
@@ -73,8 +75,9 @@ const servicenowManifest = {
     { id: 'testIncidents',    label: navText.testIncidents,   icon: ClipboardList    },
     { type: 'separator' },
     { type: 'header', label: 'Reports' },
-    { id: 'incidentSlaReport',  label: 'Incident SLA Report',  icon: ShieldCheck,   indent: true },
-    { id: 'incidentAnalytics',  label: 'Incident Analytics',   icon: TrendingUp,    indent: true },
+    { id: 'incidentSlaReport',          label: 'Incident Resolution SLA Report',  icon: ShieldCheck,   indent: true },
+    { id: 'incidentResponseSlaReport',  label: 'Incident Response SLA Report',    icon: Clock,         indent: true },
+    { id: 'incidentAnalytics',          label: 'Incident Analytics',              icon: TrendingUp,    indent: true },
     { id: 'ritmReports',        label: 'RITMs',                icon: ListChecks,    indent: true },
     { type: 'separator' },
     { id: 'config',           label: navText.config,          icon: Sliders          },
@@ -91,8 +94,9 @@ const servicenowManifest = {
     dashboard:          ServiceNowDashboard,
     incidents:          ServiceNowIncidents,
     testIncidents:      ServiceNowTestIncidents,
-    incidentSlaReport:  IncidentSlaReportView,
-    incidentAnalytics:  IncidentAnalyticsView,
+    incidentSlaReport:          IncidentSlaReportView,
+    incidentResponseSlaReport:  IncidentResponseSlaReportView,
+    incidentAnalytics:          IncidentAnalyticsView,
     ritmReports:        RitmReportsView,
   }),
 
@@ -123,6 +127,12 @@ const servicenowManifest = {
       content: () => <ServiceNowBusinessHoursTab />,
     },
     {
+      id:      cfgText.tabs.timezone.id,
+      label:   cfgText.tabs.timezone.label,
+      icon:    Globe,
+      content: () => <ServiceNowTimezoneTab />,
+    },
+    {
       type: 'section',
       id: 'incident_configuration_section',
       label: 'Incident Configuration',
@@ -147,6 +157,12 @@ const servicenowManifest = {
           label:   cfgText.tabs.sla.label,
           icon:    Clock,
           content: () => <ServiceNowSlaTab />,
+        },
+        {
+          id:      'autoAcknowledge',
+          label:   'Auto Acknowledge',
+          icon:    MessageSquare,
+          content: () => <ServiceNowAutoAcknowledgeTab />,
         },
       ],
     },

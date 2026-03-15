@@ -127,6 +127,11 @@
         "label": "Business Hours",
         "description": "Define working days and hours for SLA calculations."
       },
+      "timezone": {
+        "id": "sn_timezone",
+        "label": "Timezone",
+        "description": "Configure timezone for date and time display across all reports."
+      },
       "settings": {
         "id": "sn_settings",
         "label": "Settings",

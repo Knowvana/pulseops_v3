@@ -42,6 +42,8 @@ import incidentConfigRoutes from './routes/incidentConfigRoutes.js';
 import syncRoutes from './routes/syncRoutes.js';
 import reportRoutes from './routes/reportRoutes.js';
 import dataRoutes from './routes/dataRoutes.js';
+import autoAcknowledgeRoutes from './routes/autoAcknowledgeRoutes.js';
+import timezoneRoutes from './routes/timezoneRoutes.js';
 
 const router = Router();
 
@@ -55,6 +57,8 @@ router.use('/', incidentConfigRoutes);  // /config/incidents/*, /schema/columns,
 router.use('/', syncRoutes);            // POST /sync, GET /sync/status, GET/PUT /sync/schedule
 router.use('/', reportRoutes);          // /stats, /reports/*, /business-hours, /config/settings
 router.use('/', dataRoutes);            // /schema/info, /data/defaults, /data/demo, /data/reset
+router.use('/', autoAcknowledgeRoutes); // /config/auto-acknowledge, /auto-acknowledge/*
+router.use('/', timezoneRoutes);        // /config/timezone, /config/timezone/servicenow, /config/timezone/list
 
 // ═════════════════════════════════════════════════════════════════════════════
 // LIFECYCLE HOOKS

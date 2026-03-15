@@ -15,6 +15,15 @@
         "assignmentGroup": ""
       },
       "description": "Incident table configuration — selected columns, SLA column mapping, priority column, assignment group filter."
+    },
+    {
+      "config_key": "auto_acknowledge",
+      "config_value": {
+        "enabled": false,
+        "message": "This incident has been received and acknowledged by PulseOps. Our team will review and respond shortly.",
+        "pollFrequencyMinutes": 5
+      },
+      "description": "Auto acknowledge configuration — message template, enabled state, and poll frequency."
     }
   ],
   "sn_sla_config": [

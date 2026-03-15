@@ -112,6 +112,28 @@
         { "name": "idx_sn_sync_history_status",     "columns": ["status"],     "unique": false },
         { "name": "idx_sn_sync_history_started_at", "columns": ["started_at"], "unique": false }
       ]
+    },
+    {
+      "name": "sn_auto_acknowledge_log",
+      "description": "Auto acknowledge audit trail — records each incident that was auto-acknowledged with the configured message.",
+      "columns": [
+        { "name": "id",                 "type": "BIGSERIAL PRIMARY KEY" },
+        { "name": "incident_number",    "type": "VARCHAR(40) NOT NULL" },
+        { "name": "incident_sys_id",    "type": "VARCHAR(64) NOT NULL" },
+        { "name": "short_description",  "type": "TEXT" },
+        { "name": "priority",           "type": "VARCHAR(50)" },
+        { "name": "state",              "type": "VARCHAR(20)" },
+        { "name": "acknowledge_message","type": "TEXT NOT NULL" },
+        { "name": "status",             "type": "VARCHAR(20) NOT NULL DEFAULT 'success'" },
+        { "name": "error_message",      "type": "TEXT" },
+        { "name": "acknowledged_at",    "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_sn_auto_ack_log_number",     "columns": ["incident_number"], "unique": false },
+        { "name": "idx_sn_auto_ack_log_sys_id",     "columns": ["incident_sys_id"], "unique": false },
+        { "name": "idx_sn_auto_ack_log_acked_at",   "columns": ["acknowledged_at"], "unique": false },
+        { "name": "idx_sn_auto_ack_log_status",     "columns": ["status"],          "unique": false }
+      ]
     }
   ]
 }

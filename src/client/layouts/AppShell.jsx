@@ -56,6 +56,26 @@ export default function AppShell({
   const sideNavCollapsed = controlledCollapsed !== undefined ? controlledCollapsed : internalCollapsed;
   const onToggleSideNav = controlledToggle || (() => setInternalCollapsed((c) => !c));
 
+  // Initialize sidebar width from localStorage or use default
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    try {
+      const saved = localStorage.getItem('pulseops-sidebar-width');
+      return saved ? parseInt(saved, 10) : 320;
+    } catch {
+      return 320;
+    }
+  });
+
+  // Handle sidebar width change and persist to localStorage
+  const handleSidebarWidthChange = useCallback((newWidth) => {
+    setSidebarWidth(newWidth);
+    try {
+      localStorage.setItem('pulseops-sidebar-width', String(newWidth));
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, []);
+
   const [isRightPanelOpen, setIsRightPanelOpen] = useState(false);
   const [uiLogs, setUiLogs] = useState([]);
   const [apiCalls, setApiCalls] = useState([]);
@@ -148,6 +168,8 @@ export default function AppShell({
             onSelectItem={onSelectSideNavItem}
             collapsed={sideNavCollapsed}
             onToggleCollapse={onToggleSideNav}
+            width={sidebarWidth}
+            onWidthChange={handleSidebarWidthChange}
           />
         )}
 

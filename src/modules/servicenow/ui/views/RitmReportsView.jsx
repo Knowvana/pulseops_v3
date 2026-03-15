@@ -7,7 +7,7 @@
 // USED BY: manifest.jsx → getViews().ritmReports
 // ============================================================================
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { RefreshCw, Loader2 } from 'lucide-react';
+import { RefreshCw, Loader2, Globe } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
 import uiText from '../config/uiText.json';
@@ -106,7 +106,14 @@ export default function RitmReportsView() {
   return (
     <div className="p-6 space-y-5 animate-fade-in">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-surface-800">RITM Reports</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-bold text-surface-800">RITM Reports</h2>
+          {ritmData?.timezone && (
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full border border-brand-100">
+              <Globe size={10} /> {ritmData.timezone}
+            </span>
+          )}
+        </div>
         <button onClick={fetchRitms} className="p-1.5 rounded-lg text-surface-400 hover:text-brand-600 hover:bg-brand-50 transition-colors">
           <RefreshCw size={14} />
         </button>

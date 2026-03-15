@@ -20,9 +20,12 @@
 import { Router } from 'express';
 import {
   loadConnectionConfig, loadIncidentConfig, loadModuleConfig, saveModuleConfig,
-  loadBusinessHours, snowRequest, snowVal,
+  loadBusinessHours, snowVal,
   buildAssignmentGroupQuery, DatabaseService, dbSchema,
-} from './helpers.js';
+} from '#modules/servicenow/api/routes/helpers.js';
+import { snowGet, isSnowSuccess } from '#modules/servicenow/api/lib/SnowApiClient.js';
+import { snowUrls, apiErrors, apiMessages } from '#modules/servicenow/api/config/index.js';
+import { logger } from '#shared/logger.js';
 
 const router = Router();
 
@@ -124,7 +127,7 @@ router.get('/schema/columns', async (req, res) => {
     }
 
     // 1. Query sys_dictionary for column metadata
-    const dictResult = await snowRequest(conn, 'table/sys_dictionary',
+    const dictResult = await snowGet(conn, snowUrls.snow.tables.sysDictionary,
       'sysparm_query=name=incident^elementISNOTEMPTY^elementNOT LIKEsys_^ORDERBYcolumn_label' +
       '&sysparm_fields=element,column_label,internal_type,max_length,mandatory,read_only,comments' +
       '&sysparm_limit=300'
@@ -148,7 +151,7 @@ router.get('/schema/columns', async (req, res) => {
 
     // Fallback: if sys_dictionary didn't work, get column names from a sample record
     if (columns.length === 0) {
-      const fallbackResult = await snowRequest(conn, 'table/incident', 'sysparm_limit=1');
+      const fallbackResult = await snowGet(conn, snowUrls.snow.tables.incident, 'sysparm_limit=1');
       if (fallbackResult.statusCode >= 200 && fallbackResult.statusCode < 300 && fallbackResult.data?.result?.length > 0) {
         const sampleRecord = fallbackResult.data.result[0] || {};
         columns = Object.keys(sampleRecord).sort().map(col => ({
@@ -166,7 +169,7 @@ router.get('/schema/columns', async (req, res) => {
     // 2. Fetch one sample incident to get actual values for each column
     let sampleValues = {};
     try {
-      const sampleResult = await snowRequest(conn, 'table/incident', 'sysparm_limit=1&sysparm_query=ORDERBYDESCsys_created_on');
+      const sampleResult = await snowGet(conn, snowUrls.snow.tables.incident, 'sysparm_limit=1&sysparm_query=ORDERBYDESCsys_created_on');
       if (sampleResult.statusCode >= 200 && sampleResult.statusCode < 300 && sampleResult.data?.result?.length > 0) {
         const sample = sampleResult.data.result[0];
         for (const [key, val] of Object.entries(sample)) {
@@ -242,8 +245,8 @@ router.get('/schema/columns/:columnName/values', async (req, res) => {
       'sysparm_limit=100',
     ].join('&');
 
-    const snowResp = await snowRequest(conn, 'table/incident', query);
-    if (snowResp.statusCode < 200 || snowResp.statusCode >= 300) {
+    const snowResp = await snowGet(conn, snowUrls.snow.tables.incident, query);
+    if (!isSnowSuccess(snowResp.statusCode)) {
       const message = snowResp.data?.error?.message || `ServiceNow responded with HTTP ${snowResp.statusCode}`;
       return res.status(snowResp.statusCode || 502).json({ success: false, error: { message } });
     }
@@ -319,12 +322,11 @@ router.get('/config/sla/priorities', async (req, res) => {
         'sysparm_limit=50',
       ].join('&');
 
-      console.log(`[priorities] Attempt ${i + 1}: querying sys_choice with element=${priorityElement}`);
-      const snowResp = await snowRequest(conn, 'table/sys_choice', query);
+      const snowResp = await snowGet(conn, snowUrls.snow.tables.sysChoice, query);
 
-      if (snowResp.statusCode >= 200 && snowResp.statusCode < 300) {
+      if (isSnowSuccess(snowResp.statusCode)) {
         const results = snowResp.data?.result || [];
-        console.log(`[priorities] Attempt ${i + 1}: sys_choice returned ${results.length} result(s)`);
+        logger.debug(`[priorities] Attempt ${i + 1}: sys_choice returned ${results.length} result(s)`);
 
         if (results.length > 0) {
           choices = results
@@ -339,23 +341,22 @@ router.get('/config/sla/priorities', async (req, res) => {
           break;
         }
       } else {
-        console.log(`[priorities] Attempt ${i + 1}: HTTP ${snowResp.statusCode}`);
+        logger.debug(`[priorities] Attempt ${i + 1}: HTTP ${snowResp.statusCode}`);
       }
     }
 
     // Fallback: fetch distinct priority values from actual incident records
     if (choices.length === 0) {
-      console.log(`[priorities] sys_choice returned 0 results, falling back to incident records for field: ${priorityElement}`);
+      logger.debug(`[priorities] sys_choice returned 0 results, falling back to incident records for field: ${priorityElement}`);
       const fallbackQuery = [
         `sysparm_query=${priorityElement}ISNOTEMPTY^ORDERBYDESCsys_created_on`,
         `sysparm_fields=${priorityElement}`,
         'sysparm_limit=200',
       ].join('&');
 
-      const fallbackResp = await snowRequest(conn, 'table/incident', fallbackQuery);
-      if (fallbackResp.statusCode >= 200 && fallbackResp.statusCode < 300) {
+      const fallbackResp = await snowGet(conn, snowUrls.snow.tables.incident, fallbackQuery);
+      if (isSnowSuccess(fallbackResp.statusCode)) {
         const records = fallbackResp.data?.result || [];
-        console.log(`[priorities] Incident fallback returned ${records.length} record(s)`);
 
         // Extract unique priority values
         const seen = new Map();
@@ -394,10 +395,10 @@ router.get('/config/sla/priorities', async (req, res) => {
       return a.value.localeCompare(b.value, undefined, { numeric: true });
     });
 
-    console.log(`[priorities] Final result: ${choices.length} priorities from ${source}`);
+    logger.debug(`[priorities] Final result: ${choices.length} priorities from ${source}`);
     return res.json({ success: true, data: { choices, total: choices.length, source } });
   } catch (err) {
-    console.error(`[priorities] Error: ${err.message}`);
+    logger.error(`[priorities] Error: ${err.message}`);
     return res.status(500).json({ success: false, error: { message: `Failed to fetch ServiceNow priorities: ${err.message}` } });
   }
 });
@@ -557,7 +558,7 @@ router.get('/search/assignment-groups', async (req, res) => {
     if (q.trim()) queryParts.push(`nameLIKE${q.trim()}`);
     queryParts.push('ORDERBYname');
 
-    const result = await snowRequest(conn, 'table/sys_user_group',
+    const result = await snowGet(conn, snowUrls.snow.tables.sysUserGroup,
       `sysparm_query=${queryParts.join('^')}&sysparm_fields=sys_id,name,description,manager&sysparm_limit=50`
     );
 
@@ -590,7 +591,7 @@ router.get('/incidents/open', async (req, res) => {
     if (agQuery) queryParts.push(agQuery);
     queryParts.push('ORDERBYDESCnumber');
 
-    const result = await snowRequest(conn, 'table/incident',
+    const result = await snowGet(conn, snowUrls.snow.tables.incident,
       `sysparm_query=${queryParts.join('^')}&sysparm_fields=sys_id,number,short_description,priority,state,assigned_to&sysparm_limit=200`
     );
 

@@ -1,0 +1,61 @@
+{
+  "_description": "ServiceNow module — all backend API success and informational messages. All message strings must originate from this file.",
+
+  "config": {
+    "saved":                    "ServiceNow configuration saved successfully."
+  },
+
+  "incidents": {
+    "created":                  "Incident created successfully.",
+    "updated":                  "Incident updated successfully.",
+    "closed":                   "Incident closed successfully."
+  },
+
+  "ritms": {
+    "created":                  "RITM created successfully.",
+    "updated":                  "RITM updated successfully.",
+    "closed":                   "RITM closed successfully."
+  },
+
+  "sla": {
+    "created":                  "SLA configuration created.",
+    "updated":                  "SLA configuration updated.",
+    "deleted":                  "SLA configuration deleted."
+  },
+
+  "incidentConfig": {
+    "columnsSaved":             "Selected columns saved successfully.",
+    "slaMappingSaved":          "SLA column mapping saved successfully.",
+    "assignmentGroupSaved":     "Assignment group saved successfully.",
+    "configSaved":              "Incident configuration saved successfully."
+  },
+
+  "businessHours": {
+    "updated":                  "Business hours updated successfully.",
+    "seeded":                   "Business hours seeded successfully."
+  },
+
+  "timezone": {
+    "saved":                    "Timezone configuration saved successfully. All reports will now display dates in the selected timezone."
+  },
+
+  "settings": {
+    "saved":                    "Settings saved successfully."
+  },
+
+  "sync": {
+    "scheduleSaved":            "Sync schedule saved successfully.",
+    "completed":                "Sync completed. Fetched {total} record(s) in {duration}ms.",
+    "completedWithErrors":      "Sync completed with {errors} error(s)."
+  },
+
+  "autoAcknowledge": {
+    "configSaved":              "Auto acknowledge configuration saved.",
+    "testSent":                 "Auto acknowledge comment posted to incident."
+  },
+
+  "data": {
+    "loaded":                   "Default data loaded successfully. Seeded {tables} table(s), inserted {rows} row(s).",
+    "reset":                    "Module data deleted. Dropped {dropped} table(s) ({rows} row(s)), {skipped} not found, {errors} error(s)."
+  }
+}

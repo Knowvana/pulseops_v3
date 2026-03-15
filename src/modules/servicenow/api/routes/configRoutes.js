@@ -11,8 +11,10 @@
 import { Router } from 'express';
 import {
   loadConnectionConfig, saveConnectionConfig, loadDefaultsConfig,
-  writeJsonFile, DEFAULTS_CONFIG, snowRequest,
-} from './helpers.js';
+  writeJsonFile, DEFAULTS_CONFIG,
+} from '#modules/servicenow/api/routes/helpers.js';
+import { snowGet, isSnowSuccess } from '#modules/servicenow/api/lib/SnowApiClient.js';
+import { snowUrls, apiErrors, apiMessages } from '#modules/servicenow/api/config/index.js';
 
 const router = Router();
 
@@ -31,7 +33,7 @@ router.get('/config', (req, res) => {
       data: { connection: safeConn, sla: defaults.sla, sync: defaults.sync },
     });
   } catch (err) {
-    return res.status(500).json({ success: false, error: { message: `Failed to load config: ${err.message}` } });
+    return res.status(500).json({ success: false, error: { message: apiErrors.config.loadFailed.replace('{message}', err.message) } });
   }
 });
 
@@ -79,9 +81,9 @@ router.put('/config', (req, res) => {
     saveConnectionConfig(updatedConn);
     writeJsonFile(DEFAULTS_CONFIG, updatedDefaults);
 
-    return res.json({ success: true, message: 'ServiceNow configuration saved successfully.' });
+    return res.json({ success: true, message: apiMessages.config.saved });
   } catch (err) {
-    return res.status(500).json({ success: false, error: { message: `Failed to save config: ${err.message}` } });
+    return res.status(500).json({ success: false, error: { message: apiErrors.config.saveFailed.replace('{message}', err.message) } });
   }
 });
 
@@ -97,10 +99,7 @@ router.post('/config/test', async (req, res) => {
       rawPassword && rawPassword !== '••••••••' ? rawPassword : current.password;
 
     if (!instanceUrl || !username || !resolvedPassword) {
-      return res.status(400).json({
-        success: false,
-        error: { message: 'Instance URL, username, and password/apiToken are required.' },
-      });
+      return res.status(400).json({ success: false, error: { message: apiErrors.connection.requiredFields } });
     }
 
     const connObj = { instanceUrl, username, password: resolvedPassword, apiVersion: current.apiVersion || 'v2' };
@@ -111,20 +110,14 @@ router.post('/config/test', async (req, res) => {
 
     // Test Incidents API + get count
     try {
-      const incResult = await snowRequest(connObj, 'table/incident', 'sysparm_limit=1');
-      if (incResult.statusCode >= 200 && incResult.statusCode < 300) {
+      const incResult = await snowGet(connObj, snowUrls.snow.tables.incident, 'sysparm_limit=1');
+      if (isSnowSuccess(incResult.statusCode)) {
         apis.incidents = { status: 'connected' };
         overallSuccess = true;
-        // Get total count
         try {
-          const countResult = await snowRequest(connObj, 'table/incident', 'sysparm_limit=1&sysparm_fields=sys_id');
-          if (countResult.statusCode >= 200 && countResult.statusCode < 300) {
-            const xTotal = countResult.data?.result ? countResult.data.result.length : 0;
-            // Use stats API for count if available
-            const statsResult = await snowRequest(connObj, 'stats/incident', 'sysparm_count=true');
-            if (statsResult.statusCode >= 200 && statsResult.statusCode < 300 && statsResult.data?.result?.stats?.count) {
-              incidentCount = Number(statsResult.data.result.stats.count);
-            }
+          const statsResult = await snowGet(connObj, snowUrls.snow.tables.statsIncident, 'sysparm_count=true');
+          if (isSnowSuccess(statsResult.statusCode) && statsResult.data?.result?.stats?.count) {
+            incidentCount = Number(statsResult.data.result.stats.count);
           }
         } catch { /* count is optional */ }
       }
@@ -132,18 +125,14 @@ router.post('/config/test', async (req, res) => {
 
     // Test RITMs API
     try {
-      const ritmResult = await snowRequest(connObj, 'table/sc_req_item', 'sysparm_limit=1');
-      if (ritmResult.statusCode >= 200 && ritmResult.statusCode < 300) {
-        apis.ritms = { status: 'connected' };
-      }
+      const ritmResult = await snowGet(connObj, snowUrls.snow.tables.scReqItem, 'sysparm_limit=1');
+      if (isSnowSuccess(ritmResult.statusCode)) apis.ritms = { status: 'connected' };
     } catch { /* ritms test failed */ }
 
     // Test Changes API
     try {
-      const changeResult = await snowRequest(connObj, 'table/change_request', 'sysparm_limit=1');
-      if (changeResult.statusCode >= 200 && changeResult.statusCode < 300) {
-        apis.changes = { status: 'connected' };
-      }
+      const changeResult = await snowGet(connObj, snowUrls.snow.tables.changeRequest, 'sysparm_limit=1');
+      if (isSnowSuccess(changeResult.statusCode)) apis.changes = { status: 'connected' };
     } catch { /* changes test failed */ }
 
     // Save test result
@@ -162,7 +151,7 @@ router.post('/config/test', async (req, res) => {
       },
     });
   } catch (err) {
-    return res.status(500).json({ success: false, error: { message: `Connection test failed: ${err.message}` } });
+    return res.status(500).json({ success: false, error: { message: apiErrors.connection.testFailed.replace('{message}', err.message) } });
   }
 });
 

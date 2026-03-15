@@ -334,36 +334,33 @@ export default function ServiceNowResponseSlaReport({ onNavigate }) {
       )}
 
       {/* ── Report Header ──────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-surface-200 shadow-sm p-5">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-teal-500 to-teal-700 flex items-center justify-center">
-                <Clock size={20} className="text-white" />
+      <div className="bg-white rounded-xl border border-surface-200 shadow-sm p-5 overflow-x-auto">
+        <div className="flex items-center justify-between gap-3 min-w-max">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-teal-500 to-teal-700 flex items-center justify-center flex-shrink-0">
+              <Clock size={20} className="text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-lg font-bold text-surface-800 whitespace-nowrap">Incident Response SLA Report</h1>
+                {data?.timezone && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full border border-brand-100 whitespace-nowrap">
+                    <Globe size={10} /> Report Timezone: {data.timezone}
+                  </span>
+                )}
               </div>
-              <div>
-                <h1 className="text-lg font-bold text-surface-800">Incident Response SLA Report</h1>
-                <div className="flex items-center gap-3 mt-1 flex-wrap">
-                  <span className="text-[11px] text-surface-500">
-                    <span className="font-semibold text-surface-600">Generated:</span> {data?.generatedAt ? formatDate(data.generatedAt) : new Date().toLocaleString()}
-                  </span>
-                  <span className="w-px h-3 bg-surface-200" />
-                  <span className="text-[11px] text-surface-500">
-                    <span className="font-semibold text-surface-600">Period:</span> {data?.startDate || '...'} to {data?.endDate || '...'} ({period.charAt(0).toUpperCase() + period.slice(1)})
-                  </span>
-                  {data?.timezone && (
-                    <>
-                      <span className="w-px h-3 bg-surface-200" />
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full border border-brand-100">
-                        <Globe size={10} /> {data.timezone}
-                      </span>
-                    </>
-                  )}
-                </div>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[11px] text-surface-500 whitespace-nowrap">
+                  <span className="font-semibold text-surface-600">Generated:</span> {data?.generatedAt ? formatDate(data.generatedAt) : new Date().toLocaleString()}
+                </span>
+                <span className="w-px h-3 bg-surface-200 flex-shrink-0" />
+                <span className="text-[11px] text-surface-500 whitespace-nowrap">
+                  <span className="font-semibold text-surface-600">Period:</span> {data?.startDate || '...'} to {data?.endDate || '...'} ({period.charAt(0).toUpperCase() + period.slice(1)})
+                </span>
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-shrink-0">
             {/* Period toggle */}
             <div className="flex items-center bg-surface-100 rounded-lg p-0.5">
               {PERIOD_OPTIONS.map(opt => {
@@ -373,7 +370,7 @@ export default function ServiceNowResponseSlaReport({ onNavigate }) {
                   <button
                     key={opt.id}
                     onClick={() => handlePeriodChange(opt.id)}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-all whitespace-nowrap ${
                       isActive ? 'bg-white text-brand-700 shadow-sm' : 'text-surface-500 hover:text-surface-700'
                     }`}
                   >
@@ -386,7 +383,7 @@ export default function ServiceNowResponseSlaReport({ onNavigate }) {
             <button
               onClick={() => fetchSlaReport()}
               disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-semibold hover:bg-brand-700 transition-colors disabled:opacity-60"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-600 text-white text-xs font-semibold hover:bg-brand-700 transition-colors disabled:opacity-60 whitespace-nowrap"
             >
               {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
               Refresh
@@ -394,7 +391,7 @@ export default function ServiceNowResponseSlaReport({ onNavigate }) {
             <button
               onClick={handleDownloadPdf}
               disabled={!data || loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-200 text-surface-600 text-xs font-semibold hover:bg-surface-50 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-surface-200 text-surface-600 text-xs font-semibold hover:bg-surface-50 transition-colors disabled:opacity-50 whitespace-nowrap"
             >
               <Download size={12} />
               PDF

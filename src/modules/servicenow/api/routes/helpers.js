@@ -4,19 +4,19 @@
 // PURPOSE: Shared utilities used across all ServiceNow API route files.
 //   - Config file I/O (connection, defaults)
 //   - Incident config loader (from DB)
-//   - SNOW API request helpers (GET + write)
-//   - snowVal() for extracting values from {link, value} objects
 //   - Assignment group query builder
+//   - Re-exports from SnowApiClient (snowVal, buildSnowFields)
+//   - Compatibility shims for snowRequest / snowRequestWrite
 //
-// USED BY: All route files in src/modules/servicenow/api/routes/
+// USED BY: All route files and services in the ServiceNow module.
 // ============================================================================
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import https from 'https';
-import http from 'http';
 import DatabaseService from '#core/database/databaseService.js';
 import { config as appConfig } from '#config';
+import { logger } from '#shared/logger.js';
+import { snowGet, snowWrite, snowVal as _snowVal, buildSnowFields as _buildSnowFields } from '#modules/servicenow/api/lib/SnowApiClient.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -114,12 +114,12 @@ export async function loadBusinessHours() {
       `SELECT * FROM ${dbSchema}.sn_business_hours ORDER BY day_of_week`
     );
     if (result && result.rows && result.rows.length > 0) {
-      console.log(`[loadBusinessHours] Loaded ${result.rows.length} rows from DB`);
+      logger.debug(`[helpers] loadBusinessHours: loaded ${result.rows.length} rows from DB`);
       return result.rows;
     }
-    console.log(`[loadBusinessHours] DB returned empty or no rows (${result?.rows?.length || 0}), using fallback`);
-  } catch (err) { 
-    console.log(`[loadBusinessHours] DB query failed (${err.code}): ${err.message}, using fallback`);
+    logger.debug(`[helpers] loadBusinessHours: DB returned no rows, using fallback`);
+  } catch (err) {
+    logger.warn(`[helpers] loadBusinessHours: DB query failed (${err.code}): ${err.message}, using fallback`);
   }
   // Fallback to default business hours (Mon-Fri, 09:00-17:00)
   // IMPORTANT: This ensures business hour calculations always work, even if DB is empty
@@ -132,7 +132,7 @@ export async function loadBusinessHours() {
     { day_of_week: 5, day_name: 'Friday',    is_business_day: true,  start_time: '09:00', end_time: '17:00' },
     { day_of_week: 6, day_name: 'Saturday',  is_business_day: false, start_time: '00:00', end_time: '00:00' }
   ];
-  console.log(`[loadBusinessHours] Using fallback with ${fallback.length} days (Mon-Fri 09:00-17:00)`);
+  logger.debug('[helpers] loadBusinessHours: using Mon-Fri 09:00-17:00 fallback');
   return fallback;
 }
 
@@ -148,82 +148,14 @@ export function buildAssignmentGroupQuery(assignmentGroup) {
   return `assignment_group.nameLIKE${encodeURIComponent(trimmed)}`;
 }
 
-// ── Extract primitive value from SNOW {link, value} objects ──────────────────
-export function snowVal(field) {
-  if (!field) return field;
-  return typeof field === 'object' && field?.value !== undefined ? field.value : field;
-}
+// ── Re-exports from SnowApiClient ────────────────────────────────────────────
+// Provides backward-compatible named exports so existing code that imports
+// snowVal / buildSnowFields from helpers.js continues to work.
+export const snowVal          = _snowVal;
+export const buildSnowFields  = _buildSnowFields;
 
-// ── HTTPS GET request to ServiceNow Table API ────────────────────────────────
-export function snowRequest(config, tablePath, query = '') {
-  return new Promise((resolve, reject) => {
-    const url = new URL(`/api/now/${config.apiVersion || 'v2'}/${tablePath}`, config.instanceUrl);
-    if (query) url.search = query;
-
-    const authStr = Buffer.from(`${config.username}:${config.password}`).toString('base64');
-    const options = {
-      hostname: url.hostname,
-      port: url.port || (url.protocol === 'https:' ? 443 : 80),
-      path: url.pathname + url.search,
-      method: 'GET',
-      headers: {
-        'Authorization': `Basic ${authStr}`,
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-    };
-
-    const transport = url.protocol === 'https:' ? https : http;
-    const req = transport.request(options, (res) => {
-      let body = '';
-      res.on('data', chunk => { body += chunk; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(body);
-          resolve({ statusCode: res.statusCode, data: parsed });
-        } catch {
-          resolve({ statusCode: res.statusCode, data: body });
-        }
-      });
-    });
-    req.on('error', reject);
-    req.setTimeout(15000, () => { req.destroy(new Error('Request timeout (15s)')); });
-    req.end();
-  });
-}
-
-// ── Write request (POST/PATCH/PUT) to ServiceNow Table API ──────────────────
-export function snowRequestWrite(config, tablePath, method = 'POST', bodyStr = '') {
-  return new Promise((resolve, reject) => {
-    const url = new URL(`/api/now/${config.apiVersion || 'v2'}/${tablePath}`, config.instanceUrl);
-    const authStr = Buffer.from(`${config.username}:${config.password}`).toString('base64');
-    const options = {
-      hostname: url.hostname,
-      port: url.port || (url.protocol === 'https:' ? 443 : 80),
-      path: url.pathname + url.search,
-      method,
-      headers: {
-        'Authorization': `Basic ${authStr}`,
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(bodyStr),
-      },
-    };
-    const transport = url.protocol === 'https:' ? https : http;
-    const req = transport.request(options, (res) => {
-      let body = '';
-      res.on('data', chunk => { body += chunk; });
-      res.on('end', () => {
-        try {
-          resolve({ statusCode: res.statusCode, data: JSON.parse(body) });
-        } catch {
-          resolve({ statusCode: res.statusCode, data: body });
-        }
-      });
-    });
-    req.on('error', reject);
-    req.setTimeout(15000, () => { req.destroy(new Error('Request timeout (15s)')); });
-    req.write(bodyStr);
-    req.end();
-  });
-}
+// ── Backward-compatible shims ─────────────────────────────────────────────────
+// Routes that haven't migrated to SnowApiClient yet can still call these.
+// New code should import snowGet / snowWrite from #modules/servicenow/api/lib/SnowApiClient.js
+export const snowRequest      = snowGet;
+export const snowRequestWrite = snowWrite;

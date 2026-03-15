@@ -1,0 +1,127 @@
+{
+  "_description": "ServiceNow module — all backend API error messages. All error strings must originate from this file.",
+
+  "connection": {
+    "notConfigured":    "ServiceNow connection is not configured.",
+    "testFailed":       "Connection test failed: {message}",
+    "requiredFields":   "Instance URL, username, and password/apiToken are required."
+  },
+
+  "incidents": {
+    "shortDescriptionRequired": "shortDescription is required.",
+    "fetchFailed":              "Incidents fetch failed: {message}",
+    "createFailed":             "Create incident failed: {message}",
+    "updateFailed":             "Update incident failed: {message}",
+    "closeFailed":              "Close incident failed: {message}",
+    "snowRejected":             "ServiceNow returned HTTP {status}: {detail}",
+    "openFetchFailed":          "Open incidents fetch failed: {message}"
+  },
+
+  "ritms": {
+    "shortDescriptionRequired": "shortDescription is required.",
+    "fetchFailed":              "RITMs fetch failed: {message}",
+    "createFailed":             "Create RITM failed: {message}",
+    "updateFailed":             "Update RITM failed: {message}",
+    "closeFailed":              "Close RITM failed: {message}",
+    "snowRejected":             "ServiceNow returned HTTP {status}"
+  },
+
+  "config": {
+    "loadFailed":               "Failed to load config: {message}",
+    "saveFailed":               "Failed to save config: {message}",
+    "loadIncidentFailed":       "Failed to load incident config: {message}",
+    "saveColumnsFailed":        "Failed to save columns: {message}",
+    "saveSlaMappingFailed":     "Failed to save SLA mapping: {message}",
+    "saveAssignmentGroupFailed":"Failed to save assignment group: {message}",
+    "saveIncidentConfigFailed": "Failed to save incident config: {message}",
+    "loadSettingsFailed":       "Failed to load settings: {message}",
+    "saveSettingsFailed":       "Failed to save settings: {message}"
+  },
+
+  "incidentConfig": {
+    "selectedColumnsRequired":  "selectedColumns must be an array.",
+    "numberColumnMandatory":    "Incident number column is mandatory.",
+    "createdClosedRequired":    "Both createdColumn and closedColumn are required.",
+    "responseColumnRequired":   "Response SLA column is not configured. Go to Configuration → SLA Column Mapping to set it up."
+  },
+
+  "sla": {
+    "loadFailed":               "Failed to load SLA config: {message}",
+    "createFailed":             "Failed to create SLA config: {message}",
+    "updateFailed":             "Failed to update SLA config: {message}",
+    "deleteFailed":             "Failed to delete SLA config: {message}",
+    "priorityRequired":         "priority is required.",
+    "priorityValueRequired":    "priorityValue is required.",
+    "notFound":                 "SLA config not found.",
+    "duplicate":                "SLA for priority \"{priority}\" already exists.",
+    "fetchPrioritiesFailed":    "Failed to fetch ServiceNow priorities: {message}"
+  },
+
+  "businessHours": {
+    "loadFailed":               "Failed to load business hours: {message}",
+    "updateFailed":             "Failed to update business hours: {message}",
+    "seedFailed":               "Failed to seed business hours: {message}",
+    "exactlySevenRequired":     "Exactly 7 day entries are required.",
+    "invalidDay":               "Invalid day entry: day_of_week and day_name are required."
+  },
+
+  "timezone": {
+    "loadFailed":               "Failed to load timezone config: {message}",
+    "saveFailed":               "Failed to save timezone config: {message}",
+    "fetchSnowFailed":          "Failed to fetch ServiceNow timezone: {message}",
+    "invalidTimezone":          "Invalid timezone: {timezone}"
+  },
+
+  "schema": {
+    "fetchColumnsFailed":       "Failed to fetch SNOW columns: {message}",
+    "fetchColumnValuesFailed":  "Failed to fetch column values: {message}",
+    "invalidColumnName":        "Invalid column name.",
+    "infoFailed":               "Schema info failed: {message}",
+    "schemaNotFound":           "No Schema.json found — no database objects to delete.",
+    "noTables":                 "Schema.json has no table definitions."
+  },
+
+  "data": {
+    "defaultDataNotFound":      "DefaultData.json not found for this module.",
+    "noSeedEntries":            "DefaultData.json has no seed data entries.",
+    "loadFailed":               "Default data load failed: {message}",
+    "resetFailed":              "Delete module data failed: {message}"
+  },
+
+  "sync": {
+    "notConfigured":            "ServiceNow connection is not configured.",
+    "failed":                   "Sync failed: {message}",
+    "statusFailed":             "Sync status failed: {message}",
+    "scheduleFetchFailed":      "Sync schedule fetch failed: {message}",
+    "scheduleSaveFailed":       "Sync schedule save failed: {message}"
+  },
+
+  "reports": {
+    "statsFailed":              "Stats failed: {message}",
+    "reportsFailed":            "Reports failed: {message}",
+    "incidentReportFailed":     "Incident report failed: {message}",
+    "ritmReportFailed":         "RITM report failed: {message}",
+    "slaReportFailed":          "SLA report failed: {message}",
+    "slaIncidentReportFailed":  "SLA report failed: {message}",
+    "responseReportFailed":     "Response SLA report failed: {message}"
+  },
+
+  "autoAcknowledge": {
+    "loadFailed":               "Failed to load auto acknowledge config: {message}",
+    "saveFailed":               "Failed to save auto acknowledge config: {message}",
+    "messageRequired":          "Acknowledge message is required when enabling auto acknowledge.",
+    "pollFreqInvalid":          "Poll frequency must be between 1 and 1440 minutes.",
+    "notEnabled":               "Auto acknowledge is not enabled.",
+    "noMessage":                "No acknowledge message configured.",
+    "incidentSysIdRequired":    "incidentSysId is required.",
+    "noTestMessage":            "No acknowledge message provided or configured.",
+    "pollFailed":               "Poll failed: {message}",
+    "testFailed":               "Test failed: {message}",
+    "logFailed":                "Failed to load log: {message}",
+    "historyFailed":            "Failed to load log history: {message}"
+  },
+
+  "assignmentGroups": {
+    "searchFailed":             "Assignment group search failed: {message}"
+  }
+}

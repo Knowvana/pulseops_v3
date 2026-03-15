@@ -14,10 +14,11 @@
 import { Router } from 'express';
 import {
   loadConnectionConfig, loadModuleConfig, saveModuleConfig,
-  snowRequest, snowRequestWrite, snowVal,
   buildAssignmentGroupQuery, loadIncidentConfig,
   DatabaseService, dbSchema,
-} from './helpers.js';
+} from '#modules/servicenow/api/routes/helpers.js';
+import { snowGet, snowWrite, snowVal, isSnowSuccess } from '#modules/servicenow/api/lib/SnowApiClient.js';
+import { snowUrls, apiErrors, apiMessages } from '#modules/servicenow/api/config/index.js';
 import { logger } from '#shared/logger.js';
 
 const router = Router();
@@ -31,7 +32,7 @@ router.get('/config/auto-acknowledge', async (req, res) => {
     const stored = await loadModuleConfig(CONFIG_KEY);
     return res.json({ success: true, data: { ...DEFAULT_CONFIG, ...(stored || {}) } });
   } catch (err) {
-    return res.status(500).json({ success: false, error: { message: `Failed to load auto acknowledge config: ${err.message}` } });
+    return res.status(500).json({ success: false, error: { message: apiErrors.autoAcknowledge.loadFailed.replace('{message}', err.message) } });
   }
 });
 
@@ -40,11 +41,11 @@ router.put('/config/auto-acknowledge', async (req, res) => {
   try {
     const { enabled, message, pollFrequencyMinutes } = req.body;
     if (enabled && (!message || !message.trim())) {
-      return res.status(400).json({ success: false, error: { message: 'Acknowledge message is required when enabling auto acknowledge.' } });
+      return res.status(400).json({ success: false, error: { message: apiErrors.autoAcknowledge.messageRequired } });
     }
     const freq = parseInt(pollFrequencyMinutes, 10);
     if (enabled && (!freq || freq < 1 || freq > 1440)) {
-      return res.status(400).json({ success: false, error: { message: 'Poll frequency must be between 1 and 1440 minutes.' } });
+      return res.status(400).json({ success: false, error: { message: apiErrors.autoAcknowledge.pollFreqInvalid } });
     }
     const config = {
       enabled: !!enabled,
@@ -53,19 +54,21 @@ router.put('/config/auto-acknowledge', async (req, res) => {
     };
     await saveModuleConfig(CONFIG_KEY, config, 'Auto acknowledge configuration — message template, enabled state, and poll frequency.');
     logger.info(`[AutoAcknowledge] Configuration saved: enabled=${config.enabled}, freq=${config.pollFrequencyMinutes}m`);
-    return res.json({ success: true, message: 'Auto acknowledge configuration saved.', data: config });
+    return res.json({ success: true, message: apiMessages.autoAcknowledge.configSaved, data: config });
   } catch (err) {
-    return res.status(500).json({ success: false, error: { message: `Failed to save auto acknowledge config: ${err.message}` } });
+    return res.status(500).json({ success: false, error: { message: apiErrors.autoAcknowledge.saveFailed.replace('{message}', err.message) } });
   }
 });
 
 // ── Helper: Post a work note (comment) to a ServiceNow incident ──────────────
 async function postWorkNote(conn, sysId, message) {
-  const body = JSON.stringify({ comments: message });
-  const result = await snowRequestWrite(conn, `table/incident/${sysId}`, 'PATCH', body);
-  if (result.statusCode >= 200 && result.statusCode < 300) {
-    return { success: true, data: result.data?.result };
-  }
+  const payload = {
+    comments: message,
+    state: '2', // Set state to In Progress when acknowledging
+    work_notes: message
+  };
+  const result = await snowWrite(conn, `${snowUrls.snow.tables.incident}/${sysId}`, 'PATCH', JSON.stringify(payload));
+  if (isSnowSuccess(result.statusCode)) return { success: true, data: result.data?.result };
   throw new Error(`SNOW API returned ${result.statusCode}: ${JSON.stringify(result.data)}`);
 }
 
@@ -77,10 +80,10 @@ async function fetchNewIncidents(conn, incidentConfig) {
   queryParts.push('ORDERBYDESCnumber');
 
   const fields = ['sys_id', 'number', 'short_description', 'priority', 'state', 'comments'];
-  const result = await snowRequest(conn, 'table/incident',
+  const result = await snowGet(conn, snowUrls.snow.tables.incident,
     `sysparm_limit=200&sysparm_fields=${fields.join(',')}&sysparm_query=${queryParts.join('^')}`
   );
-  if (result.statusCode >= 200 && result.statusCode < 300 && result.data?.result) {
+  if (isSnowSuccess(result.statusCode) && result.data?.result) {
     return result.data.result;
   }
   return [];
@@ -126,16 +129,12 @@ async function logAcknowledge(incident, message, status, errorMsg = null) {
 router.post('/auto-acknowledge/poll', async (req, res) => {
   try {
     const config = { ...DEFAULT_CONFIG, ...(await loadModuleConfig(CONFIG_KEY) || {}) };
-    if (!config.enabled) {
-      return res.status(400).json({ success: false, error: { message: 'Auto acknowledge is not enabled.' } });
-    }
-    if (!config.message || !config.message.trim()) {
-      return res.status(400).json({ success: false, error: { message: 'No acknowledge message configured.' } });
-    }
+    if (!config.enabled) return res.status(400).json({ success: false, error: { message: apiErrors.autoAcknowledge.notEnabled } });
+    if (!config.message || !config.message.trim()) return res.status(400).json({ success: false, error: { message: apiErrors.autoAcknowledge.noMessage } });
 
     const conn = loadConnectionConfig();
     if (!conn.isConfigured) {
-      return res.status(400).json({ success: false, error: { message: 'ServiceNow connection is not configured.' } });
+      return res.status(400).json({ success: false, error: { message: apiErrors.connection.notConfigured } });
     }
 
     const incidentConfig = await loadIncidentConfig();
@@ -182,7 +181,7 @@ router.post('/auto-acknowledge/poll', async (req, res) => {
       },
     });
   } catch (err) {
-    return res.status(500).json({ success: false, error: { message: `Poll failed: ${err.message}` } });
+    return res.status(500).json({ success: false, error: { message: apiErrors.autoAcknowledge.pollFailed.replace('{message}', err.message) } });
   }
 });
 
@@ -190,28 +189,21 @@ router.post('/auto-acknowledge/poll', async (req, res) => {
 router.post('/auto-acknowledge/test', async (req, res) => {
   try {
     const { incidentSysId, message } = req.body;
-    if (!incidentSysId) {
-      return res.status(400).json({ success: false, error: { message: 'incidentSysId is required.' } });
-    }
+    if (!incidentSysId) return res.status(400).json({ success: false, error: { message: apiErrors.autoAcknowledge.incidentSysIdRequired } });
 
     const conn = loadConnectionConfig();
-    if (!conn.isConfigured) {
-      return res.status(400).json({ success: false, error: { message: 'ServiceNow connection is not configured.' } });
-    }
+    if (!conn.isConfigured) return res.status(400).json({ success: false, error: { message: apiErrors.connection.notConfigured } });
 
-    // Use provided message or fall back to configured message
-    const config = { ...DEFAULT_CONFIG, ...(await loadModuleConfig(CONFIG_KEY) || {}) };
+    const config    = { ...DEFAULT_CONFIG, ...(await loadModuleConfig(CONFIG_KEY) || {}) };
     const ackMessage = (message || config.message || '').trim();
-    if (!ackMessage) {
-      return res.status(400).json({ success: false, error: { message: 'No acknowledge message provided or configured.' } });
-    }
+    if (!ackMessage) return res.status(400).json({ success: false, error: { message: apiErrors.autoAcknowledge.noTestMessage } });
 
     await postWorkNote(conn, incidentSysId, ackMessage);
     logger.info(`[AutoAcknowledge] Test acknowledge sent to ${incidentSysId}`);
 
-    return res.json({ success: true, message: `Auto acknowledge comment posted to incident.` });
+    return res.json({ success: true, message: apiMessages.autoAcknowledge.testSent });
   } catch (err) {
-    return res.status(500).json({ success: false, error: { message: `Test failed: ${err.message}` } });
+    return res.status(500).json({ success: false, error: { message: apiErrors.autoAcknowledge.testFailed.replace('{message}', err.message) } });
   }
 });
 
@@ -227,7 +219,7 @@ router.get('/auto-acknowledge/log', async (req, res) => {
     );
     return res.json({ success: true, data: result.rows });
   } catch (err) {
-    return res.status(500).json({ success: false, error: { message: `Failed to load log: ${err.message}` } });
+    return res.status(500).json({ success: false, error: { message: apiErrors.autoAcknowledge.logFailed.replace('{message}', err.message) } });
   }
 });
 
@@ -255,7 +247,7 @@ router.get('/auto-acknowledge/log/history', async (req, res) => {
     const result = await DatabaseService.query(query, params);
     return res.json({ success: true, data: result.rows });
   } catch (err) {
-    return res.status(500).json({ success: false, error: { message: `Failed to load log history: ${err.message}` } });
+    return res.status(500).json({ success: false, error: { message: apiErrors.autoAcknowledge.historyFailed.replace('{message}', err.message) } });
   }
 });
 

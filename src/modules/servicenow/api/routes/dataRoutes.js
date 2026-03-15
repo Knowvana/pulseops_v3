@@ -14,7 +14,9 @@ import fs from 'fs';
 import {
   resolveModuleDbFile, SCHEMA_JSON_FILE, DEFAULT_DATA_FILE,
   DatabaseService, dbSchema,
-} from './helpers.js';
+} from '#modules/servicenow/api/routes/helpers.js';
+import { apiErrors, apiMessages } from '#modules/servicenow/api/config/index.js';
+import { logger } from '#shared/logger.js';
 
 const router = Router();
 
@@ -24,7 +26,7 @@ router.get('/schema/info', async (req, res) => {
   const logContext = { endpoint: 'GET /schema/info', requestId: req.headers['x-request-id'] };
 
   try {
-    console.log('[ServiceNow API] Schema info request started', logContext);
+    logger.debug('[ServiceNow API] Schema info request started', logContext);
 
     const schemaPath = resolveModuleDbFile(SCHEMA_JSON_FILE);
     if (!schemaPath) {
@@ -66,7 +68,7 @@ router.get('/schema/info', async (req, res) => {
           rowCount = parseInt(countResult.rows[0]?.count || '0', 10);
         }
       } catch (dbErr) {
-        console.warn('[ServiceNow API] Table check failed', { table: tableName, error: dbErr.message });
+        logger.warn('[ServiceNow API] Table check failed', { table: tableName, error: dbErr.message });
         exists = false;
       }
 
@@ -118,9 +120,7 @@ router.get('/schema/info', async (req, res) => {
     const initialized = schemaInitialized && allExist;
     const duration = Date.now() - startTime;
 
-    console.log('[ServiceNow API] Schema info retrieved', {
-      ...logContext, initialized, tableCount: tables.length, allTablesExist: allExist, duration,
-    });
+    logger.debug('[ServiceNow API] Schema info retrieved', { ...logContext, initialized, tableCount: tables.length, allTablesExist: allExist, duration });
 
     return res.json({
       success: true,
@@ -135,7 +135,7 @@ router.get('/schema/info', async (req, res) => {
     });
   } catch (err) {
     const duration = Date.now() - startTime;
-    console.error('[ServiceNow API] Schema info failed', { ...logContext, error: err.message, stack: err.stack, duration });
+    logger.error('[ServiceNow API] Schema info failed', { ...logContext, error: err.message, stack: err.stack, duration });
     return res.status(500).json({ success: false, error: { message: `Schema info failed: ${err.message}` } });
   }
 });
@@ -146,7 +146,7 @@ router.post('/data/defaults', async (req, res) => {
   const logContext = { endpoint: 'POST /data/defaults', requestId: req.headers['x-request-id'] };
 
   try {
-    console.log('[ServiceNow API] Default data load started', logContext);
+    logger.debug('[ServiceNow API] Default data load started', logContext);
 
     const defaultDataPath = resolveModuleDbFile(DEFAULT_DATA_FILE);
     if (!defaultDataPath) {
@@ -186,7 +186,7 @@ router.post('/data/defaults', async (req, res) => {
         totalRowsInserted += tableRowsInserted;
         tablesSeeded.push({ table: tableName, rowsInserted: tableRowsInserted, rowsSkipped: tableRowsSkipped, totalRows: rows.length });
 
-        console.log('[ServiceNow API] Seeded table', { ...logContext, table: tableName, inserted: tableRowsInserted, skipped: tableRowsSkipped });
+        logger.debug('[ServiceNow API] Seeded table', { ...logContext, table: tableName, inserted: tableRowsInserted, skipped: tableRowsSkipped });
       }
 
       await client.query('COMMIT');
@@ -198,7 +198,7 @@ router.post('/data/defaults', async (req, res) => {
     }
 
     const duration = Date.now() - startTime;
-    console.log('[ServiceNow API] Default data load completed', { ...logContext, tablesSeeded: tablesSeeded.length, totalRowsInserted, duration });
+    logger.info('[ServiceNow API] Default data load completed', { ...logContext, tablesSeeded: tablesSeeded.length, totalRowsInserted, duration });
 
     return res.json({
       success: true,
@@ -209,7 +209,7 @@ router.post('/data/defaults', async (req, res) => {
     });
   } catch (err) {
     const duration = Date.now() - startTime;
-    console.error('[ServiceNow API] Default data load failed', { ...logContext, error: err.message, stack: err.stack, duration });
+    logger.error('[ServiceNow API] Default data load failed', { ...logContext, error: err.message, stack: err.stack, duration });
     return res.status(500).json({ success: false, error: { message: `Default data load failed: ${err.message}` } });
   }
 });
@@ -226,8 +226,8 @@ router.delete('/data/reset', async (req, res) => {
   const logContext = { endpoint: 'DELETE /data/reset', requestId: req.headers['x-request-id'] };
 
   try {
-    console.log('[ServiceNow API] Delete module data started', logContext);
-    console.warn('[ServiceNow API] ⚠️  DANGER ZONE: Dropping all module database objects', logContext);
+    logger.info('[ServiceNow API] Delete module data started', logContext);
+    logger.warn('[ServiceNow API] DANGER ZONE: Dropping all module database objects', logContext);
 
     const schemaPath = resolveModuleDbFile(SCHEMA_JSON_FILE);
     if (!schemaPath) {
@@ -266,14 +266,14 @@ router.delete('/data/reset', async (req, res) => {
 
             await client.query(`DROP TABLE IF EXISTS ${dbSchema}.${tableName} CASCADE`);
             droppedTables.push({ name: tableName, description: tableDefs[i].description || '', rowsDeleted: rowCount, status: 'dropped' });
-            console.log('[ServiceNow API] Dropped table', { ...logContext, table: tableName, rows: rowCount });
+            logger.info('[ServiceNow API] Dropped table', { ...logContext, table: tableName, rows: rowCount });
           } else {
             skippedTables.push({ name: tableName, status: 'not_found' });
-            console.log('[ServiceNow API] Table not found (skip)', { ...logContext, table: tableName });
+            logger.debug('[ServiceNow API] Table not found (skip)', { ...logContext, table: tableName });
           }
         } catch (tableErr) {
           errors.push({ name: tableName, status: 'error', error: tableErr.message });
-          console.error('[ServiceNow API] Failed to drop table', { ...logContext, table: tableName, error: tableErr.message });
+          logger.error('[ServiceNow API] Failed to drop table', { ...logContext, table: tableName, error: tableErr.message });
         }
       }
 
@@ -292,14 +292,12 @@ router.delete('/data/reset', async (req, res) => {
       client.release();
     }
 
-    console.log('[ServiceNow API] Data reset complete', logContext);
+    logger.info('[ServiceNow API] Data reset complete', logContext);
 
     const duration = Date.now() - startTime;
     const totalRowsDeleted = droppedTables.reduce((sum, t) => sum + t.rowsDeleted, 0);
 
-    console.log('[ServiceNow API] Delete module data completed', {
-      ...logContext, tablesDropped: droppedTables.length, tablesSkipped: skippedTables.length, totalRowsDeleted, errors: errors.length, duration,
-    });
+    logger.info('[ServiceNow API] Delete module data completed', { ...logContext, tablesDropped: droppedTables.length, tablesSkipped: skippedTables.length, totalRowsDeleted, errors: errors.length, duration });
 
     return res.json({
       success: true,
@@ -311,7 +309,7 @@ router.delete('/data/reset', async (req, res) => {
     });
   } catch (err) {
     const duration = Date.now() - startTime;
-    console.error('[ServiceNow API] Delete module data failed', { ...logContext, error: err.message, stack: err.stack, duration });
+    logger.error('[ServiceNow API] Delete module data failed', { ...logContext, error: err.message, stack: err.stack, duration });
     return res.status(500).json({ success: false, error: { message: `Delete module data failed: ${err.message}` } });
   }
 });

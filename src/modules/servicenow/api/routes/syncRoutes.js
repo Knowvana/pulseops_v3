@@ -12,8 +12,10 @@
 import { Router } from 'express';
 import {
   loadConnectionConfig, loadDefaultsConfig, loadIncidentConfig,
-  buildAssignmentGroupQuery, snowRequest, writeJsonFile, DEFAULTS_CONFIG,
-} from './helpers.js';
+  buildAssignmentGroupQuery, writeJsonFile, DEFAULTS_CONFIG,
+} from '#modules/servicenow/api/routes/helpers.js';
+import { snowGet, buildSnowFields, isSnowSuccess } from '#modules/servicenow/api/lib/SnowApiClient.js';
+import { snowUrls, apiErrors, apiMessages } from '#modules/servicenow/api/config/index.js';
 
 const router = Router();
 
@@ -24,26 +26,21 @@ router.post('/sync', async (req, res) => {
     const conn = loadConnectionConfig();
     const defaults = loadDefaultsConfig();
 
-    if (!conn.isConfigured) {
-      return res.status(400).json({
-        success: false,
-        error: { message: 'ServiceNow connection is not configured.' },
-      });
-    }
+    if (!conn.isConfigured) return res.status(400).json({ success: false, error: { message: apiErrors.connection.notConfigured } });
 
     const incidentConfig = await loadIncidentConfig();
     const agQuery = buildAssignmentGroupQuery(incidentConfig.assignmentGroup);
+    const fields  = buildSnowFields(incidentConfig.columns);
 
-    // Fetch incidents from SNOW
+    // Fetch incidents from SNOW with configured column set
     const queryParts = ['ORDERBYDESCnumber'];
     if (agQuery) queryParts.unshift(agQuery);
-    const incidentResult = await snowRequest(conn, 'table/incident',
-      `sysparm_limit=${defaults.sync?.maxIncidents || 500}&sysparm_query=${queryParts.join('^')}`
-    );
+    const qs = `sysparm_limit=${defaults.sync?.maxIncidents || 500}&sysparm_query=${queryParts.join('^')}${fields ? `&sysparm_fields=${fields}` : ''}`;
+    const incidentResult = await snowGet(conn, snowUrls.snow.tables.incident, qs);
 
     const summary = { tables: [], totalFetched: 0, errors: [] };
 
-    if (incidentResult.statusCode >= 200 && incidentResult.statusCode < 300 && incidentResult.data?.result) {
+    if (isSnowSuccess(incidentResult.statusCode) && incidentResult.data?.result) {
       summary.tables.push({ name: 'incident', recordsFetched: incidentResult.data.result.length });
       summary.totalFetched += incidentResult.data.result.length;
     } else {
@@ -65,11 +62,11 @@ router.post('/sync', async (req, res) => {
         durationMs,
       },
       message: summary.errors.length === 0
-        ? `Sync completed successfully. Fetched ${summary.totalFetched} record(s) from ${summary.tables.length} table(s) in ${durationMs}ms.`
-        : `Sync completed with ${summary.errors.length} error(s).`,
+        ? apiMessages.sync.completed.replace('{total}', summary.totalFetched).replace('{duration}', durationMs)
+        : apiMessages.sync.completedWithErrors.replace('{errors}', summary.errors.length),
     });
   } catch (err) {
-    return res.status(500).json({ success: false, error: { message: `Sync failed: ${err.message}` } });
+    return res.status(500).json({ success: false, error: { message: apiErrors.sync.failed.replace('{message}', err.message) } });
   }
 });
 
@@ -86,7 +83,7 @@ router.get('/sync/status', (req, res) => {
       },
     });
   } catch (err) {
-    return res.status(500).json({ success: false, error: { message: `Sync status failed: ${err.message}` } });
+    return res.status(500).json({ success: false, error: { message: apiErrors.sync.statusFailed.replace('{message}', err.message) } });
   }
 });
 
@@ -105,7 +102,7 @@ router.get('/sync/schedule', (req, res) => {
       },
     });
   } catch (err) {
-    return res.status(500).json({ success: false, error: { message: `Sync schedule fetch failed: ${err.message}` } });
+    return res.status(500).json({ success: false, error: { message: apiErrors.sync.scheduleFetchFailed.replace('{message}', err.message) } });
   }
 });
 
@@ -123,9 +120,9 @@ router.put('/sync/schedule', (req, res) => {
       syncChanges: syncChanges !== false,
     };
     writeJsonFile(DEFAULTS_CONFIG, defaults);
-    return res.json({ success: true, message: 'Sync schedule saved successfully.' });
+    return res.json({ success: true, message: apiMessages.sync.scheduleSaved });
   } catch (err) {
-    return res.status(500).json({ success: false, error: { message: `Sync schedule save failed: ${err.message}` } });
+    return res.status(500).json({ success: false, error: { message: apiErrors.sync.scheduleSaveFailed.replace('{message}', err.message) } });
   }
 });
 

@@ -34,16 +34,16 @@
 import { Router } from 'express';
 import fs from 'fs';
 
-import { CONFIG_DIR, CONNECTION_CONFIG, DEFAULTS_CONFIG, writeJsonFile } from './routes/helpers.js';
-import configRoutes from './routes/configRoutes.js';
-import incidentRoutes from './routes/incidentRoutes.js';
-import ritmRoutes from './routes/ritmRoutes.js';
-import incidentConfigRoutes from './routes/incidentConfigRoutes.js';
-import syncRoutes from './routes/syncRoutes.js';
-import reportRoutes from './routes/reportRoutes.js';
-import dataRoutes from './routes/dataRoutes.js';
-import autoAcknowledgeRoutes from './routes/autoAcknowledgeRoutes.js';
-import timezoneRoutes from './routes/timezoneRoutes.js';
+import { CONFIG_DIR, CONNECTION_CONFIG, DEFAULTS_CONFIG, writeJsonFile } from '#modules/servicenow/api/routes/helpers.js';
+import configRoutes          from '#modules/servicenow/api/routes/configRoutes.js';
+import incidentRoutes        from '#modules/servicenow/api/routes/incidentRoutes.js';
+import ritmRoutes            from '#modules/servicenow/api/routes/ritmRoutes.js';
+import incidentConfigRoutes  from '#modules/servicenow/api/routes/incidentConfigRoutes.js';
+import syncRoutes            from '#modules/servicenow/api/routes/syncRoutes.js';
+import reportRoutes          from '#modules/servicenow/api/routes/reportRoutes.js';
+import dataRoutes            from '#modules/servicenow/api/routes/dataRoutes.js';
+import autoAcknowledgeRoutes from '#modules/servicenow/api/routes/autoAcknowledgeRoutes.js';
+import timezoneRoutes        from '#modules/servicenow/api/routes/timezoneRoutes.js';
 
 const router = Router();
 

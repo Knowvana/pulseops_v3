@@ -1,0 +1,69 @@
+{
+  "_description": "ServiceNow module — all ServiceNow table paths and internal API route paths. Zero hardcoding in route files.",
+
+  "snow": {
+    "tables": {
+      "incident":         "table/incident",
+      "scReqItem":        "table/sc_req_item",
+      "changeRequest":    "table/change_request",
+      "sysUser":          "table/sys_user",
+      "sysUserGroup":     "table/sys_user_group",
+      "sysDictionary":    "table/sys_dictionary",
+      "sysProperties":    "table/sys_properties",
+      "sysChoice":        "table/sys_choice",
+      "sysJournalField":  "table/sys_journal_field",
+      "statsIncident":    "stats/incident"
+    },
+    "dateFields": {
+      "incident":   ["opened_at", "closed_at", "resolved_at", "sys_created_on", "sys_updated_on", "due_date", "work_start", "work_end"],
+      "sc_req_item": ["opened_at", "closed_at", "sys_created_on", "sys_updated_on", "due_date", "delivery_date"]
+    },
+    "mandatoryIncidentFields": ["sys_id", "number", "state", "priority", "opened_at", "closed_at", "resolved_at", "sys_created_on", "sys_updated_on"]
+  },
+
+  "routes": {
+    "config":                        "/config",
+    "configTest":                    "/config/test",
+    "configSettings":                "/config/settings",
+    "configTimezone":                "/config/timezone",
+    "configTimezoneServiceNow":      "/config/timezone/servicenow",
+    "configTimezoneList":            "/config/timezone/list",
+    "configIncidents":               "/config/incidents",
+    "configIncidentsColumns":        "/config/incidents/columns",
+    "configIncidentsSlaMapping":     "/config/incidents/sla-mapping",
+    "configIncidentsAssignGroup":    "/config/incidents/assignment-group",
+    "configSla":                     "/config/sla",
+    "configSlaId":                   "/config/sla/:id",
+    "configSlaPriorities":           "/config/sla/priorities",
+    "configAutoAck":                 "/config/auto-acknowledge",
+    "incidents":                     "/incidents",
+    "incidentById":                  "/incidents/:id",
+    "incidentClose":                 "/incidents/:id/close",
+    "incidentsOpen":                 "/incidents/open",
+    "ritms":                         "/ritms",
+    "ritmById":                      "/ritms/:id",
+    "ritmClose":                     "/ritms/:id/close",
+    "sync":                          "/sync",
+    "syncStatus":                    "/sync/status",
+    "syncSchedule":                  "/sync/schedule",
+    "stats":                         "/stats",
+    "reportsIncidents":              "/reports/incidents",
+    "reportsRitms":                  "/reports/ritms",
+    "reportsSla":                    "/reports/sla",
+    "reportsSlaIncidents":           "/reports/sla/incidents",
+    "reportsSlaIncidentsResponse":   "/reports/sla/incidents/response",
+    "businessHours":                 "/business-hours",
+    "schemaInfo":                    "/schema/info",
+    "schemaColumns":                 "/schema/columns",
+    "schemaColumnValues":            "/schema/columns/:columnName/values",
+    "dataDefaults":                  "/data/defaults",
+    "dataDemo":                      "/data/demo",
+    "dataReset":                     "/data/reset",
+    "dataSeedBusinessHours":         "/data/seed-business-hours",
+    "autoAckPoll":                   "/auto-acknowledge/poll",
+    "autoAckTest":                   "/auto-acknowledge/test",
+    "autoAckLog":                    "/auto-acknowledge/log",
+    "autoAckLogHistory":             "/auto-acknowledge/log/history",
+    "searchAssignmentGroups":        "/search/assignment-groups"
+  }
+}

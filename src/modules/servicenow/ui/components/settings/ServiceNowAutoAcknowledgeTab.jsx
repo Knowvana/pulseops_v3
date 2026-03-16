@@ -266,8 +266,8 @@ export default function ServiceNowAutoAcknowledgeTab() {
             <p className="text-xs text-surface-400">When enabled, PulseOps polls ServiceNow for new (state=New) incidents and auto-acknowledges them at the configured interval.</p>
           </div>
           <ToggleSwitch
-            checked={config.enabled}
-            onChange={handleToggle}
+            enabled={config.enabled}
+            onToggle={handleToggle}
             disabled={saving || !isConfigured}
           />
         </div>

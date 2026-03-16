@@ -40,6 +40,7 @@ const snApi = {
   searchGroups: '/api/servicenow/search/assignment-groups',
   autoAckTest: '/api/servicenow/auto-acknowledge/test',
   autoAckConfig: '/api/servicenow/config/auto-acknowledge',
+  closeCodes: '/api/servicenow/schema/close-codes',
 };
 
 // ServiceNow Impact/Urgency values (3-level)
@@ -120,8 +121,12 @@ export default function ServiceNowTestIncidents() {
   // Close form state
   const [closeIncident, setCloseIncident] = useState('');
   const [closeNotes, setCloseNotes]       = useState('');
-  const [closeCode, setCloseCode]         = useState('Solved (Permanently)');
+  const [closeCode, setCloseCode]         = useState('');
   const [closing, setClosing]             = useState(false);
+
+  // Close codes fetched from SNOW sys_choice
+  const [closeCodes, setCloseCodes]             = useState([]);
+  const [closeCodesLoading, setCloseCodesLoading] = useState(false);
 
   // Open incidents for close dropdown
   const [openIncidents, setOpenIncidents]       = useState([]);
@@ -156,10 +161,27 @@ export default function ServiceNowTestIncidents() {
     }
   }, []);
 
+  // ── Fetch close codes from SNOW ─────────────────────────────────────────
+  const fetchCloseCodes = useCallback(async () => {
+    setCloseCodesLoading(true);
+    try {
+      const res = await ApiClient.get(snApi.closeCodes);
+      if (res?.success && res.data?.choices?.length) {
+        setCloseCodes(res.data.choices);
+        setCloseCode(prev => prev || res.data.choices[0].value);
+      }
+    } catch (err) {
+      log.error('fetchCloseCodes', 'Failed', { error: err.message });
+    } finally {
+      setCloseCodesLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (initRan.current) return;
     initRan.current = true;
     fetchOpenIncidents();
+    fetchCloseCodes();
     // Load auto acknowledge default message
     (async () => {
       try {
@@ -167,7 +189,7 @@ export default function ServiceNowTestIncidents() {
         if (res?.success && res.data?.message) setAckMessage(res.data.message);
       } catch { /* ignore */ }
     })();
-  }, [fetchOpenIncidents]);
+  }, [fetchOpenIncidents, fetchCloseCodes]);
 
   // ── Assignment group search (debounced) ─────────────────────────────────
   useEffect(() => {
@@ -263,7 +285,6 @@ export default function ServiceNowTestIncidents() {
       const res = await ApiClient.post(snApi.incidentClose(closeIncident), {
         closeNotes: closeNotes || 'Closed via PulseOps Test Page',
         closeCode,
-        resolutionCode: closeCode,
       });
       if (res?.success) {
         addOp('CLOSE', true, res.message || 'Incident closed', res.data);
@@ -461,7 +482,7 @@ export default function ServiceNowTestIncidents() {
                 <select value={closeIncident} onChange={e => setCloseIncident(e.target.value)} className={selectCls}>
                   <option value="">— Select an open incident —</option>
                   {openIncidents.map(inc => (
-                    <option key={inc.number} value={inc.number}>
+                    <option key={inc.sysId || inc.number} value={inc.sysId || ''}>
                       {inc.number} — P{inc.priority} — {(inc.shortDescription || '').slice(0, 50)}
                     </option>
                   ))}
@@ -479,9 +500,21 @@ export default function ServiceNowTestIncidents() {
             </div>
             <div>
               <label className="text-xs font-semibold text-surface-600 mb-1 block">{t.closeCodeLabel}</label>
-              <select value={closeCode} onChange={e => setCloseCode(e.target.value)} className={selectCls}>
-                {t.closeCodes.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              {closeCodesLoading ? (
+                <div className="flex items-center gap-2 px-3 py-2 text-xs text-surface-400">
+                  <Loader2 size={12} className="animate-spin" /> Loading close codes from ServiceNow...
+                </div>
+              ) : (
+                <select value={closeCode} onChange={e => setCloseCode(e.target.value)} className={selectCls}>
+                  {closeCodes.length > 0
+                    ? closeCodes.map(c => <option key={c.value} value={c.value}>{c.label}</option>)
+                    : t.closeCodes.map(c => <option key={c} value={c}>{c}</option>)
+                  }
+                </select>
+              )}
+              <p className="text-[10px] text-surface-400 mt-0.5">
+                {closeCodes.length > 0 ? `${closeCodes.length} resolution code(s) from ServiceNow` : 'Using default resolution codes'}
+              </p>
             </div>
             <button onClick={handleClose} disabled={closing || !closeIncident}
               className={`${btnPrimary} bg-rose-600 text-white hover:bg-rose-700 w-full justify-center`}>

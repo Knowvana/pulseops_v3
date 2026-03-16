@@ -44,6 +44,10 @@ let _status = {
   lastPollResult:  null,
 };
 
+// In-memory dedup set — survives across poll cycles within a session.
+// Cleared only on poller stop() or server restart.
+const _acknowledgedSysIds = new Set();
+
 // ── Private helpers ───────────────────────────────────────────────────────────
 
 async function fetchNewIncidents(conn, incidentConfig) {
@@ -52,7 +56,8 @@ async function fetchNewIncidents(conn, incidentConfig) {
   if (agQuery) queryParts.unshift(agQuery);
   queryParts.push('ORDERBYDESCnumber');
 
-  const fields = ['sys_id', 'number', 'short_description', 'priority', 'state', 'comments'];
+  // Note: journal fields (comments, work_notes) are NOT returned in list queries by SNOW Table API
+  const fields = ['sys_id', 'number', 'short_description', 'priority', 'state'];
   const result = await snowGet(
     conn,
     snowUrls.snow.tables.incident,
@@ -80,7 +85,6 @@ async function postAcknowledge(conn, sysId, message) {
   const payload = {
     comments:   message,
     state:      '2',      // In Progress
-    work_notes: message,
   };
   const result = await snowWrite(
     conn,
@@ -148,17 +152,17 @@ async function executePollCycle() {
     const sysId  = snowVal(inc.sys_id);
     const number = snowVal(inc.number);
 
-    // Primary guard: check SNOW comments field directly
-    const existingComments = String(snowVal(inc.comments) || '');
-    if (existingComments.includes(config.message.trim())) {
-      logger.debug(`[AutoAcknowledge] ${number} — ack message already in SNOW comments, skipping`);
+    // Guard 1 (fast): in-memory set — catches re-acks within same session
+    if (_acknowledgedSysIds.has(sysId)) {
+      logger.debug(`[AutoAcknowledge] ${number} — already in memory set, skipping`);
       skipped++;
       continue;
     }
 
-    // Secondary guard: local DB log
+    // Guard 2 (durable): local DB log — catches re-acks across restarts
     if (await isAlreadyLoggedInDb(sysId)) {
-      logger.debug(`[AutoAcknowledge] ${number} — already in local log, skipping`);
+      logger.debug(`[AutoAcknowledge] ${number} — already in local DB log, skipping`);
+      _acknowledgedSysIds.add(sysId); // sync memory set
       skipped++;
       continue;
     }
@@ -166,6 +170,7 @@ async function executePollCycle() {
     try {
       await postAcknowledge(conn, sysId, config.message);
       await logToDb(inc, config.message, 'success');
+      _acknowledgedSysIds.add(sysId);
       acknowledged++;
       results.push({ number, status: 'success' });
       logger.info(`[AutoAcknowledge] Acknowledged ${number} → state set to In Progress`);
@@ -228,6 +233,7 @@ export function stop() {
   }
   _status.running    = false;
   _status.nextPollAt = null;
+  _acknowledgedSysIds.clear();
 }
 
 /**

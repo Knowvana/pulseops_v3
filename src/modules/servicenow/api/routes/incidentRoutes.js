@@ -15,7 +15,7 @@ import { loadConnectionConfig, loadIncidentConfig } from '#modules/servicenow/ap
 import { isSnowSuccess, extractSnowError } from '#modules/servicenow/api/lib/SnowApiClient.js';
 import {
   listIncidents, createIncident,
-  updateIncident, closeIncident,
+  updateIncident, closeIncident, resolveIncidentSysId,
 } from '#modules/servicenow/api/services/IncidentService.js';
 import { getEffectiveTimezone } from '#modules/servicenow/api/services/TimezoneService.js';
 import { apiErrors, apiMessages } from '#modules/servicenow/api/config/index.js';
@@ -91,7 +91,19 @@ router.post('/incidents/:id/close', async (req, res) => {
       return res.status(400).json({ success: false, error: { message: apiErrors.connection.notConfigured } });
     }
 
-    const result = await closeIncident(conn, req.params.id, req.body);
+    // Resolve sys_id if caller passed an incident number (e.g. INC0010018)
+    let sysId = req.params.id;
+    const isSysId = /^[0-9a-f]{32}$/i.test(sysId);
+    if (!isSysId) {
+      log.debug(`Resolving incident number ${sysId} to sys_id`);
+      const resolved = await resolveIncidentSysId(conn, sysId);
+      if (!resolved) {
+        return res.status(404).json({ success: false, error: { message: `Incident ${sysId} not found in ServiceNow` } });
+      }
+      sysId = resolved;
+    }
+
+    const result = await closeIncident(conn, sysId, req.body);
     if (isSnowSuccess(result.statusCode)) {
       return res.json({ success: true, message: apiMessages.incidents.closed });
     }

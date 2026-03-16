@@ -33,7 +33,10 @@ const DEFAULT_CONFIG = { enabled: false, message: DEFAULT_MESSAGE, pollFrequency
 router.get('/config/auto-acknowledge', async (req, res) => {
   try {
     const stored = await loadModuleConfig(CONFIG_KEY);
-    return res.json({ success: true, data: { ...DEFAULT_CONFIG, ...(stored || {}) } });
+    const merged = { ...DEFAULT_CONFIG, ...(stored || {}) };
+    // Ensure message is never empty — fall back to default if stored value is blank
+    if (!merged.message?.trim()) merged.message = DEFAULT_MESSAGE;
+    return res.json({ success: true, data: merged });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: apiErrors.autoAcknowledge.loadFailed.replace('{message}', err.message) } });
   }

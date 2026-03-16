@@ -21,14 +21,18 @@
 // ============================================================================
 import { logger } from '#shared/logger.js';
 import { isModuleLoggingEnabled } from '#core/services/logService.js';
+import { getRequestContext } from '#shared/requestContext.js';
 
 const MODULE_NAME = 'ServiceNow';
 
 /**
  * Fire-and-forget DB persistence for module log entries.
  * Uses dynamic import to avoid circular dependency issues at load time.
+ * Reads transactionId / sessionId / correlationId / userEmail from
+ * AsyncLocalStorage so module logs are tagged with the originating request.
  */
 function _persistToDb(level, component, msg, meta) {
+  const ctx = getRequestContext();
   import('#core/services/logService.js').then(mod => {
     mod.default.writeModuleLog({
       level,
@@ -38,6 +42,10 @@ function _persistToDb(level, component, msg, meta) {
       module: MODULE_NAME,
       fileName: component,
       data: meta && typeof meta === 'object' ? meta : (meta != null ? { detail: meta } : null),
+      transactionId: ctx.transactionId || null,
+      sessionId: ctx.sessionId || null,
+      correlationId: ctx.correlationId || null,
+      user: ctx.userEmail || null,
       timestamp: new Date().toISOString(),
     });
   }).catch(() => {});

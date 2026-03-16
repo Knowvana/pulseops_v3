@@ -29,6 +29,7 @@ import jwt from 'jsonwebtoken';
 import { errors } from '#shared/loadJson.js';
 import { logger } from '#shared/logger.js';
 import { getLogsConfig, resolveModuleFromPath, isModuleLoggingEnabled } from '#core/services/logService.js';
+import { runWithContext } from '#shared/requestContext.js';
 import { config } from '#config';
 
 function _extractUserEmail(req) {
@@ -77,7 +78,13 @@ export function requestIdMiddleware(req, _res, next) {
   req.requestId     = req.headers['x-transaction-id'] || crypto.randomUUID();
   req.sessionId     = req.headers['x-session-id']     || null;
   req.correlationId = req.headers['x-correlation-id'] || null;
-  next();
+  const userEmail   = _extractUserEmail(req);
+  // Propagate request context via AsyncLocalStorage so module loggers
+  // (which don't receive `req`) can tag DB entries with these IDs.
+  runWithContext(
+    { transactionId: req.requestId, sessionId: req.sessionId, correlationId: req.correlationId, userEmail },
+    next,
+  );
 }
 
 // ── 6. Request/Response Logger: Detailed API call tracking ─────────────────

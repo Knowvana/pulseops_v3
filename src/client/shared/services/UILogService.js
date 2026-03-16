@@ -322,9 +322,13 @@ class UILogServiceClass {
       const tag       = target.tagName.toLowerCase();
       const ariaLabel = target.getAttribute('aria-label');
       const title     = target.getAttribute('title');
-      // Use aria-label or title first; fall back to direct text nodes only
-      // (excludes badge/counter spans that pollute textContent, e.g. "UI Logs3")
-      const directText = ariaLabel || title || this._getDirectText(target);
+      // For <select>, use the selected option text (not all options concatenated)
+      let directText;
+      if (tag === 'select' && target.selectedIndex >= 0) {
+        directText = ariaLabel || title || target.options[target.selectedIndex]?.text || '';
+      } else {
+        directText = ariaLabel || title || this._getDirectText(target);
+      }
       const rawText   = (directText || '').replace(/\s+/g, ' ').trim().slice(0, 100);
       const dataLog   = target.getAttribute('data-log');
 

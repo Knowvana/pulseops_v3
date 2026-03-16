@@ -404,6 +404,75 @@ router.get('/config/sla/priorities', async (req, res) => {
   }
 });
 
+// ── GET /schema/close-codes — Fetch valid close/resolution codes from SNOW ───
+// Queries sys_choice for the incident.close_code element.
+// Progressive fallback: language=en+inactive=false → inactive=false → all.
+router.get('/schema/close-codes', async (req, res) => {
+  try {
+    const conn = loadConnectionConfig();
+    if (!conn.isConfigured) {
+      return res.status(400).json({ success: false, error: { message: 'ServiceNow connection is not configured.' } });
+    }
+
+    const sysChoiceQueries = [
+      `sysparm_query=name=incident^element=close_code^language=en^inactive=false^ORDERBYsequence`,
+      `sysparm_query=name=incident^element=close_code^inactive=false^ORDERBYsequence`,
+      `sysparm_query=name=incident^element=close_code^ORDERBYsequence`,
+    ];
+
+    let choices = [];
+    let source = 'none';
+
+    for (let i = 0; i < sysChoiceQueries.length; i++) {
+      const query = [
+        sysChoiceQueries[i],
+        'sysparm_fields=value,label,sequence',
+        'sysparm_limit=50',
+      ].join('&');
+
+      const snowResp = await snowGet(conn, snowUrls.snow.tables.sysChoice, query);
+
+      if (isSnowSuccess(snowResp.statusCode)) {
+        const results = snowResp.data?.result || [];
+        log.debug(`Close codes attempt ${i + 1}: sys_choice returned ${results.length} result(s)`);
+
+        if (results.length > 0) {
+          choices = results
+            .map(choice => ({
+              value: snowVal(choice.value)?.trim(),
+              label: snowVal(choice.label) || snowVal(choice.value) || '',
+              sequence: Number(snowVal(choice.sequence)) || null,
+            }))
+            .filter(choice => !!choice.value);
+          source = `sys_choice (attempt ${i + 1})`;
+          break;
+        }
+      } else {
+        log.debug(`Close codes attempt ${i + 1}: HTTP ${snowResp.statusCode}`);
+      }
+    }
+
+    // Fallback: provide well-known defaults if SNOW returned nothing
+    if (choices.length === 0) {
+      choices = [
+        { value: 'Solved (Work Around)', label: 'Solved (Work Around)', sequence: 1 },
+        { value: 'Solved (Permanently)', label: 'Solved (Permanently)', sequence: 2 },
+        { value: 'Not Solved (Not Reproducible)', label: 'Not Solved (Not Reproducible)', sequence: 3 },
+        { value: 'Not Solved (Too Costly)', label: 'Not Solved (Too Costly)', sequence: 4 },
+        { value: 'Closed/Resolved by Caller', label: 'Closed/Resolved by Caller', sequence: 5 },
+      ];
+      source = 'defaults';
+    }
+
+    choices.sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
+    log.debug(`Close codes result: ${choices.length} codes from ${source}`);
+    return res.json({ success: true, data: { choices, total: choices.length, source } });
+  } catch (err) {
+    log.error(`Close codes fetch error: ${err.message}`);
+    return res.status(500).json({ success: false, error: { message: `Failed to fetch close codes: ${err.message}` } });
+  }
+});
+
 // ── POST /config/sla — Create a new SLA row ─────────────────────────────
 router.post('/config/sla', async (req, res) => {
   try {

@@ -122,20 +122,30 @@ router.post('/config/test', async (req, res) => {
             incidentCount = Number(statsResult.data.result.stats.count);
           }
         } catch { /* count is optional */ }
+      } else {
+        apis.incidents = { status: 'failed', httpStatus: incResult.statusCode, error: incResult.data?.error?.message || `HTTP ${incResult.statusCode}` };
       }
-    } catch { /* incidents test failed */ }
+    } catch (err) { apis.incidents = { status: 'failed', error: err.message }; }
 
     // Test RITMs API
     try {
       const ritmResult = await snowGet(connObj, snowUrls.snow.tables.scReqItem, 'sysparm_limit=1');
-      if (isSnowSuccess(ritmResult.statusCode)) apis.ritms = { status: 'connected' };
-    } catch { /* ritms test failed */ }
+      if (isSnowSuccess(ritmResult.statusCode)) {
+        apis.ritms = { status: 'connected' };
+      } else {
+        apis.ritms = { status: 'failed', httpStatus: ritmResult.statusCode, error: ritmResult.data?.error?.message || `HTTP ${ritmResult.statusCode}` };
+      }
+    } catch (err) { apis.ritms = { status: 'failed', error: err.message }; }
 
     // Test Changes API
     try {
       const changeResult = await snowGet(connObj, snowUrls.snow.tables.changeRequest, 'sysparm_limit=1');
-      if (isSnowSuccess(changeResult.statusCode)) apis.changes = { status: 'connected' };
-    } catch { /* changes test failed */ }
+      if (isSnowSuccess(changeResult.statusCode)) {
+        apis.changes = { status: 'connected' };
+      } else {
+        apis.changes = { status: 'failed', httpStatus: changeResult.statusCode, error: changeResult.data?.error?.message || `HTTP ${changeResult.statusCode}` };
+      }
+    } catch (err) { apis.changes = { status: 'failed', error: err.message }; }
 
     // Save test result
     const conn = loadConnectionConfig();
@@ -146,11 +156,23 @@ router.post('/config/test', async (req, res) => {
     if (overallSuccess) {
       log.info('Connection test passed', { instanceUrl, apis, incidentCount });
     } else {
-      log.warn('Connection test failed — none of the SNOW APIs responded successfully', { instanceUrl, apis });
+      // Collect per-API error details for diagnostics
+      const apiErrors_ = Object.entries(apis)
+        .filter(([, v]) => v.status === 'failed' && (v.error || v.httpStatus))
+        .map(([k, v]) => `${k}: ${v.error || `HTTP ${v.httpStatus}`}`);
+      log.warn('Connection test failed', { instanceUrl, apis, errors: apiErrors_ });
     }
 
-    // Return proper HTTP status based on test result
-    const httpStatus = overallSuccess ? 200 : 502;
+    // Derive meaningful HTTP status from SNOW API responses
+    let httpStatus = 502; // default: upstream unavailable
+    if (overallSuccess) {
+      httpStatus = 200;
+    } else {
+      // Check if any API returned an auth error (401/403)
+      const allStatuses = Object.values(apis).map(a => a.httpStatus).filter(Boolean);
+      if (allStatuses.some(s => s === 401)) httpStatus = 401;
+      else if (allStatuses.some(s => s === 403)) httpStatus = 403;
+    }
     return res.status(httpStatus).json({
       success: overallSuccess,
       data: {

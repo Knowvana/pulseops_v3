@@ -137,7 +137,13 @@ export async function updateIncident(conn, id, payload) {
 }
 
 /**
- * Close an incident (state = 7 — Closed).
+ * Close an incident via two-step state transition:
+ *   1. Resolve (state=6) — sets close_code and close_notes
+ *   2. Close  (state=7)
+ *
+ * ServiceNow data policies typically require close_code when resolving.
+ * Some instances allow direct state=7, but going through state=6 first
+ * ensures compatibility with all SNOW configurations.
  *
  * @param {object} conn    - ServiceNow connection config.
  * @param {string} id      - sys_id of the incident.
@@ -145,12 +151,20 @@ export async function updateIncident(conn, id, payload) {
  * @returns {Promise<{ statusCode: number, data: any }>}
  */
 export async function closeIncident(conn, id, payload) {
-  const code = payload.closeCode || 'Solved (Permanently)';
+  const code  = payload.closeCode  || 'Solved (Permanently)';
+  const notes = payload.closeNotes || 'Closed via PulseOps';
+
+  // Step 1: Resolve (state = 6) with mandatory close fields
+  const resolveResult = await snowWrite(conn, `${SNOW_TABLE}/${id}`, 'PATCH', JSON.stringify({
+    state:       '6',
+    close_code:  code,
+    close_notes: notes,
+  }));
+  if (!isSnowSuccess(resolveResult.statusCode)) return resolveResult;
+
+  // Step 2: Close (state = 7)
   return snowWrite(conn, `${SNOW_TABLE}/${id}`, 'PATCH', JSON.stringify({
-    state:            '7',
-    close_notes:      payload.closeNotes || 'Closed via PulseOps',
-    close_code:       code,
-    resolution_code:  code,
+    state: '7',
   }));
 }
 

@@ -5,10 +5,10 @@
 // frequency and auto-acknowledges incidents in the "New" state.
 //
 // DESIGN:
+//   - Stateless — no in-memory dedup; safe for K8s pod restarts
 //   - Single setInterval timer — safe across hot-reloads (stop() clears it)
 //   - Re-reads config from DB on every tick — honors live config changes
-//   - Checks SNOW comment field directly to avoid re-acknowledging
-//   - Also checks local DB log as a secondary guard
+//   - Dedup via DB log (sn_auto_acknowledge_log) — sole source of truth
 //   - Exported lifecycle: start(config) / stop() / restart(config) / runOnce()
 //   - Exported status:    getStatus() → { running, lastPollAt, nextPollAt, lastPollResult }
 //
@@ -43,10 +43,6 @@ let _status = {
   pollFreqMinutes: null,
   lastPollResult:  null,
 };
-
-// In-memory dedup set — survives across poll cycles within a session.
-// Cleared only on poller stop() or server restart.
-const _acknowledgedSysIds = new Set();
 
 // ── Private helpers ───────────────────────────────────────────────────────────
 
@@ -114,7 +110,7 @@ async function logToDb(incident, message, status, errorMsg = null) {
       ],
     );
   } catch (err) {
-    logger.error(`[AutoAcknowledge] Failed to log to DB: ${err.message}`);
+    logger.error(`Failed to log to DB: ${err.message}`);
   }
 }
 
@@ -124,24 +120,24 @@ async function executePollCycle() {
   const config = { ...DEFAULT_CONFIG, ...(await loadModuleConfig(CONFIG_KEY) || {}) };
 
   if (!config.enabled) {
-    logger.debug('[AutoAcknowledge] Poll tick — feature disabled, stopping poller');
+    logger.debug('Poll tick — feature disabled, stopping poller');
     stop();
     return { stopped: true };
   }
 
   const conn = loadConnectionConfig();
   if (!conn.isConfigured) {
-    logger.debug('[AutoAcknowledge] Poll tick — ServiceNow not configured, skipping');
+    logger.debug('Poll tick — ServiceNow not configured, skipping');
     return { skipped: 'not_configured' };
   }
 
-  logger.debug(`[AutoAcknowledge] Poll cycle starting — freq: ${config.pollFrequencyMinutes}m`);
+  logger.debug(`Poll cycle starting — freq: ${config.pollFrequencyMinutes}m`);
   const pollAt = new Date().toISOString();
   _status.lastPollAt = pollAt;
 
   const incidentConfig = await loadIncidentConfig();
   const newIncidents   = await fetchNewIncidents(conn, incidentConfig);
-  logger.debug(`[AutoAcknowledge] Found ${newIncidents.length} incidents in New state`);
+  logger.debug(`Found ${newIncidents.length} incidents in New state`);
 
   let acknowledged = 0;
   let skipped      = 0;
@@ -152,17 +148,9 @@ async function executePollCycle() {
     const sysId  = snowVal(inc.sys_id);
     const number = snowVal(inc.number);
 
-    // Guard 1 (fast): in-memory set — catches re-acks within same session
-    if (_acknowledgedSysIds.has(sysId)) {
-      logger.debug(`[AutoAcknowledge] ${number} — already in memory set, skipping`);
-      skipped++;
-      continue;
-    }
-
-    // Guard 2 (durable): local DB log — catches re-acks across restarts
+    // Stateless guard: check DB log — safe across K8s pod restarts
     if (await isAlreadyLoggedInDb(sysId)) {
-      logger.debug(`[AutoAcknowledge] ${number} — already in local DB log, skipping`);
-      _acknowledgedSysIds.add(sysId); // sync memory set
+      logger.debug(`${number} — already acknowledged in DB, skipping`);
       skipped++;
       continue;
     }
@@ -170,21 +158,20 @@ async function executePollCycle() {
     try {
       await postAcknowledge(conn, sysId, config.message);
       await logToDb(inc, config.message, 'success');
-      _acknowledgedSysIds.add(sysId);
       acknowledged++;
       results.push({ number, status: 'success' });
-      logger.info(`[AutoAcknowledge] Acknowledged ${number} → state set to In Progress`);
+      logger.info(`Acknowledged ${number} → state set to In Progress`);
     } catch (err) {
       await logToDb(inc, config.message, 'failed', err.message);
       failed++;
       results.push({ number, status: 'failed', error: err.message });
-      logger.error(`[AutoAcknowledge] Failed to acknowledge ${number}: ${err.message}`);
+      logger.error(`Failed to acknowledge ${number}: ${err.message}`);
     }
   }
 
   const result = { totalNew: newIncidents.length, acknowledged, skipped, failed, results, at: pollAt };
   _status.lastPollResult = result;
-  logger.info(`[AutoAcknowledge] Poll complete — new:${newIncidents.length} acked:${acknowledged} skipped:${skipped} failed:${failed}`);
+  logger.info(`Poll complete — new:${newIncidents.length} acked:${acknowledged} skipped:${skipped} failed:${failed}`);
   return result;
 }
 
@@ -215,11 +202,11 @@ export function start(config) {
         _status.nextPollAt = new Date(Date.now() + nextFreqMs).toISOString();
       }
     } catch (err) {
-      logger.error(`[AutoAcknowledge] Unhandled poller error: ${err.message}`);
+      logger.error(`Unhandled poller error: ${err.message}`);
     }
   }, freqMs);
 
-  logger.info(`[AutoAcknowledge] Poller started — interval: ${freqMin}m`);
+  logger.info(`Poller started — interval: ${freqMin}m`);
 }
 
 /**
@@ -229,11 +216,10 @@ export function stop() {
   if (_timer) {
     clearInterval(_timer);
     _timer = null;
-    logger.info('[AutoAcknowledge] Poller stopped');
+    logger.info('Poller stopped');
   }
   _status.running    = false;
   _status.nextPollAt = null;
-  _acknowledgedSysIds.clear();
 }
 
 /**
@@ -257,10 +243,10 @@ export async function startIfEnabled() {
     if (config.enabled && config.message?.trim()) {
       start(config);
     } else {
-      logger.debug('[AutoAcknowledge] startIfEnabled — not enabled or no message, poller not started');
+      logger.debug('startIfEnabled — not enabled or no message, poller not started');
     }
   } catch (err) {
-    logger.warn(`[AutoAcknowledge] startIfEnabled failed: ${err.message}`);
+    logger.warn(`startIfEnabled failed: ${err.message}`);
   }
 }
 

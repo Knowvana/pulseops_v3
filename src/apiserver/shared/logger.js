@@ -74,9 +74,17 @@ let logger = winston.createLogger({
     new winston.transports.Console({
       format: winston.format.combine(
         winston.format.colorize(),
-        winston.format.printf(({ timestamp, level, message, ...meta }) => {
-          const metaStr = Object.keys(meta).length > 1 ? ` ${JSON.stringify(meta)}` : '';
-          return `${timestamp} [${level}]: ${message}${metaStr}`;
+        winston.format.printf(({ timestamp, level, message, moduleName, fileName, functionName, service, ...meta }) => {
+          // Module logs: [API][Date][Level][Module][File][Function] Message
+          if (moduleName) {
+            const filePart   = fileName     ? `[${fileName}]`     : '';
+            const funcPart   = functionName ? `[${functionName}]` : '';
+            const metaStr    = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
+            return `[API] ${timestamp} [${level}] [${moduleName}]${filePart}${funcPart} ${message}${metaStr}`;
+          }
+          // Core logs: existing format
+          const metaStr = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
+          return `[API] ${timestamp} [${level}]: ${message}${metaStr}`;
         })
       ),
     }),

@@ -770,30 +770,7 @@ function LogConfigTabNew() {
             }`} />
           </div>
         </div>
-        <div className="flex items-center justify-between py-2">
-          <div>
-            <p className="text-xs font-semibold text-surface-700">Suppress <code className="bg-surface-100 px-1 rounded">/api/servicenow/auto-acknowledge/status</code> from Terminal</p>
-            <p className="text-[10px] text-surface-400">Hides frequent poller status polling from terminal output</p>
-          </div>
-          <div
-            className={`relative w-8 h-4 rounded-full transition-colors cursor-pointer ${
-              cfg.suppressConsolePaths?.includes('/api/servicenow/auto-acknowledge/status') ? 'bg-brand-500' : 'bg-surface-300'
-            }`}
-            onClick={() => setCfg(prev => {
-              const path = '/api/servicenow/auto-acknowledge/status';
-              return {
-                ...prev,
-                suppressConsolePaths: prev.suppressConsolePaths?.includes(path)
-                  ? prev.suppressConsolePaths.filter(p => p !== path)
-                  : [...(prev.suppressConsolePaths || []), path],
-              };
-            })}
-          >
-            <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${
-              cfg.suppressConsolePaths?.includes('/api/servicenow/auto-acknowledge/status') ? 'translate-x-4' : 'translate-x-0.5'
-            }`} />
-          </div>
-        </div>
+        
       </div>
 
       {/* Management Settings */}

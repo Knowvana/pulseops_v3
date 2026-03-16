@@ -19,7 +19,7 @@ import {
   Clock, RefreshCw, Save, Info, Activity, Timer, Play, Square,
 } from 'lucide-react';
 import { createLogger, useConfigLayout } from '@shared';
-import { ToggleSwitch, PageSpinner } from '@components';
+import { ToggleSwitch, PageSpinner, ConfirmDialog } from '@components';
 import ApiClient from '@shared/services/apiClient';
 
 const log = createLogger('ServiceNowAutoAcknowledgeTab');
@@ -43,6 +43,8 @@ export default function ServiceNowAutoAcknowledgeTab() {
   const [config, setConfig]             = useState(DEFAULT_CONFIG);
   const [pollerStatus, setPollerStatus] = useState(null);
   const [statusBanner, setStatusBanner] = useState(null);
+  const [showConfirm, setShowConfirm]   = useState(false);
+  const [saveResultLabel, setSaveResultLabel] = useState(null);
 
   // ── Load config ──────────────────────────────────────────────────────────
   const loadConfig = useCallback(async () => {
@@ -78,52 +80,33 @@ export default function ServiceNowAutoAcknowledgeTab() {
     return () => clearInterval(statusTimer.current);
   }, [loadStatus]);
 
-  // ── Save config ──────────────────────────────────────────────────────────
-  const handleSave = useCallback(async () => {
-    setSaving(true);
-    setStatusBanner(null);
-    try {
-      const res = await ApiClient.put(snApi.config, config);
-      if (res?.success) {
-        setStatusBanner({ success: true, message: 'Auto acknowledge configuration saved. Poller restarted.' });
-        if (res.data) setConfig({ ...DEFAULT_CONFIG, ...res.data });
-        await loadStatus();
-      } else {
-        throw new Error(res?.error?.message || 'Save failed.');
-      }
-    } catch (err) {
-      setStatusBanner({ success: false, message: err.message });
-    } finally {
-      setSaving(false);
+  // ── Save config (called from ConfirmDialog action) ─────────────────────
+  const executeSave = useCallback(async () => {
+    const res = await ApiClient.put(snApi.config, config);
+    if (res?.success) {
+      if (res.data) setConfig({ ...DEFAULT_CONFIG, ...res.data });
+      await loadStatus();
+      return res;
     }
+    throw new Error(res?.error?.message || 'Save failed.');
   }, [config, loadStatus]);
 
-  // ── Toggle enabled ───────────────────────────────────────────────────────
-  const handleToggle = useCallback(async () => {
+  const handleSaveClick = useCallback(() => {
+    setStatusBanner(null);
+    setSaveResultLabel(null);
+    setShowConfirm(true);
+  }, []);
+
+  // ── Toggle enabled (local state only — saved on Save click) ────────────
+  const handleToggle = useCallback(() => {
     const newEnabled = !config.enabled;
     if (newEnabled && (!config.message || !config.message.trim())) {
       setStatusBanner({ success: false, message: 'Please enter an acknowledge message before enabling.' });
       return;
     }
     setConfig(prev => ({ ...prev, enabled: newEnabled }));
-    setSaving(true);
-    setStatusBanner(null);
-    try {
-      const res = await ApiClient.put(snApi.config, { ...config, enabled: newEnabled });
-      if (res?.success) {
-        setStatusBanner({ success: true, message: `Auto acknowledge ${newEnabled ? 'enabled — poller started' : 'disabled — poller stopped'}.` });
-        if (res.data) setConfig({ ...DEFAULT_CONFIG, ...res.data });
-        await loadStatus();
-      } else {
-        setConfig(prev => ({ ...prev, enabled: !newEnabled }));
-        throw new Error(res?.error?.message || 'Toggle failed.');
-      }
-    } catch (err) {
-      setStatusBanner({ success: false, message: err.message });
-    } finally {
-      setSaving(false);
-    }
-  }, [config, loadStatus]);
+    setSaveResultLabel(null);
+  }, [config]);
 
   // ── Manual poll ──────────────────────────────────────────────────────────
   const handlePoll = useCallback(async () => {
@@ -305,17 +288,25 @@ export default function ServiceNowAutoAcknowledgeTab() {
           <p className="text-[10px] text-surface-400 mt-1">How often PulseOps polls ServiceNow (1–1440 minutes). Poller restarts on save.</p>
         </div>
 
-        {/* Save Button */}
+        {/* Save Button + Result Label */}
         <div className="flex items-center gap-3 pt-2">
           <button
-            onClick={handleSave}
+            onClick={handleSaveClick}
             disabled={saving}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 transition-colors disabled:opacity-60"
           >
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             {saving ? 'Saving...' : 'Save Configuration'}
           </button>
-          <p className="text-[10px] text-surface-400">Today's acknowledged incidents are shown on the Dashboard.</p>
+          {saveResultLabel && (
+            <span className={`flex items-center gap-1 text-xs font-medium ${
+              saveResultLabel.success ? 'text-emerald-600' : 'text-rose-600'
+            }`}>
+              {saveResultLabel.success ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+              {saveResultLabel.message}
+            </span>
+          )}
+          {!saveResultLabel && <p className="text-[10px] text-surface-400">Today's acknowledged incidents are shown on the Dashboard.</p>}
         </div>
       </div>
 
@@ -331,6 +322,33 @@ export default function ServiceNowAutoAcknowledgeTab() {
           <button onClick={() => setStatusBanner(null)} className="ml-auto text-surface-400 hover:text-surface-600">×</button>
         </div>
       )}
+
+      {/* Save Confirmation Modal */}
+      <ConfirmDialog
+        isOpen={showConfirm}
+        onClose={() => {
+          setShowConfirm(false);
+          loadStatus();
+        }}
+        title="Save Auto Acknowledge Configuration"
+        actionDescription="save the auto acknowledge configuration"
+        actionTarget="ServiceNow Module"
+        actionDetails={[
+          { label: 'Enabled', value: config.enabled ? 'Yes' : 'No' },
+          { label: 'Poll Frequency', value: `${config.pollFrequencyMinutes} minute(s)` },
+          { label: 'Message', value: (config.message || '').slice(0, 80) + ((config.message || '').length > 80 ? '...' : '') },
+        ]}
+        confirmLabel="Save & Apply"
+        variant="info"
+        action={executeSave}
+        onSuccess={(res) => {
+          setSaveResultLabel({ success: true, message: 'Configuration saved. Poller restarted.' });
+        }}
+        buildSummary={(res) => [
+          { label: 'Status', value: 'Configuration saved successfully' },
+          { label: 'Poller', value: config.enabled ? 'Started' : 'Stopped' },
+        ]}
+      />
 
       {/* Polling overlay */}
       {polling && (

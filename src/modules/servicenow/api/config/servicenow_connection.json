@@ -1,10 +1,10 @@
 {
   "instanceUrl": "https://dev300418.service-now.com",
   "username": "admin",
-  "password": "FHV7Ffzxy7*%",
+  "password": "FHV7Ffzxy7*%.",
   "authMethod": "basic",
   "apiVersion": "v2",
   "isConfigured": true,
-  "lastTested": "2026-03-15T16:11:36.037Z",
-  "testStatus": "success"
+  "lastTested": "2026-03-16T06:55:27.939Z",
+  "testStatus": "failed"
 }

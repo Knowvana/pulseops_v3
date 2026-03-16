@@ -11,7 +11,8 @@ import { loadModuleConfig, saveModuleConfig } from '#modules/servicenow/api/rout
 import { snowGet } from '#modules/servicenow/api/lib/SnowApiClient.js';
 import { snowVal } from '#modules/servicenow/api/lib/SnowApiClient.js';
 import { snowUrls } from '#modules/servicenow/api/config/index.js';
-import { logger } from '#shared/logger.js';
+import { createSnowLogger } from '#modules/servicenow/api/lib/moduleLogger.js';
+const log = createSnowLogger('TimezoneService');
 
 const CONFIG_KEY = 'timezone_config';
 
@@ -119,7 +120,7 @@ export async function detectSnowTimezone(conn) {
     source     = 'default_utc';
   }
 
-  logger.info('[TimezoneService] Detected ServiceNow timezone', { snTimezone, source });
+  log.info('Detected ServiceNow timezone', { snTimezone, source });
   return { snTimezone, source, attempts };
 }
 

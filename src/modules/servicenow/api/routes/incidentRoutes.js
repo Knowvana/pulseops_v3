@@ -10,6 +10,7 @@
 // MOUNT: router.use('/', incidentRoutes)  (in index.js)
 // ============================================================================
 import { Router } from 'express';
+import { createSnowLogger } from '#modules/servicenow/api/lib/moduleLogger.js';
 import { loadConnectionConfig, loadIncidentConfig } from '#modules/servicenow/api/routes/helpers.js';
 import { isSnowSuccess, extractSnowError } from '#modules/servicenow/api/lib/SnowApiClient.js';
 import {
@@ -19,11 +20,14 @@ import {
 import { getEffectiveTimezone } from '#modules/servicenow/api/services/TimezoneService.js';
 import { apiErrors, apiMessages } from '#modules/servicenow/api/config/index.js';
 
+const log = createSnowLogger('Incidents');
+
 const router = Router();
 
 // ── GET /incidents — List incidents ─────────────────────────────────────────
 router.get('/incidents', async (req, res) => {
   try {
+    log.debug(`GET /incidents — limit=${req.query.limit} offset=${req.query.offset} state=${req.query.state}`);
     const conn = loadConnectionConfig();
     if (!conn.isConfigured) return res.json({ success: true, data: { incidents: [], total: 0 } });
 
@@ -40,6 +44,7 @@ router.get('/incidents', async (req, res) => {
 // ── POST /incidents — Create incident ───────────────────────────────────────
 router.post('/incidents', async (req, res) => {
   try {
+    log.debug('POST /incidents — creating new incident', { shortDescription: req.body?.shortDescription });
     const conn = loadConnectionConfig();
     if (!conn.isConfigured) {
       return res.status(400).json({ success: false, error: { message: apiErrors.connection.notConfigured } });
@@ -61,6 +66,7 @@ router.post('/incidents', async (req, res) => {
 // ── PUT /incidents/:id — Update incident ────────────────────────────────────
 router.put('/incidents/:id', async (req, res) => {
   try {
+    log.debug(`PUT /incidents/${req.params.id} — updating incident`);
     const conn = loadConnectionConfig();
     if (!conn.isConfigured) {
       return res.status(400).json({ success: false, error: { message: apiErrors.connection.notConfigured } });
@@ -79,6 +85,7 @@ router.put('/incidents/:id', async (req, res) => {
 // ── POST /incidents/:id/close — Close incident ──────────────────────────────
 router.post('/incidents/:id/close', async (req, res) => {
   try {
+    log.debug(`POST /incidents/${req.params.id}/close — closing incident`);
     const conn = loadConnectionConfig();
     if (!conn.isConfigured) {
       return res.status(400).json({ success: false, error: { message: apiErrors.connection.notConfigured } });

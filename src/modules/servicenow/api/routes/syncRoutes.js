@@ -10,6 +10,7 @@
 // MOUNT: router.use('/', syncRoutes)  (in index.js)
 // ============================================================================
 import { Router } from 'express';
+import { createSnowLogger } from '#modules/servicenow/api/lib/moduleLogger.js';
 import {
   loadConnectionConfig, loadDefaultsConfig, loadIncidentConfig,
   buildAssignmentGroupQuery, writeJsonFile, DEFAULTS_CONFIG,
@@ -17,12 +18,14 @@ import {
 import { snowGet, buildSnowFields, isSnowSuccess } from '#modules/servicenow/api/lib/SnowApiClient.js';
 import { snowUrls, apiErrors, apiMessages } from '#modules/servicenow/api/config/index.js';
 
+const log = createSnowLogger('Sync');
 const router = Router();
 
 // ── POST /sync — Trigger manual sync with detailed summary ──────────────
 router.post('/sync', async (req, res) => {
   const startTime = Date.now();
   try {
+    log.debug('POST /sync — manual sync triggered');
     const conn = loadConnectionConfig();
     const defaults = loadDefaultsConfig();
 

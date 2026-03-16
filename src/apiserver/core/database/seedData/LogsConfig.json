@@ -19,6 +19,10 @@
     "consoleLogs": false,
     "moduleLogs": true
   },
+  "moduleLogsEnabled": {
+    "ServiceNow": true
+  },
+  "suppressConsolePaths": [],
   "management": {
     "maxUiEntries": 1000,
     "maxApiEntries": 500,

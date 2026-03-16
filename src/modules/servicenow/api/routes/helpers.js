@@ -15,7 +15,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import DatabaseService from '#core/database/databaseService.js';
 import { config as appConfig } from '#config';
-import { logger } from '#shared/logger.js';
+import { createSnowLogger } from '#modules/servicenow/api/lib/moduleLogger.js';
+const log = createSnowLogger('Helpers');
 import { snowGet, snowWrite, snowVal as _snowVal, buildSnowFields as _buildSnowFields } from '#modules/servicenow/api/lib/SnowApiClient.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -114,12 +115,12 @@ export async function loadBusinessHours() {
       `SELECT * FROM ${dbSchema}.sn_business_hours ORDER BY day_of_week`
     );
     if (result && result.rows && result.rows.length > 0) {
-      logger.debug(`[helpers] loadBusinessHours: loaded ${result.rows.length} rows from DB`);
+      log.debug(`loadBusinessHours: loaded ${result.rows.length} rows from DB`);
       return result.rows;
     }
-    logger.debug(`[helpers] loadBusinessHours: DB returned no rows, using fallback`);
+    log.debug('loadBusinessHours: DB returned no rows, using fallback');
   } catch (err) {
-    logger.warn(`[helpers] loadBusinessHours: DB query failed (${err.code}): ${err.message}, using fallback`);
+    log.warn(`loadBusinessHours: DB query failed (${err.code}): ${err.message}, using fallback`);
   }
   // Fallback to default business hours (Mon-Fri, 09:00-17:00)
   // IMPORTANT: This ensures business hour calculations always work, even if DB is empty
@@ -132,7 +133,7 @@ export async function loadBusinessHours() {
     { day_of_week: 5, day_name: 'Friday',    is_business_day: true,  start_time: '09:00', end_time: '17:00' },
     { day_of_week: 6, day_name: 'Saturday',  is_business_day: false, start_time: '00:00', end_time: '00:00' }
   ];
-  logger.debug('[helpers] loadBusinessHours: using Mon-Fri 09:00-17:00 fallback');
+  log.debug('loadBusinessHours: using Mon-Fri 09:00-17:00 fallback');
   return fallback;
 }
 

@@ -44,6 +44,49 @@ import SettingsService from '#core/services/settingsService.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const apiRoot = path.resolve(__dirname, '../../..');
 
+// ── Module path resolution ──────────────────────────────────────────────────
+// Maps URL path segments to module display names for log tagging + gating.
+// Core API path segments are never treated as modules.
+const CORE_PATH_SEGMENTS = new Set([
+  'auth', 'database', 'logs', 'settings', 'health', 'modules', 'users',
+]);
+
+// moduleId (lowercase) → display name  e.g. { servicenow: 'ServiceNow' }
+let _modulePathMap = {};
+
+/**
+ * Register a mapping from module ID (URL segment) to display name.
+ * Called by dynamicRouteLoader when a module is enabled / rehydrated.
+ * @param {string} moduleId - e.g. 'servicenow'
+ * @param {string} displayName - e.g. 'ServiceNow'
+ */
+export function registerModulePathMapping(moduleId, displayName) {
+  _modulePathMap[moduleId.toLowerCase()] = displayName;
+}
+
+/**
+ * Resolve a request path to its owning module display name.
+ * Returns 'Core' for core platform routes, the display name for module routes,
+ * or null if the path segment is unknown (not core, not registered).
+ * @param {string} requestPath - e.g. '/api/servicenow/incidents'
+ * @returns {string|null}
+ */
+export function resolveModuleFromPath(requestPath) {
+  const match = requestPath.match(/^\/api\/([^/?]+)/);
+  if (!match) return 'Core';
+  const segment = match[1].toLowerCase();
+  if (CORE_PATH_SEGMENTS.has(segment)) return 'Core';
+  // Check registered modules
+  if (_modulePathMap[segment]) return _modulePathMap[segment];
+  // Fallback: check moduleLogsEnabled keys case-insensitively
+  const cfg = getLogsConfig();
+  const keys = Object.keys(cfg.moduleLogsEnabled || {});
+  const found = keys.find(k => k.toLowerCase() === segment);
+  if (found) return found;
+  // Unknown module — return segment capitalised as best-effort
+  return segment.charAt(0).toUpperCase() + segment.slice(1);
+}
+
 // In-memory cache for logs config (refreshed from DB on each call via async path)
 let _cachedLogsConfig = null;
 
@@ -53,15 +96,32 @@ const DEFAULT_LOGS_CONFIG = {
   defaultLevel: 'info',
   captureOptions: { uiLogs: true, apiLogs: true, consoleLogs: false, moduleLogs: true },
   management: { maxUiEntries: 1000, maxApiEntries: 500, pushIntervalMs: 30000, notifyDebounceMs: 250, maxBodyBytes: 10000 },
+  moduleLogsEnabled: {},
+  suppressConsolePaths: [],
 };
 
 /**
  * Get the current logs configuration (synchronous — uses cached value).
  * The cache is refreshed from DB by refreshLogsConfig().
+ * Exported so other modules (e.g. security.js) can read config without DB call.
  * @returns {Object} Current LogsConfig
  */
-function getLogsConfig() {
+export function getLogsConfig() {
   return _cachedLogsConfig || DEFAULT_LOGS_CONFIG;
+}
+
+/**
+ * Check whether logging is enabled for a named module.
+ * If the module has an explicit entry in moduleLogsEnabled, use it.
+ * Otherwise default to true (enabled).
+ * @param {string} moduleName
+ * @returns {boolean}
+ */
+export function isModuleLoggingEnabled(moduleName) {
+  const cfg = getLogsConfig();
+  const map = cfg.moduleLogsEnabled || {};
+  if (moduleName in map) return !!map[moduleName];
+  return true; // enabled by default if not explicitly listed
 }
 
 /**
@@ -265,7 +325,6 @@ async function readLogsFromDb(logType, filters = {}) {
     `SELECT * FROM ${table} ${where} ORDER BY created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
     [...params, limit, offset]
   );
-  logger.debug(`readLogsFromDb: Read ${result.rows.length} ${logType} logs from database`);
   return result.rows;
 }
 
@@ -321,7 +380,6 @@ async function writeLogsToDb(logType, entries) {
       entry.timestamp || new Date().toISOString(),                      // $20 created_at
     ]);
   }
-  logger.debug(`writeLogsToDb: Inserted ${entries.length} ${logType} log entries into database`);
   return entries.length;
 }
 
@@ -467,7 +525,7 @@ const LogService = {
     const logsConfig = { ...getLogsConfig() };
 
     // Allowed top-level fields that callers may update
-    const allowed = ['enabled', 'defaultLevel', 'captureOptions', 'management'];
+    const allowed = ['enabled', 'defaultLevel', 'captureOptions', 'management', 'moduleLogsEnabled', 'suppressConsolePaths'];
     for (const key of allowed) {
       if (updates[key] !== undefined) {
         if (typeof updates[key] === 'object' && !Array.isArray(updates[key])) {
@@ -479,6 +537,8 @@ const LogService = {
     }
     // Storage is always 'database' — never override
     logsConfig.storage = 'database';
+    // Clean up stale legacy keys
+    delete logsConfig.moduleLogLevels;
     await SettingsService.set('logs_config', logsConfig, 'Logging configuration (storage, levels, capture options, management)');
     _cachedLogsConfig = logsConfig;
     
@@ -599,7 +659,6 @@ const LogService = {
       try {
         const written = await writeLogsToDb(logType, timestamped);
         const stats = await getDbLogStats(logType);
-        logger.debug(`writeLogs: Wrote ${written} ${logType} entries to database`);
         return { written, total: stats.count };
       } catch (err) {
         // DB unavailable or schema mismatch — log full error for diagnosis
@@ -687,6 +746,27 @@ const LogService = {
     } catch (err) {
       logger.error('Failed to write API log', { error: err.message });
     }
+  },
+
+  /**
+   * Write a module-originated log entry to DB.
+   * Gates on: global enabled, captureOptions.moduleLogs, moduleLogsEnabled[module].
+   * Used by module-scoped loggers (e.g. createSnowLogger) to persist debug/info/warn/error
+   * entries to the database so they appear in the Logs Viewer.
+   * @param {Object} entry - { level, module, message, fileName, data, ... }
+   */
+  async writeModuleLog(entry) {
+    try {
+      const cfg = getLogsConfig();
+      if (!cfg.enabled) return;
+      if (cfg.captureOptions?.moduleLogs === false) return;
+      const moduleName = entry.module || 'Core';
+      if (moduleName !== 'Core') {
+        const map = cfg.moduleLogsEnabled || {};
+        if (moduleName in map && !map[moduleName]) return;
+      }
+      await this.writeLogs('api', [entry]);
+    } catch { /* silent — avoid log loops */ }
   },
 
   /**

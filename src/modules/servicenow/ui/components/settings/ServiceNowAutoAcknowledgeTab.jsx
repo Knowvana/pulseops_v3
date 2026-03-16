@@ -5,9 +5,10 @@
 //   - Enable/disable auto acknowledge with toggle
 //   - Configure acknowledge message template
 //   - Configure poll frequency (minutes)
-//   - Show SetupRequiredOverlay when not configured
+//   - Live poller status card (running/stopped, next poll, last result)
 //   - Manual poll trigger button
-//   - Today's auto acknowledged incidents log grid
+//
+// NOTE: Today's auto acknowledged incidents are shown on the Dashboard.
 //
 // USED BY: manifest.jsx → getConfigTabs() → Incident Configuration section
 // ============================================================================
@@ -15,7 +16,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   MessageSquare, Loader2, CheckCircle2, AlertCircle,
-  Clock, RefreshCw, Save, Power, Info,
+  Clock, RefreshCw, Save, Info, Activity, Timer, Play, Square,
 } from 'lucide-react';
 import { createLogger, useConfigLayout } from '@shared';
 import { ToggleSwitch, PageSpinner } from '@components';
@@ -24,49 +25,41 @@ import ApiClient from '@shared/services/apiClient';
 const log = createLogger('ServiceNowAutoAcknowledgeTab');
 
 const snApi = {
-  config: '/api/servicenow/config/auto-acknowledge',
-  poll: '/api/servicenow/auto-acknowledge/poll',
-  logToday: '/api/servicenow/auto-acknowledge/log',
+  config:  '/api/servicenow/config/auto-acknowledge',
+  poll:    '/api/servicenow/auto-acknowledge/poll',
+  status:  '/api/servicenow/auto-acknowledge/status',
 };
 
 const DEFAULT_CONFIG = { enabled: false, message: '', pollFrequencyMinutes: 5 };
 
 export default function ServiceNowAutoAcknowledgeTab() {
   const { navigateToTab } = useConfigLayout();
-  const initRan = useRef(false);
+  const initRan      = useRef(false);
+  const statusTimer  = useRef(null);
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [polling, setPolling] = useState(false);
-  const [config, setConfig] = useState(DEFAULT_CONFIG);
+  const [loading, setLoading]           = useState(true);
+  const [saving, setSaving]             = useState(false);
+  const [polling, setPolling]           = useState(false);
+  const [config, setConfig]             = useState(DEFAULT_CONFIG);
+  const [pollerStatus, setPollerStatus] = useState(null);
   const [statusBanner, setStatusBanner] = useState(null);
-  const [logEntries, setLogEntries] = useState([]);
-  const [logLoading, setLogLoading] = useState(false);
 
-  // ── Load config and today's log ─────────────────────────────────────────
+  // ── Load config ──────────────────────────────────────────────────────────
   const loadConfig = useCallback(async () => {
     try {
       const res = await ApiClient.get(snApi.config);
-      if (res?.success) {
-        setConfig({ ...DEFAULT_CONFIG, ...(res.data || {}) });
-      }
+      if (res?.success) setConfig({ ...DEFAULT_CONFIG, ...(res.data || {}) });
     } catch (err) {
       log.error('loadConfig', 'Failed to load config', { error: err.message });
     }
   }, []);
 
-  const loadTodayLog = useCallback(async () => {
-    setLogLoading(true);
+  // ── Load poller status ───────────────────────────────────────────────────
+  const loadStatus = useCallback(async () => {
     try {
-      const res = await ApiClient.get(snApi.logToday);
-      if (res?.success) {
-        setLogEntries(res.data || []);
-      }
-    } catch (err) {
-      log.error('loadTodayLog', 'Failed to load log', { error: err.message });
-    } finally {
-      setLogLoading(false);
-    }
+      const res = await ApiClient.get(snApi.status);
+      if (res?.success) setPollerStatus(res.data);
+    } catch { /* ignore */ }
   }, []);
 
   useEffect(() => {
@@ -74,20 +67,27 @@ export default function ServiceNowAutoAcknowledgeTab() {
     initRan.current = true;
     (async () => {
       setLoading(true);
-      await Promise.all([loadConfig(), loadTodayLog()]);
+      await Promise.all([loadConfig(), loadStatus()]);
       setLoading(false);
     })();
-  }, [loadConfig, loadTodayLog]);
+  }, [loadConfig, loadStatus]);
 
-  // ── Save config ─────────────────────────────────────────────────────────
+  // Auto-refresh status every 30 seconds while tab is open
+  useEffect(() => {
+    statusTimer.current = setInterval(loadStatus, 30_000);
+    return () => clearInterval(statusTimer.current);
+  }, [loadStatus]);
+
+  // ── Save config ──────────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
     setSaving(true);
     setStatusBanner(null);
     try {
       const res = await ApiClient.put(snApi.config, config);
       if (res?.success) {
-        setStatusBanner({ success: true, message: 'Auto acknowledge configuration saved.' });
+        setStatusBanner({ success: true, message: 'Auto acknowledge configuration saved. Poller restarted.' });
         if (res.data) setConfig({ ...DEFAULT_CONFIG, ...res.data });
+        await loadStatus();
       } else {
         throw new Error(res?.error?.message || 'Save failed.');
       }
@@ -96,12 +96,11 @@ export default function ServiceNowAutoAcknowledgeTab() {
     } finally {
       setSaving(false);
     }
-  }, [config]);
+  }, [config, loadStatus]);
 
-  // ── Toggle enabled ──────────────────────────────────────────────────────
+  // ── Toggle enabled ───────────────────────────────────────────────────────
   const handleToggle = useCallback(async () => {
     const newEnabled = !config.enabled;
-    // If enabling, require message to be set
     if (newEnabled && (!config.message || !config.message.trim())) {
       setStatusBanner({ success: false, message: 'Please enter an acknowledge message before enabling.' });
       return;
@@ -112,10 +111,10 @@ export default function ServiceNowAutoAcknowledgeTab() {
     try {
       const res = await ApiClient.put(snApi.config, { ...config, enabled: newEnabled });
       if (res?.success) {
-        setStatusBanner({ success: true, message: `Auto acknowledge ${newEnabled ? 'enabled' : 'disabled'}.` });
+        setStatusBanner({ success: true, message: `Auto acknowledge ${newEnabled ? 'enabled — poller started' : 'disabled — poller stopped'}.` });
         if (res.data) setConfig({ ...DEFAULT_CONFIG, ...res.data });
+        await loadStatus();
       } else {
-        // Revert
         setConfig(prev => ({ ...prev, enabled: !newEnabled }));
         throw new Error(res?.error?.message || 'Toggle failed.');
       }
@@ -124,9 +123,9 @@ export default function ServiceNowAutoAcknowledgeTab() {
     } finally {
       setSaving(false);
     }
-  }, [config]);
+  }, [config, loadStatus]);
 
-  // ── Manual poll ─────────────────────────────────────────────────────────
+  // ── Manual poll ──────────────────────────────────────────────────────────
   const handlePoll = useCallback(async () => {
     setPolling(true);
     setStatusBanner(null);
@@ -136,9 +135,9 @@ export default function ServiceNowAutoAcknowledgeTab() {
         const d = res.data || {};
         setStatusBanner({
           success: true,
-          message: `Poll complete: ${d.totalNew || 0} new incidents found, ${d.acknowledged || 0} acknowledged, ${d.skipped || 0} skipped, ${d.failed || 0} failed.`,
+          message: `Poll complete: ${d.totalNew || 0} new, ${d.acknowledged || 0} acknowledged, ${d.skipped || 0} skipped, ${d.failed || 0} failed.`,
         });
-        await loadTodayLog();
+        await loadStatus();
       } else {
         throw new Error(res?.error?.message || 'Poll failed.');
       }
@@ -147,17 +146,17 @@ export default function ServiceNowAutoAcknowledgeTab() {
     } finally {
       setPolling(false);
     }
-  }, [loadTodayLog]);
+  }, [loadStatus]);
 
-  // ── Check if configured ─────────────────────────────────────────────────
-  const isConfigured = config.message && config.message.trim().length > 0;
+  const isConfigured = !!(config.message?.trim());
 
-  if (loading) {
-    return <PageSpinner modal message="Loading auto acknowledge configuration..." />;
-  }
+  if (loading) return <PageSpinner modal message="Loading auto acknowledge configuration..." />;
+
+  const lastResult = pollerStatus?.lastPollResult;
 
   return (
     <div className="relative space-y-5 animate-fade-in">
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -173,22 +172,85 @@ export default function ServiceNowAutoAcknowledgeTab() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-surface-500">Automatically acknowledge new incidents with a configured message.</p>
+            <p className="text-xs text-surface-500">Automatically acknowledge new incidents with a configured message at the configured poll frequency.</p>
           </div>
         </div>
-        {isConfigured && (
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handlePoll}
-              disabled={polling || !config.enabled}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 transition-colors disabled:opacity-60"
-            >
-              {polling ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-              Poll Now
-            </button>
-          </div>
+        {isConfigured && config.enabled && (
+          <button
+            onClick={handlePoll}
+            disabled={polling}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 transition-colors disabled:opacity-60"
+          >
+            {polling ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            Poll Now
+          </button>
         )}
       </div>
+
+      {/* Poller Status Card */}
+      {isConfigured && (
+        <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-surface-100 bg-surface-50/50">
+            <h3 className="text-sm font-bold text-surface-700 flex items-center gap-2">
+              <Activity size={14} className="text-brand-500" />
+              Background Poller Status
+            </h3>
+            <button onClick={loadStatus} className="p-1 rounded text-surface-400 hover:text-brand-600 hover:bg-brand-50 transition-colors" title="Refresh status">
+              <RefreshCw size={12} />
+            </button>
+          </div>
+          <div className="p-5 grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Running state */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold text-surface-400 uppercase tracking-wider">Status</span>
+              <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${pollerStatus?.running ? 'text-emerald-600' : 'text-surface-400'}`}>
+                {pollerStatus?.running
+                  ? <><Play size={11} className="text-emerald-500" /> Running</>
+                  : <><Square size={11} /> Stopped</>}
+              </span>
+            </div>
+            {/* Poll frequency */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold text-surface-400 uppercase tracking-wider">Interval</span>
+              <span className="text-xs font-semibold text-surface-700 flex items-center gap-1">
+                <Timer size={11} className="text-brand-400" />
+                {pollerStatus?.pollFreqMinutes != null ? `${pollerStatus.pollFreqMinutes} min` : `${config.pollFrequencyMinutes} min`}
+              </span>
+            </div>
+            {/* Last poll */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold text-surface-400 uppercase tracking-wider">Last Poll</span>
+              <span className="text-xs text-surface-600">
+                {pollerStatus?.lastPollAt ? new Date(pollerStatus.lastPollAt).toLocaleTimeString() : '—'}
+              </span>
+            </div>
+            {/* Next poll */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold text-surface-400 uppercase tracking-wider">Next Poll</span>
+              <span className="text-xs text-surface-600">
+                {pollerStatus?.nextPollAt ? new Date(pollerStatus.nextPollAt).toLocaleTimeString() : '—'}
+              </span>
+            </div>
+          </div>
+          {/* Last poll result */}
+          {lastResult && !lastResult.error && (
+            <div className="px-5 pb-4 flex items-center gap-4 text-xs text-surface-500 border-t border-surface-100 pt-3">
+              <span className="font-semibold text-surface-600">Last Result:</span>
+              <span>Found <strong className="text-surface-700">{lastResult.totalNew}</strong> new</span>
+              <span>·</span>
+              <span className="text-emerald-600 font-semibold">{lastResult.acknowledged} acknowledged</span>
+              <span>·</span>
+              <span>{lastResult.skipped} skipped</span>
+              {lastResult.failed > 0 && <><span>·</span><span className="text-rose-600 font-semibold">{lastResult.failed} failed</span></>}
+            </div>
+          )}
+          {lastResult?.error && (
+            <div className="px-5 pb-4 text-xs text-rose-600 border-t border-surface-100 pt-3">
+              Last poll error: {lastResult.error}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Configuration Form */}
       <div className="bg-white rounded-2xl border border-surface-200 shadow-sm p-6 space-y-5">
@@ -201,7 +263,7 @@ export default function ServiceNowAutoAcknowledgeTab() {
         <div className="flex items-center justify-between py-3 border-b border-surface-100">
           <div>
             <p className="text-sm font-semibold text-surface-700">Enabled</p>
-            <p className="text-xs text-surface-400">When enabled, PulseOps will poll ServiceNow for new incidents and auto-acknowledge them.</p>
+            <p className="text-xs text-surface-400">When enabled, PulseOps polls ServiceNow for new (state=New) incidents and auto-acknowledges them at the configured interval.</p>
           </div>
           <ToggleSwitch
             checked={config.enabled}
@@ -220,9 +282,11 @@ export default function ServiceNowAutoAcknowledgeTab() {
             onChange={e => setConfig(prev => ({ ...prev, message: e.target.value }))}
             rows={3}
             className="w-full px-3 py-2 rounded-lg border border-surface-200 text-sm text-surface-700 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 resize-none"
-            placeholder="Enter the message to post as a comment on new incidents..."
+            placeholder="Enter the message to post as a work note on new incidents..."
           />
-          <p className="text-[10px] text-surface-400 mt-1">This message will be posted as a work note (comment) on each new incident.</p>
+          <p className="text-[10px] text-surface-400 mt-1">
+            Posted as a work note on each new incident. Incidents already containing this message are skipped.
+          </p>
         </div>
 
         {/* Poll Frequency */}
@@ -238,7 +302,7 @@ export default function ServiceNowAutoAcknowledgeTab() {
             onChange={e => setConfig(prev => ({ ...prev, pollFrequencyMinutes: parseInt(e.target.value, 10) || 5 }))}
             className="w-32 px-3 py-2 rounded-lg border border-surface-200 text-sm text-surface-700 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400"
           />
-          <p className="text-[10px] text-surface-400 mt-1">How often PulseOps polls ServiceNow for new incidents (1–1440 minutes).</p>
+          <p className="text-[10px] text-surface-400 mt-1">How often PulseOps polls ServiceNow (1–1440 minutes). Poller restarts on save.</p>
         </div>
 
         {/* Save Button */}
@@ -251,67 +315,9 @@ export default function ServiceNowAutoAcknowledgeTab() {
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             {saving ? 'Saving...' : 'Save Configuration'}
           </button>
+          <p className="text-[10px] text-surface-400">Today's acknowledged incidents are shown on the Dashboard.</p>
         </div>
       </div>
-
-      {/* Today's Auto Acknowledged Incidents */}
-      {isConfigured && (
-        <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-surface-200 bg-surface-50">
-            <h3 className="text-sm font-bold text-surface-800 flex items-center gap-2">
-              <CheckCircle2 size={14} className="text-emerald-500" />
-              Today's Auto Acknowledged Incidents
-            </h3>
-            <button
-              onClick={loadTodayLog}
-              disabled={logLoading}
-              className="flex items-center gap-1 text-xs text-surface-500 hover:text-surface-700 transition-colors"
-            >
-              {logLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-              Refresh
-            </button>
-          </div>
-          {logEntries.length === 0 ? (
-            <div className="p-6 text-center">
-              <p className="text-xs text-surface-400">No incidents auto-acknowledged today.</p>
-            </div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-surface-50 border-b border-surface-200">
-                  <th className="text-left px-4 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider">Incident</th>
-                  <th className="text-left px-4 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider">Description</th>
-                  <th className="text-center px-4 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider">Priority</th>
-                  <th className="text-center px-4 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider">Status</th>
-                  <th className="text-left px-4 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider">Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {logEntries.map((entry, idx) => (
-                  <tr key={entry.id || idx} className="border-b border-surface-100 hover:bg-surface-50/50 transition-colors">
-                    <td className="px-4 py-2.5 text-xs font-mono font-semibold text-brand-700">{entry.incident_number}</td>
-                    <td className="px-4 py-2.5 text-xs text-surface-600 max-w-[250px] truncate">{entry.short_description || '—'}</td>
-                    <td className="px-4 py-2.5 text-center text-xs text-surface-600">{entry.priority || '—'}</td>
-                    <td className="px-4 py-2.5 text-center">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                        entry.status === 'success'
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : 'bg-rose-50 text-rose-700 border border-rose-200'
-                      }`}>
-                        {entry.status === 'success' ? <CheckCircle2 size={10} /> : <AlertCircle size={10} />}
-                        {entry.status === 'success' ? 'Acknowledged' : 'Failed'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-surface-500">
-                      {entry.acknowledged_at ? new Date(entry.acknowledged_at).toLocaleTimeString() : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
 
       {/* Status Banner */}
       {statusBanner && (

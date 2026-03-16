@@ -123,10 +123,26 @@ export default function ServiceNowDashboard({ onNavigate }) {
   const [syncing, setSyncing]         = useState(false);
   const [error, setError]             = useState(null);
   const [syncMessage, setSyncMessage] = useState(null); // { type: 'success'|'error', text, summary }
-  const [autoAckLog, setAutoAckLog]   = useState([]);
+  const [autoAckLog, setAutoAckLog]         = useState([]);
+  const [autoAckLoading, setAutoAckLoading] = useState(false);
+  const [autoAckStatus, setAutoAckStatus]   = useState(null);
   const initRan = useRef(false);
 
   // ── Fetch dashboard stats ─────────────────────────────────────────────────
+  const fetchAutoAckLog = useCallback(async () => {
+    setAutoAckLoading(true);
+    try {
+      const [ackRes, statusRes] = await Promise.all([
+        ApiClient.get('/api/servicenow/auto-acknowledge/log').catch(() => null),
+        ApiClient.get('/api/servicenow/auto-acknowledge/status').catch(() => null),
+      ]);
+      if (ackRes?.success) setAutoAckLog(ackRes.data || []);
+      if (statusRes?.success) setAutoAckStatus(statusRes.data);
+    } catch { /* ignore */ } finally {
+      setAutoAckLoading(false);
+    }
+  }, []);
+
   const fetchStats = useCallback(async () => {
     log.debug('fetchStats', 'Fetching dashboard stats');
     setLoading(true);
@@ -156,10 +172,14 @@ export default function ServiceNowDashboard({ onNavigate }) {
       if (cfgRes?.success) setConfigData(cfgRes.data);
       if (incCfgRes?.success) setIncidentConfig(incCfgRes.data);
 
-      // Fetch today's auto-acknowledged incidents
+      // Fetch today's auto-acknowledged incidents + poller status
       try {
-        const ackRes = await ApiClient.get('/api/servicenow/auto-acknowledge/log');
+        const [ackRes, statusRes] = await Promise.all([
+          ApiClient.get('/api/servicenow/auto-acknowledge/log').catch(() => null),
+          ApiClient.get('/api/servicenow/auto-acknowledge/status').catch(() => null),
+        ]);
         if (ackRes?.success) setAutoAckLog(ackRes.data || []);
+        if (statusRes?.success) setAutoAckStatus(statusRes.data);
       } catch { /* ignore */ }
     } catch (err) {
       log.error('fetchStats', 'Unexpected error', { error: err.message });
@@ -368,6 +388,7 @@ export default function ServiceNowDashboard({ onNavigate }) {
               { label: 'Last Sync', value: stats?.lastSync ? new Date(stats.lastSync).toLocaleString() : (syncStatus?.lastSyncTime ? new Date(syncStatus.lastSyncTime).toLocaleString() : 'Never'), ok: !!(stats?.lastSync || syncStatus?.lastSyncTime) },
               { label: 'Cached Incidents', value: stats?.total != null ? `${stats.total} record(s)` : '—', ok: stats?.total > 0 },
               { label: 'SLA Config', value: configData?.sla ? 'Configured' : 'Default', ok: !!configData?.sla },
+              { label: 'Auto Acknowledge', value: autoAckStatus?.running ? `Running (every ${autoAckStatus.pollFreqMinutes}m)` : 'Stopped', ok: !!autoAckStatus?.running },
             ].map(row => (
               <div key={row.label} className="flex items-center justify-between">
                 <span className="text-xs font-medium text-surface-500">{row.label}</span>
@@ -451,14 +472,18 @@ export default function ServiceNowDashboard({ onNavigate }) {
       </div>
 
       {/* Auto Acknowledged Incidents Today */}
-      {autoAckLog.length > 0 && (
-        <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 border-b border-surface-100 bg-brand-50/50">
             <div className="flex items-center gap-2">
               <MessageSquare size={14} className="text-brand-600" />
               <h3 className="text-sm font-bold text-surface-700">Auto Acknowledged Today</h3>
-              <span className="px-1.5 py-0.5 rounded-full bg-brand-100 text-brand-700 text-[10px] font-bold">{autoAckLog.length}</span>
+              {autoAckLog.length > 0 && <span className="px-1.5 py-0.5 rounded-full bg-brand-100 text-brand-700 text-[10px] font-bold">{autoAckLog.length}</span>}
             </div>
+            <button onClick={fetchAutoAckLog} disabled={autoAckLoading}
+              className="p-1.5 rounded-lg text-surface-400 hover:text-brand-600 hover:bg-brand-50 transition-colors disabled:opacity-40"
+              title="Refresh">
+              <RefreshCw size={13} className={autoAckLoading ? 'animate-spin' : ''} />
+            </button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -495,8 +520,12 @@ export default function ServiceNowDashboard({ onNavigate }) {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+          {autoAckLog.length === 0 ? (
+            <div className="p-8 text-center">
+              <p className="text-sm text-surface-400">{loading || autoAckLoading ? 'Loading…' : 'No incidents auto-acknowledged today.'}</p>
+            </div>
+          ) : null}
+      </div>
     </div>
   );
 }

@@ -28,6 +28,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { errors } from '#shared/loadJson.js';
 import { logger } from '#shared/logger.js';
+import { getLogsConfig, resolveModuleFromPath, isModuleLoggingEnabled } from '#core/services/logService.js';
 import { config } from '#config';
 
 function _extractUserEmail(req) {
@@ -84,39 +85,63 @@ export function requestLogger(req, res, next) {
   const startTime = Date.now();
   const requestPath = req.originalUrl || req.path;
   const isLogRoute = requestPath.startsWith('/api/logs');
-  
-  // Log incoming request
-  logger.info(`[${req.requestId}] → ${req.method} ${requestPath}`, {
-    requestId: req.requestId,
-    method: req.method,
-    path: requestPath,
-    query: Object.keys(req.query).length > 0 ? req.query : undefined,
-    body: req.method !== 'GET' && req.body ? { ...req.body, password: req.body.password ? '***' : undefined } : undefined,
-    ip: req.ip,
-    userAgent: req.get('user-agent')
-  });
+
+  const cfg = getLogsConfig();
+  const suppressPaths = cfg.suppressConsolePaths || [];
+  const suppressConsole = suppressPaths.some(p => requestPath.startsWith(p));
+
+  // ── Module-aware gating ──────────────────────────────────────────────────
+  // Resolve which module owns this path (e.g. 'ServiceNow', 'Core')
+  const moduleName = resolveModuleFromPath(requestPath);
+  let moduleLoggingSuppressed = false;
+  if (moduleName && moduleName !== 'Core') {
+    // Global module logs master toggle
+    if (cfg.captureOptions?.moduleLogs === false) {
+      moduleLoggingSuppressed = true;
+    }
+    // Per-module toggle
+    const moduleMap = cfg.moduleLogsEnabled || {};
+    if (moduleName in moduleMap && !moduleMap[moduleName]) {
+      moduleLoggingSuppressed = true;
+    }
+  }
+
+  // Log incoming request (skipped if suppressed OR module logging disabled)
+  if (!suppressConsole && !moduleLoggingSuppressed) {
+    logger.info(`[${req.requestId}] → ${req.method} ${requestPath}`, {
+      requestId: req.requestId,
+      method: req.method,
+      path: requestPath,
+      query: Object.keys(req.query).length > 0 ? req.query : undefined,
+      body: req.method !== 'GET' && req.body ? { ...req.body, password: req.body.password ? '***' : undefined } : undefined,
+      ip: req.ip,
+      userAgent: req.get('user-agent')
+    });
+  }
 
   // Capture original res.json to log responses
   const originalJson = res.json.bind(res);
   res.json = function(data) {
     const duration = Date.now() - startTime;
-    
-    logger.info(`[${req.requestId}] ← ${res.statusCode} ${req.method} ${requestPath} (${duration}ms)`, {
-      requestId: req.requestId,
-      statusCode: res.statusCode,
-      duration,
-      success: data?.success,
-      error: data?.error?.message
-    });
 
-    // Persist API log entry (skip /logs endpoints to prevent recursion)
-    if (!isLogRoute) {
+    // Log response (skipped if suppressed OR module logging disabled)
+    if (!suppressConsole && !moduleLoggingSuppressed) {
+      logger.info(`[${req.requestId}] ← ${res.statusCode} ${req.method} ${requestPath} (${duration}ms)`, {
+        requestId: req.requestId,
+        statusCode: res.statusCode,
+        duration,
+        success: data?.success,
+        error: data?.error?.message
+      });
+    }
+
+    // Persist API log entry (skip /logs endpoints to prevent recursion, skip if module disabled)
+    if (!isLogRoute && !moduleLoggingSuppressed) {
       const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info';
       const safeBody = req.method !== 'GET' && req.body
         ? { ...req.body, password: undefined, password_hash: undefined }
         : null;
       const userEmail = req.user?.email || _extractUserEmail(req) || null;
-      // Derive fileName from the route path (e.g. /api/database/config → databaseRoutes.js:config)
       const routeFile = _deriveRouteFile(requestPath);
       import('#core/services/logService.js').then(mod => {
         mod.default.writeApiLog({
@@ -129,7 +154,7 @@ export function requestLogger(req, res, next) {
           message: `${req.method} ${requestPath} → ${res.statusCode} (${duration}ms)`,
           user: userEmail,
           fileName: routeFile,
-          module: 'Core',
+          module: moduleName || 'Core',
           url: requestPath,
           method: req.method,
           statusCode: res.statusCode,

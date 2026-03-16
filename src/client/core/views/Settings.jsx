@@ -452,7 +452,10 @@ function LogConfigTabNew() {
     defaultLevel: 'info',
     captureOptions: { uiLogs: true, apiLogs: true, consoleLogs: false, moduleLogs: true },
     management: { maxUiEntries: 1000, maxApiEntries: 500, pushIntervalMs: 30000 },
+    moduleLogsEnabled: {},
+    suppressConsolePaths: [],
   });
+  const [installedModules, setInstalledModules] = useState([]);
   const [dbStatus, setDbStatus] = useState({ status: 'idle', message: '' });
   const [dbProgress, setDbProgress] = useState(0);
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -483,17 +486,40 @@ function LogConfigTabNew() {
     log.info('LogConfigTab', 'Tab accessed — loading log configuration');
     const load = async () => {
       try {
-        const res = await fetch(urls.logs.config, { credentials: 'include' });
-        const result = await res.json();
-        if (result?.success && result?.data) {
-          const d = result.data;
+        // Fetch log config and installed modules in parallel
+        const [cfgRes, modRes] = await Promise.all([
+          fetch(urls.logs.config, { credentials: 'include' }),
+          fetch(urls.modules.list, { credentials: 'include' }),
+        ]);
+        const cfgResult = await cfgRes.json();
+        const modResult = await modRes.json();
+
+        // Process installed modules (non-core, enabled)
+        let modules = [];
+        if (modResult?.success && Array.isArray(modResult.data)) {
+          modules = modResult.data
+            .filter(m => m.installed && m.enabled && !m.isCore)
+            .map(m => ({ key: m.name, label: m.name, description: m.description || '' }));
+        }
+        setInstalledModules(modules);
+
+        if (cfgResult?.success && cfgResult?.data) {
+          const d = cfgResult.data;
+          // Auto-populate moduleLogsEnabled for any installed module not yet in config
+          const existingMap = d.moduleLogsEnabled || {};
+          const mergedMap = { ...existingMap };
+          for (const mod of modules) {
+            if (!(mod.key in mergedMap)) mergedMap[mod.key] = true;
+          }
           setCfg({
             enabled: d.enabled !== false,
             defaultLevel: d.defaultLevel || 'info',
             captureOptions: d.captureOptions || { uiLogs: true, apiLogs: true, consoleLogs: false, moduleLogs: true },
             management: d.management || { maxUiEntries: 1000, maxApiEntries: 500, pushIntervalMs: 30000 },
+            moduleLogsEnabled: mergedMap,
+            suppressConsolePaths: d.suppressConsolePaths || [],
           });
-          log.info('LogConfigTab', 'Config loaded', { enabled: d.enabled, level: d.defaultLevel });
+          log.info('LogConfigTab', 'Config loaded', { enabled: d.enabled, level: d.defaultLevel, modules: modules.length });
         }
       } catch (err) {
         log.error('LogConfigTab', 'Failed to load config', { message: err.message });
@@ -677,6 +703,95 @@ function LogConfigTabNew() {
               enabled={cfg.captureOptions.moduleLogs}
               onToggle={() => setCfg(prev => ({ ...prev, captureOptions: { ...prev.captureOptions, moduleLogs: !prev.captureOptions.moduleLogs } }))}
             />
+          </div>
+        </div>
+      </div>
+
+      {/* Module Logs — Enable / Disable (dynamic from installed modules) */}
+      <div className="bg-white rounded-xl border border-surface-200 p-4 shadow-sm space-y-4">
+        <div>
+          <p className="text-sm font-semibold text-surface-800">Module Logs</p>
+          <p className="text-xs text-surface-400 mt-0.5">Enable or disable logging per installed module. Disabled modules produce no terminal or database logs. The global Log Level above controls the threshold for all enabled modules.</p>
+        </div>
+        {installedModules.length === 0 ? (
+          <p className="text-xs text-surface-400 italic">No add-on modules installed.</p>
+        ) : (
+          <div className="space-y-1">
+            {installedModules.map(mod => {
+              const isEnabled = cfg.moduleLogsEnabled?.[mod.key] !== false;
+              return (
+                <div key={mod.key} className="flex items-center justify-between py-2.5 border-b border-surface-100 last:border-0">
+                  <div>
+                    <p className="text-xs font-semibold text-surface-700">{mod.label}</p>
+                    <p className="text-[10px] text-surface-400">{mod.description}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-semibold ${isEnabled ? 'text-emerald-600' : 'text-surface-400'}`}>
+                      {isEnabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                    <div
+                      className={`relative w-8 h-4 rounded-full transition-colors cursor-pointer ${isEnabled ? 'bg-brand-500' : 'bg-surface-300'}`}
+                      onClick={() => setCfg(prev => ({ ...prev, moduleLogsEnabled: { ...prev.moduleLogsEnabled, [mod.key]: !isEnabled } }))}
+                    >
+                      <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${isEnabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Terminal Console Suppression */}
+      <div className="bg-white rounded-xl border border-surface-200 p-4 shadow-sm space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-surface-800">Terminal Console — Suppress Noisy Paths</p>
+          <p className="text-xs text-surface-400 mt-0.5">When enabled, requests to the listed API paths will NOT print to the terminal console, reducing noise from frequent background calls (e.g. log push).</p>
+        </div>
+        <div className="flex items-center justify-between py-2 border-b border-surface-100">
+          <div>
+            <p className="text-xs font-semibold text-surface-700">Suppress <code className="bg-surface-100 px-1 rounded">/api/logs</code> from Terminal</p>
+            <p className="text-[10px] text-surface-400">Hides POST /api/logs/ui and /api/logs/api push entries from terminal output</p>
+          </div>
+          <div
+            className={`relative w-8 h-4 rounded-full transition-colors cursor-pointer ${
+              cfg.suppressConsolePaths?.includes('/api/logs') ? 'bg-brand-500' : 'bg-surface-300'
+            }`}
+            onClick={() => setCfg(prev => ({
+              ...prev,
+              suppressConsolePaths: prev.suppressConsolePaths?.includes('/api/logs')
+                ? prev.suppressConsolePaths.filter(p => p !== '/api/logs')
+                : [...(prev.suppressConsolePaths || []), '/api/logs'],
+            }))}
+          >
+            <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${
+              cfg.suppressConsolePaths?.includes('/api/logs') ? 'translate-x-4' : 'translate-x-0.5'
+            }`} />
+          </div>
+        </div>
+        <div className="flex items-center justify-between py-2">
+          <div>
+            <p className="text-xs font-semibold text-surface-700">Suppress <code className="bg-surface-100 px-1 rounded">/api/servicenow/auto-acknowledge/status</code> from Terminal</p>
+            <p className="text-[10px] text-surface-400">Hides frequent poller status polling from terminal output</p>
+          </div>
+          <div
+            className={`relative w-8 h-4 rounded-full transition-colors cursor-pointer ${
+              cfg.suppressConsolePaths?.includes('/api/servicenow/auto-acknowledge/status') ? 'bg-brand-500' : 'bg-surface-300'
+            }`}
+            onClick={() => setCfg(prev => {
+              const path = '/api/servicenow/auto-acknowledge/status';
+              return {
+                ...prev,
+                suppressConsolePaths: prev.suppressConsolePaths?.includes(path)
+                  ? prev.suppressConsolePaths.filter(p => p !== path)
+                  : [...(prev.suppressConsolePaths || []), path],
+              };
+            })}
+          >
+            <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${
+              cfg.suppressConsolePaths?.includes('/api/servicenow/auto-acknowledge/status') ? 'translate-x-4' : 'translate-x-0.5'
+            }`} />
           </div>
         </div>
       </div>

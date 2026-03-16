@@ -35,6 +35,7 @@ import { Router } from 'express';
 import fs from 'fs';
 
 import { CONFIG_DIR, CONNECTION_CONFIG, DEFAULTS_CONFIG, writeJsonFile } from '#modules/servicenow/api/routes/helpers.js';
+import { startIfEnabled, stop as stopPoller } from '#modules/servicenow/api/services/AutoAcknowledgePoller.js';
 import configRoutes          from '#modules/servicenow/api/routes/configRoutes.js';
 import incidentRoutes        from '#modules/servicenow/api/routes/incidentRoutes.js';
 import ritmRoutes            from '#modules/servicenow/api/routes/ritmRoutes.js';
@@ -92,13 +93,17 @@ export async function onEnable() {
       sync: { enabled: false, intervalMinutes: 30, maxIncidents: 500, lastSync: null },
     });
   }
+
+  // Start auto-acknowledge background poller if config has it enabled
+  await startIfEnabled();
 }
 
 /**
  * Called when the module is disabled. Cleanup resources.
  */
 export async function onDisable() {
-  // No caching to clear — all data fetched live from SNOW API
+  // Stop auto-acknowledge background poller
+  stopPoller();
 }
 
 export { router };

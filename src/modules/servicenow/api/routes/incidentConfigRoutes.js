@@ -25,7 +25,8 @@ import {
 } from '#modules/servicenow/api/routes/helpers.js';
 import { snowGet, isSnowSuccess } from '#modules/servicenow/api/lib/SnowApiClient.js';
 import { snowUrls, apiErrors, apiMessages } from '#modules/servicenow/api/config/index.js';
-import { logger } from '#shared/logger.js';
+import { createSnowLogger } from '#modules/servicenow/api/lib/moduleLogger.js';
+const log = createSnowLogger('IncidentConfig');
 
 const router = Router();
 
@@ -326,7 +327,7 @@ router.get('/config/sla/priorities', async (req, res) => {
 
       if (isSnowSuccess(snowResp.statusCode)) {
         const results = snowResp.data?.result || [];
-        logger.debug(`[priorities] Attempt ${i + 1}: sys_choice returned ${results.length} result(s)`);
+        log.debug(`Priorities attempt ${i + 1}: sys_choice returned ${results.length} result(s)`);
 
         if (results.length > 0) {
           choices = results
@@ -341,13 +342,13 @@ router.get('/config/sla/priorities', async (req, res) => {
           break;
         }
       } else {
-        logger.debug(`[priorities] Attempt ${i + 1}: HTTP ${snowResp.statusCode}`);
+        log.debug(`Priorities attempt ${i + 1}: HTTP ${snowResp.statusCode}`);
       }
     }
 
     // Fallback: fetch distinct priority values from actual incident records
     if (choices.length === 0) {
-      logger.debug(`[priorities] sys_choice returned 0 results, falling back to incident records for field: ${priorityElement}`);
+      log.debug(`sys_choice returned 0 results, falling back to incident records for field: ${priorityElement}`);
       const fallbackQuery = [
         `sysparm_query=${priorityElement}ISNOTEMPTY^ORDERBYDESCsys_created_on`,
         `sysparm_fields=${priorityElement}`,
@@ -395,10 +396,10 @@ router.get('/config/sla/priorities', async (req, res) => {
       return a.value.localeCompare(b.value, undefined, { numeric: true });
     });
 
-    logger.debug(`[priorities] Final result: ${choices.length} priorities from ${source}`);
+    log.debug(`Final result: ${choices.length} priorities from ${source}`);
     return res.json({ success: true, data: { choices, total: choices.length, source } });
   } catch (err) {
-    logger.error(`[priorities] Error: ${err.message}`);
+    log.error(`Priorities fetch error: ${err.message}`);
     return res.status(500).json({ success: false, error: { message: `Failed to fetch ServiceNow priorities: ${err.message}` } });
   }
 });

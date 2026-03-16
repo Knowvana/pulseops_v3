@@ -20,7 +20,8 @@ import {
 } from '#modules/servicenow/api/services/SlaService.js';
 import { DatabaseService, dbSchema } from '#modules/servicenow/api/routes/helpers.js';
 import { snowUrls } from '#modules/servicenow/api/config/index.js';
-import { logger } from '#shared/logger.js';
+import { createSnowLogger } from '#modules/servicenow/api/lib/moduleLogger.js';
+const log = createSnowLogger('ReportService');
 
 const SNOW_INCIDENT = snowUrls.snow.tables.incident;
 const SNOW_SC_ITEM  = snowUrls.snow.tables.scReqItem;
@@ -410,7 +411,7 @@ export async function getSlaResolutionReport(conn, incidentConfig, tz, filters =
   const { slaByLabel, slaByPriorityValue } = await loadSlaThresholds();
   const { rows: bhRows, map: hoursMap }    = await loadBusinessHoursMap();
 
-  logger.debug('[ReportService] SLA resolution report', {
+  log.debug('SLA resolution report', {
     period, totalIncidents: incidents.length,
     slaConfigCount: Object.keys(slaByLabel).length,
   });
@@ -522,7 +523,7 @@ export async function getSlaResponseReport(conn, incidentConfig, tz, filters = {
   const { slaByLabel, slaByPriorityValue } = await loadSlaThresholds();
   const { rows: bhRows, map: hoursMap }    = await loadBusinessHoursMap();
 
-  logger.debug('[ReportService] Response SLA report', {
+  log.debug('Response SLA report', {
     period, totalIncidents: incidents.length, responseCol,
   });
 
@@ -540,7 +541,7 @@ export async function getSlaResponseReport(conn, incidentConfig, tz, filters = {
         firstResponseMap[sysId] = snowVal(auditResult.data.result[0].sys_created_on);
       }
     } catch (err) {
-      logger.debug('[ReportService] Journal fetch failed', { sysId, error: err.message });
+      log.debug('Journal fetch failed', { sysId, error: err.message });
     }
   }
 

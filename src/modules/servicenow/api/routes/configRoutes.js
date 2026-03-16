@@ -15,6 +15,8 @@ import {
 } from '#modules/servicenow/api/routes/helpers.js';
 import { snowGet, isSnowSuccess } from '#modules/servicenow/api/lib/SnowApiClient.js';
 import { snowUrls, apiErrors, apiMessages } from '#modules/servicenow/api/config/index.js';
+import { createSnowLogger } from '#modules/servicenow/api/lib/moduleLogger.js';
+const log = createSnowLogger('Config');
 
 const router = Router();
 
@@ -141,8 +143,16 @@ router.post('/config/test', async (req, res) => {
     conn.testStatus = overallSuccess ? 'success' : 'failed';
     saveConnectionConfig(conn);
 
-    return res.json({
-      success: true,
+    if (overallSuccess) {
+      log.info('Connection test passed', { instanceUrl, apis, incidentCount });
+    } else {
+      log.warn('Connection test failed — none of the SNOW APIs responded successfully', { instanceUrl, apis });
+    }
+
+    // Return proper HTTP status based on test result
+    const httpStatus = overallSuccess ? 200 : 502;
+    return res.status(httpStatus).json({
+      success: overallSuccess,
       data: {
         success: overallSuccess,
         testedAt,
@@ -151,6 +161,7 @@ router.post('/config/test', async (req, res) => {
       },
     });
   } catch (err) {
+    log.error('Connection test threw an exception', { error: err.message });
     return res.status(500).json({ success: false, error: { message: apiErrors.connection.testFailed.replace('{message}', err.message) } });
   }
 });

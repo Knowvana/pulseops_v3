@@ -117,6 +117,7 @@
     "noTestMessage":            "No acknowledge message provided or configured.",
     "pollFailed":               "Poll failed: {message}",
     "testFailed":               "Test failed: {message}",
+    "statusFailed":             "Failed to get poller status: {message}",
     "logFailed":                "Failed to load log: {message}",
     "historyFailed":            "Failed to load log history: {message}"
   },

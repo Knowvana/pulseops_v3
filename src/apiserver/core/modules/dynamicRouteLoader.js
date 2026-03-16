@@ -36,6 +36,7 @@ import { config } from '#config';
 import DatabaseService from '#core/database/databaseService.js';
 import ModuleScanner from './moduleScanner.js';
 import { addModuleRouter, removeModuleRouter } from './moduleGateway.js';
+import { registerModulePathMapping } from '#core/services/logService.js';
 
 const schema = config.db.schema || 'pulseops';
 
@@ -84,6 +85,18 @@ export async function loadModuleRoutes(app, moduleId) {
     // Register on the moduleGateway (middleware registered before 404 handler in app.js)
     // This ensures dynamically added routes are reachable.
     addModuleRouter(moduleId, authenticate, router);
+
+    // Register module path mapping for logging (moduleId → display name)
+    try {
+      const constantsPath = path.join(modulePath, 'constants.json');
+      if (fs.existsSync(constantsPath)) {
+        const constants = JSON.parse(fs.readFileSync(constantsPath, 'utf8'));
+        registerModulePathMapping(moduleId, constants.name || moduleId);
+      } else {
+        registerModulePathMapping(moduleId, moduleId);
+      }
+    } catch { registerModulePathMapping(moduleId, moduleId); }
+
     logger.info(`[DynamicRouteLoader] Registered '${moduleId}' on moduleGateway`);
 
     // Store reference for unloading
@@ -173,9 +186,14 @@ export async function rehydrateEnabledModules(app) {
 
   try {
     const result = await DatabaseService.query(
-      `SELECT module_id FROM ${schema}.system_modules WHERE installed = true AND enabled = true`
+      `SELECT module_id, name FROM ${schema}.system_modules WHERE installed = true AND enabled = true`
     );
     const enabledModules = result.rows || [];
+
+    // Pre-register module path mappings for logging before loading routes
+    for (const mod of enabledModules) {
+      registerModulePathMapping(mod.module_id, mod.name || mod.module_id);
+    }
 
     if (enabledModules.length === 0) {
       logger.info('[DynamicRouteLoader] No enabled modules to rehydrate');

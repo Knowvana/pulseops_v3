@@ -16,7 +16,8 @@ import {
   loadTimezoneConfig, saveTimezoneConfig, getEffectiveTimezone, getTimezoneList,
 } from '#modules/servicenow/api/services/TimezoneService.js';
 import { snowUrls, apiErrors, apiMessages } from '#modules/servicenow/api/config/index.js';
-import { logger } from '#shared/logger.js';
+import { createSnowLogger } from '#modules/servicenow/api/lib/moduleLogger.js';
+const log = createSnowLogger('Timezone');
 
 const router = Router();
 
@@ -42,7 +43,7 @@ router.put('/config/timezone', async (req, res) => {
     }
     const updated    = await saveTimezoneConfig({ displayTimezone: displayTimezone || null });
     const effectiveTz = updated.displayTimezone || updated.serviceNowTimezone || 'UTC';
-    logger.debug('[Timezone] Config saved', { displayTimezone, effectiveTz });
+    log.debug('Config saved', { displayTimezone, effectiveTz });
     return res.json({ success: true, message: apiMessages.timezone.saved, data: { ...updated, effectiveTimezone: effectiveTz } });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: apiErrors.timezone.saveFailed.replace('{message}', err.message) } });
@@ -75,7 +76,7 @@ router.get('/config/timezone/servicenow', async (req, res) => {
         const incident = sampleResult.data.result[0];
         const sampleDate = snowVal(incident.opened_at) || snowVal(incident.sys_created_on);
         
-        logger.debug('[Timezone] Sample incident date retrieved', { 
+        log.debug('Sample incident date retrieved', { 
           sampleDate, 
           incident: {
             opened_at: incident.opened_at,
@@ -94,18 +95,18 @@ router.get('/config/timezone/servicenow', async (req, res) => {
           if (datePattern.test(sampleDate.trim())) {
             snTimezone = 'UTC';
             source = 'date_format_detection';
-            logger.info('[Timezone] Detected UTC format from incident dates', { sampleDate, pattern: 'ServiceNow_ISO' });
+            log.info('Detected UTC format from incident dates', { sampleDate, pattern: 'ServiceNow_ISO' });
           }
         }
       } else {
-        logger.debug('[Timezone] No incidents found for date format detection', { 
+        log.debug('No incidents found for date format detection', { 
           statusCode: sampleResult.statusCode,
           hasResult: !!sampleResult.data?.result
         });
       }
     } catch (err) {
       attempts.push({ method: 'incident_date_format_detection', status: 'error', error: err.message });
-      logger.debug('[Timezone] Date format detection failed', { error: err.message });
+      log.debug('Date format detection failed', { error: err.message });
     }
 
     // Method 1: Query sys_user for the authenticated user's time_zone field
@@ -119,11 +120,11 @@ router.get('/config/timezone/servicenow', async (req, res) => {
         if (result.statusCode >= 200 && result.statusCode < 300 && tz) {
           snTimezone = tz;
           source = 'sys_user';
-          logger.debug('[Timezone] Got timezone from sys_user.time_zone', { snTimezone });
+          log.debug('Got timezone from sys_user.time_zone', { snTimezone });
         }
       } catch (err) {
         attempts.push({ method: 'sys_user.time_zone', status: 'error', error: err.message });
-        logger.debug('[Timezone] sys_user query failed', { error: err.message });
+        log.debug('sys_user query failed', { error: err.message });
       }
     }
 
@@ -138,11 +139,11 @@ router.get('/config/timezone/servicenow', async (req, res) => {
         if (result.statusCode >= 200 && result.statusCode < 300 && tz) {
           snTimezone = tz;
           source = 'sys_properties';
-          logger.debug('[Timezone] Got timezone from sys_properties', { snTimezone });
+          log.debug('Got timezone from sys_properties', { snTimezone });
         }
       } catch (err) {
         attempts.push({ method: 'sys_properties.glide.sys.default.tz', status: 'error', error: err.message });
-        logger.debug('[Timezone] sys_properties query failed', { error: err.message });
+        log.debug('sys_properties query failed', { error: err.message });
       }
     }
 
@@ -157,11 +158,11 @@ router.get('/config/timezone/servicenow', async (req, res) => {
         if (result.statusCode >= 200 && result.statusCode < 300 && tz) {
           snTimezone = tz;
           source = 'sys_user_preference';
-          logger.debug('[Timezone] Got timezone from sys_user_preference', { snTimezone });
+          log.debug('Got timezone from sys_user_preference', { snTimezone });
         }
       } catch (err) {
         attempts.push({ method: 'sys_user_preference.timezone', status: 'error', error: err.message });
-        logger.debug('[Timezone] sys_user_preference query failed', { error: err.message });
+        log.debug('sys_user_preference query failed', { error: err.message });
       }
     }
 
@@ -169,10 +170,10 @@ router.get('/config/timezone/servicenow', async (req, res) => {
     if (!snTimezone) {
       snTimezone = 'UTC';
       source = 'default_utc';
-      logger.info('[Timezone] No timezone detected from ServiceNow, defaulting to UTC (ServiceNow REST API standard)', { attempts });
+      log.info('No timezone detected from ServiceNow, defaulting to UTC (ServiceNow REST API standard)', { attempts });
     }
 
-    logger.info(`[Timezone] Fetch complete: timezone=${snTimezone}, source=${source}`, { attempts });
+    log.info(`Fetch complete: timezone=${snTimezone}, source=${source}`, { attempts });
 
     // Save the detected/default timezone to config
     const current = await loadTimezoneConfig();

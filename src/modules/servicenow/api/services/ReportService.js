@@ -200,6 +200,286 @@ export async function getStats(conn, incidentConfig, defaults) {
 }
 
 /**
+ * Get comprehensive dashboard statistics for the redesigned Summary Section.
+ *
+ * Returns:
+ *   - total, open, closed counts
+ *   - created/closed counts for today, this week, this month
+ *   - SLA compliance % (response + resolution) for today, week, month
+ *   - auto-acknowledged counts (today, week, month)
+ *   - incidents grouped by priority
+ *
+ * @param {object} conn           - ServiceNow connection config.
+ * @param {object} incidentConfig - Loaded incident config.
+ * @param {string} tz             - Effective display timezone.
+ * @returns {Promise<object>}
+ */
+export async function getDashboardStats(conn, incidentConfig, tz) {
+  const agQuery    = buildAssignmentGroupQuery(incidentConfig.assignmentGroup);
+  const queryParts = [];
+  if (agQuery) queryParts.push(agQuery);
+  queryParts.push('ORDERBYDESCnumber');
+
+  const fields = buildSnowFields(incidentConfig, ['short_description', 'category', 'resolved_at']);
+  const result = await snowGet(
+    conn,
+    SNOW_INCIDENT,
+    `sysparm_limit=1000&sysparm_fields=${fields}&sysparm_query=${queryParts.join('^')}`,
+  );
+
+  let incidents = [];
+  if (isSnowSuccess(result.statusCode) && result.data?.result) {
+    incidents = result.data.result;
+  }
+
+  // ── Date boundaries (UTC) ────────────────────────────────────────────────
+  const now = new Date();
+  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const weekStart  = new Date(todayStart);
+  const dayOfWeek  = weekStart.getUTCDay() === 0 ? 6 : weekStart.getUTCDay() - 1;
+  weekStart.setUTCDate(weekStart.getUTCDate() - dayOfWeek);
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+  // ── Load SLA thresholds & business hours ─────────────────────────────────
+  const { slaByLabel, slaByPriorityValue } = await loadSlaThresholds();
+  const { map: hoursMap } = await loadBusinessHoursMap();
+
+  // ── Accumulators ─────────────────────────────────────────────────────────
+  let totalOpen = 0, totalClosed = 0;
+  let createdToday = 0, createdWeek = 0, createdMonth = 0;
+  let closedToday = 0, closedWeek = 0, closedMonth = 0;
+  const priorityCounts = {};
+
+  // SLA accumulators per period: { met, breached } for resolution & response
+  const slaRes  = { today: { met: 0, total: 0 }, week: { met: 0, total: 0 }, month: { met: 0, total: 0 } };
+  const slaResp = { today: { met: 0, total: 0 }, week: { met: 0, total: 0 }, month: { met: 0, total: 0 } };
+
+  for (const inc of incidents) {
+    const pRaw   = String(snowVal(inc[incidentConfig.priorityColumn || 'priority']) || '4');
+    const state  = String(snowVal(inc.state) || 'unknown');
+    const pLabel = normalizePriority(pRaw) || pRaw;
+
+    // Priority counts
+    priorityCounts[pLabel] = (priorityCounts[pLabel] || 0) + 1;
+
+    // Open vs closed
+    const isClosed = ['6', '7', '8'].includes(state);
+    if (isClosed) totalClosed++; else totalOpen++;
+
+    // Parse dates
+    const createdAtRaw = snowVal(inc[incidentConfig.createdColumn || 'opened_at']);
+    const closedAtRaw  = snowVal(inc[incidentConfig.closedColumn  || 'closed_at']) || snowVal(inc.resolved_at);
+    const createdDate  = parseSnowDateUTC(createdAtRaw);
+    const closedDate   = parseSnowDateUTC(closedAtRaw);
+
+    // Created counts by period
+    if (createdDate) {
+      if (createdDate >= todayStart) createdToday++;
+      if (createdDate >= weekStart)  createdWeek++;
+      if (createdDate >= monthStart) createdMonth++;
+    }
+
+    // Closed counts by period
+    if (closedDate && isClosed) {
+      if (closedDate >= todayStart) closedToday++;
+      if (closedDate >= weekStart)  closedWeek++;
+      if (closedDate >= monthStart) closedMonth++;
+    }
+
+    // SLA resolution compliance by period
+    const threshold = resolveSlaThreshold(pRaw, slaByLabel, slaByPriorityValue);
+    if (createdDate && closedDate && !isNaN(createdDate.getTime()) && !isNaN(closedDate.getTime())) {
+      const resMinutes = calcBusinessMinutesBetween(createdDate, closedDate, hoursMap, tz);
+      const met = resMinutes <= threshold.resolutionMinutes;
+
+      // Categorize by when the incident was created
+      if (createdDate >= todayStart) { slaRes.today.total++; if (met) slaRes.today.met++; }
+      if (createdDate >= weekStart)  { slaRes.week.total++;  if (met) slaRes.week.met++;  }
+      if (createdDate >= monthStart) { slaRes.month.total++; if (met) slaRes.month.met++; }
+    }
+  }
+
+  // SLA % helper
+  const slaPct = (bucket) => bucket.total > 0 ? Math.round((bucket.met / bucket.total) * 100) : null;
+
+  // ── Auto-acknowledge counts from DB ──────────────────────────────────────
+  let autoAckToday = 0, autoAckWeek = 0, autoAckMonth = 0;
+  try {
+    const ackResult = await DatabaseService.query(
+      `SELECT
+         COUNT(*) FILTER (WHERE acknowledged_at >= $1::date)                          AS today,
+         COUNT(*) FILTER (WHERE acknowledged_at >= $2::date)                          AS week,
+         COUNT(*) FILTER (WHERE acknowledged_at >= $3::date)                          AS month
+       FROM ${dbSchema}.sn_auto_acknowledge_log
+       WHERE status = 'success'`,
+      [todayStart.toISOString().slice(0, 10), weekStart.toISOString().slice(0, 10), monthStart.toISOString().slice(0, 10)],
+    );
+    if (ackResult.rows[0]) {
+      autoAckToday = parseInt(ackResult.rows[0].today, 10) || 0;
+      autoAckWeek  = parseInt(ackResult.rows[0].week,  10) || 0;
+      autoAckMonth = parseInt(ackResult.rows[0].month, 10) || 0;
+    }
+  } catch { /* table might not exist yet */ }
+
+  return {
+    totalIncidents: incidents.length,
+    totalOpen,
+    totalClosed,
+    created: { today: createdToday, week: createdWeek, month: createdMonth },
+    closed:  { today: closedToday,  week: closedWeek,  month: closedMonth },
+    slaResolution: {
+      today: slaPct(slaRes.today),
+      week:  slaPct(slaRes.week),
+      month: slaPct(slaRes.month),
+    },
+    slaResponse: {
+      today: slaPct(slaResp.today),
+      week:  slaPct(slaResp.week),
+      month: slaPct(slaResp.month),
+    },
+    autoAcknowledged: { today: autoAckToday, week: autoAckWeek, month: autoAckMonth },
+    priorityCounts,
+  };
+}
+
+/**
+ * Get today's incidents with SLA columns + auto-acknowledge status for the
+ * dashboard Incidents Grid.
+ *
+ * Each incident row includes:
+ *   - Standard fields (number, short_description, priority, state, assigned_to, createdAt, closedAt)
+ *   - SLA columns: expectedClosure, resolutionMinutes, targetMinutes, slaVariance, slaStatus
+ *   - Auto-acknowledge: autoAcknowledged (boolean), autoAcknowledgedAt (tz-converted)
+ *
+ * Also returns a second list: incidents whose resolution SLA is breaching today.
+ *
+ * @param {object} conn           - ServiceNow connection config.
+ * @param {object} incidentConfig - Loaded incident config.
+ * @param {string} tz             - Effective display timezone.
+ * @returns {Promise<object>}
+ */
+export async function getDashboardIncidents(conn, incidentConfig, tz) {
+  const now        = new Date();
+  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const todayStr   = todayStart.toISOString().slice(0, 10);
+
+  // Fetch incidents created today
+  const agQuery    = buildAssignmentGroupQuery(incidentConfig.assignmentGroup);
+  const queryParts = [
+    `${incidentConfig.createdColumn || 'opened_at'}>=${todayStr}`,
+    'ORDERBYDESCnumber',
+  ];
+  if (agQuery) queryParts.unshift(agQuery);
+
+  const fields = [...new Set([
+    'sys_id', 'number', 'short_description', 'priority', 'state', 'assigned_to',
+    incidentConfig.createdColumn || 'opened_at',
+    incidentConfig.closedColumn  || 'closed_at',
+    'resolved_at',
+  ].filter(Boolean))];
+
+  const result = await snowGet(
+    conn,
+    SNOW_INCIDENT,
+    `sysparm_limit=500&sysparm_fields=${fields.join(',')}&sysparm_query=${queryParts.join('^')}`,
+  );
+
+  let incidents = [];
+  if (isSnowSuccess(result.statusCode) && result.data?.result) incidents = result.data.result;
+
+  // Load SLA & business hours
+  const { slaByLabel, slaByPriorityValue } = await loadSlaThresholds();
+  const { map: hoursMap } = await loadBusinessHoursMap();
+
+  // Load auto-acknowledge log for today (indexed by incident sys_id)
+  const autoAckMap = {};
+  try {
+    const ackResult = await DatabaseService.query(
+      `SELECT incident_sys_id, acknowledged_at FROM ${dbSchema}.sn_auto_acknowledge_log
+       WHERE acknowledged_at >= $1::date AND acknowledged_at < ($1::date + interval '1 day') AND status = 'success'
+       ORDER BY acknowledged_at DESC`,
+      [todayStr],
+    );
+    for (const row of ackResult.rows) {
+      if (!autoAckMap[row.incident_sys_id]) autoAckMap[row.incident_sys_id] = row.acknowledged_at;
+    }
+  } catch { /* table might not exist yet */ }
+
+  // Process incidents with SLA calculation
+  const todaysIncidents = [];
+  const slaBreachingToday = [];
+
+  for (const inc of incidents) {
+    const sysId        = snowVal(inc.sys_id);
+    const priorityRaw  = snowVal(inc[incidentConfig.priorityColumn || 'priority']);
+    const normalised   = normalizePriority(priorityRaw);
+    const threshold    = resolveSlaThreshold(priorityRaw, slaByLabel, slaByPriorityValue);
+    const state        = snowVal(inc.state);
+
+    const createdAtRaw = snowVal(inc[incidentConfig.createdColumn || 'opened_at']);
+    const closedAtRaw  = snowVal(inc[incidentConfig.closedColumn  || 'closed_at']) || snowVal(inc.resolved_at);
+    const createdDate  = parseSnowDateUTC(createdAtRaw);
+    const closedDate   = parseSnowDateUTC(closedAtRaw);
+
+    let resolutionMinutes = null, slaMet = null, expectedClosure = null, slaVariance = null;
+
+    if (createdDate && !isNaN(createdDate.getTime())) {
+      const exp = addBusinessMinutes(createdDate, threshold.resolutionMinutes, hoursMap, tz);
+      if (exp) expectedClosure = exp.toISOString();
+    }
+    if (createdDate && closedDate && !isNaN(createdDate.getTime()) && !isNaN(closedDate.getTime())) {
+      resolutionMinutes = calcBusinessMinutesBetween(createdDate, closedDate, hoursMap, tz);
+      slaMet = resolutionMinutes <= threshold.resolutionMinutes;
+      slaVariance = threshold.resolutionMinutes - resolutionMinutes;
+    } else if (createdDate && !['6', '7', '8'].includes(String(state))) {
+      // Still open — calculate elapsed
+      resolutionMinutes = calcBusinessMinutesBetween(createdDate, now, hoursMap, tz);
+      slaMet = resolutionMinutes <= threshold.resolutionMinutes;
+      slaVariance = threshold.resolutionMinutes - resolutionMinutes;
+    }
+
+    let slaStatus = 'pending';
+    if (slaMet === true)  slaStatus = 'met';
+    if (slaMet === false) slaStatus = 'breached';
+
+    const ackAt = autoAckMap[sysId] || null;
+
+    const row = {
+      sysId,
+      number:            snowVal(inc.number),
+      shortDescription:  snowVal(inc.short_description),
+      priority:          normalised || priorityRaw,
+      state,
+      assignedTo:        snowVal(inc.assigned_to),
+      createdAt:         convertToTimezone(createdDate ? createdDate.toISOString() : createdAtRaw, tz),
+      closedAt:          convertToTimezone(closedDate  ? closedDate.toISOString()  : closedAtRaw,  tz),
+      expectedClosure:   convertToTimezone(expectedClosure, tz),
+      resolutionMinutes,
+      targetMinutes:     threshold.resolutionMinutes,
+      slaVariance,
+      slaStatus,
+      autoAcknowledged:    !!ackAt,
+      autoAcknowledgedAt:  ackAt ? convertToTimezone(new Date(ackAt).toISOString(), tz) : null,
+    };
+
+    todaysIncidents.push(row);
+
+    // Breaching today: SLA is breached AND incident was created or breaching today
+    if (slaStatus === 'breached') {
+      slaBreachingToday.push(row);
+    }
+  }
+
+  return {
+    timezone: tz,
+    todaysIncidents,
+    slaBreachingToday,
+    totalToday:     todaysIncidents.length,
+    totalBreaching: slaBreachingToday.length,
+  };
+}
+
+/**
  * Get the incident report (per-incident list with timezone conversion).
  *
  * @param {object} conn           - ServiceNow connection config.

@@ -103,7 +103,9 @@
     "ritmReportFailed":         "RITM report failed: {message}",
     "slaReportFailed":          "SLA report failed: {message}",
     "slaIncidentReportFailed":  "SLA report failed: {message}",
-    "responseReportFailed":     "Response SLA report failed: {message}"
+    "responseReportFailed":     "Response SLA report failed: {message}",
+    "dashboardStatsFailed":     "Dashboard stats failed: {message}",
+    "dashboardIncidentsFailed": "Dashboard incidents failed: {message}"
   },
 
   "autoAcknowledge": {

@@ -47,6 +47,8 @@
     "syncStatus":                    "/sync/status",
     "syncSchedule":                  "/sync/schedule",
     "stats":                         "/stats",
+    "dashboardStats":                "/dashboard/stats",
+    "dashboardIncidents":            "/dashboard/incidents",
     "reportsIncidents":              "/reports/incidents",
     "reportsRitms":                  "/reports/ritms",
     "reportsSla":                    "/reports/sla",

@@ -1,14 +1,17 @@
 // ============================================================================
 // ServiceNowDashboard — PulseOps V3 ServiceNow Module
 //
-// PURPOSE: Main dashboard view for the ServiceNow module. Displays live
-// incident statistics, SLA breach count, connection status, and a recent
-// incident table. Fetches stats from GET /api/servicenow/stats and initiates
-// manual sync via POST /api/servicenow/sync.
+// PURPOSE: Main dashboard view for the ServiceNow module. Displays:
+//   1. Summary Section — incident metrics, SLA compliance %, auto-ack counts,
+//      priority breakdown (all fetched live from SNOW API via /dashboard/stats)
+//   2. Incidents Grid — "Today's Incidents" and "Resolution SLAs Breaching
+//      Today" using the DataTable component with SLA + auto-ack columns
+//   3. Connection Health — instance URL, connection status, metadata link,
+//      last fetch date/time, and counts of fetched incidents/RITMs
 //
 // ARCHITECTURE:
-//   - Fetches dashboard stats on mount (guarded with useRef for StrictMode)
-//   - Manual sync button triggers POST /sync → clears server cache + re-fetches
+//   - Fetches dashboard data on mount (guarded with useRef for StrictMode)
+//   - Single refresh button — no duplicate refresh icons, no sync summary
 //   - Uses only project theme colors (brand/teal/surface palette)
 //   - All text from uiText.json — zero hardcoded strings
 //
@@ -17,176 +20,208 @@
 // DEPENDENCIES:
 //   - lucide-react                         → Icons
 //   - @modules/servicenow/uiText.json      → All UI labels
-//   - @config/urls.json                    → API endpoints
 //   - @shared                              → createLogger
+//   - ./DataTable                          → Reusable data grid
 // ============================================================================
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Headset, RefreshCw, AlertTriangle, Activity, CheckCircle2,
-  Clock, AlertCircle, ArrowRight, Wifi, WifiOff, Loader2, MessageSquare,
+  Clock, AlertCircle, ArrowRight, Wifi, WifiOff, Loader2,
+  BarChart3, ShieldCheck, ShieldAlert, MessageSquare, ExternalLink,
+  TrendingUp, TrendingDown, Minus, Calendar, FolderOpen, FolderClosed,
 } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
-// Module-local API URLs — no dependency on platform urls.json
-const snApi = {
-  stats:      '/api/servicenow/stats',
-  incidents:  '/api/servicenow/incidents',
-  sync:       '/api/servicenow/sync',
-  syncStatus: '/api/servicenow/sync/status',
-  config:     '/api/servicenow/config',
-};
 import uiText from '../config/uiText.json';
 import DataTable from './DataTable';
 
 const log = createLogger('ServiceNowDashboard.jsx');
 const t   = uiText.dashboard;
-const inc = uiText.incidents;
+const ts  = t.summary;
+const tg  = t.incidentsGrid;
+const tc  = t.connectionHealth;
+
+// Module-local API URLs
+const snApi = {
+  dashboardStats:     '/api/servicenow/dashboard/stats',
+  dashboardIncidents: '/api/servicenow/dashboard/incidents',
+  config:             '/api/servicenow/config',
+  autoAckStatus:      '/api/servicenow/auto-acknowledge/status',
+  ritms:              '/api/servicenow/ritms',
+};
 
 // ── Priority badge config ─────────────────────────────────────────────────────
 const PRIORITY_STYLES = {
-  critical: 'bg-rose-100 text-rose-700 border-rose-200',
-  high:     'bg-amber-100 text-amber-700 border-amber-200',
-  medium:   'bg-blue-100 text-blue-700 border-blue-200',
-  low:      'bg-surface-100 text-surface-600 border-surface-200',
-  planning: 'bg-violet-100 text-violet-700 border-violet-200',
+  '1 - Critical': 'bg-rose-100 text-rose-700 border-rose-200',
+  '2 - High':     'bg-amber-100 text-amber-700 border-amber-200',
+  '3 - Medium':   'bg-blue-100 text-blue-700 border-blue-200',
+  '4 - Low':      'bg-surface-100 text-surface-600 border-surface-200',
+  '5 - Planning': 'bg-violet-100 text-violet-700 border-violet-200',
+  critical:       'bg-rose-100 text-rose-700 border-rose-200',
+  high:           'bg-amber-100 text-amber-700 border-amber-200',
+  medium:         'bg-blue-100 text-blue-700 border-blue-200',
+  low:            'bg-surface-100 text-surface-600 border-surface-200',
+  planning:       'bg-violet-100 text-violet-700 border-violet-200',
 };
 
-const STATE_STYLES = {
-  open:        'bg-rose-50 text-rose-600',
-  in_progress: 'bg-amber-50 text-amber-600',
-  on_hold:     'bg-violet-50 text-violet-600',
-  resolved:    'bg-emerald-50 text-emerald-600',
-  closed:      'bg-surface-100 text-surface-500',
-  cancelled:   'bg-surface-50 text-surface-400',
+const SLA_STATUS_STYLES = {
+  met:      'bg-emerald-50 text-emerald-700 border-emerald-200',
+  breached: 'bg-rose-50 text-rose-700 border-rose-200',
+  pending:  'bg-amber-50 text-amber-700 border-amber-200',
 };
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function formatMinutes(mins) {
+  if (mins == null) return '—';
+  const absMin = Math.abs(Math.round(mins));
+  if (absMin < 60) return `${Math.round(mins)}m`;
+  const h = Math.floor(absMin / 60);
+  const m = absMin % 60;
+  const sign = mins < 0 ? '-' : '';
+  return m > 0 ? `${sign}${h}h ${m}m` : `${sign}${h}h`;
+}
 
 // ── Stat card sub-component ────────────────────────────────────────────────────
-/**
- * Single stat tile showing a metric label + animated count.
- * @param {{ label, value, icon: React.ComponentType, color, loading }} props
- */
-function StatCard({ label, value, icon: Icon, color = 'text-brand-600', bg = 'bg-brand-50', loading }) {
+function StatCard({ label, value, icon: Icon, color = 'text-brand-600', bg = 'bg-brand-50', loading, small }) {
   return (
-    <div className="bg-white rounded-xl border border-surface-200 p-4 flex items-center gap-3 shadow-sm">
-      <div className={`w-10 h-10 rounded-lg ${bg} flex items-center justify-center flex-shrink-0`}>
-        <Icon size={18} className={color} />
+    <div className={`bg-white rounded-xl border border-surface-200 ${small ? 'p-3' : 'p-4'} flex items-center gap-3 shadow-sm`}>
+      <div className={`${small ? 'w-8 h-8' : 'w-10 h-10'} rounded-lg ${bg} flex items-center justify-center flex-shrink-0`}>
+        <Icon size={small ? 14 : 18} className={color} />
       </div>
       <div className="min-w-0">
-        <p className="text-xs text-surface-500 font-medium truncate">{label}</p>
+        <p className="text-[10px] text-surface-500 font-medium truncate leading-tight">{label}</p>
         {loading ? (
           <div className="h-5 w-10 bg-surface-100 rounded animate-pulse mt-0.5" />
         ) : (
-          <p className="text-xl font-bold text-surface-800">{value ?? 0}</p>
+          <p className={`${small ? 'text-lg' : 'text-xl'} font-bold text-surface-800`}>{value ?? 0}</p>
         )}
       </div>
     </div>
   );
 }
 
-// ── Connection status banner ──────────────────────────────────────────────────
-/**
- * Top-of-page banner indicating connection state.
- * @param {{ status: string, lastSync: string|null }} props
- */
-function ConnectionBanner({ status, lastSync }) {
-  const statusConfig = {
-    connected:      { icon: Wifi,    text: t.connectionStatus.connected,      cls: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
-    error:          { icon: WifiOff, text: t.connectionStatus.error,          cls: 'bg-rose-50 border-rose-200 text-rose-700' },
-    not_configured: { icon: WifiOff, text: t.connectionStatus.not_configured, cls: 'bg-surface-50 border-surface-200 text-surface-600' },
-  };
-  const cfg = statusConfig[status] || statusConfig.not_configured;
-  const StatusIcon = cfg.icon;
-
+// ── SLA % card ────────────────────────────────────────────────────────────────
+function SlaPctCard({ label, value, loading }) {
+  const color = value == null ? 'text-surface-400' : value >= 90 ? 'text-emerald-600' : value >= 70 ? 'text-amber-600' : 'text-rose-600';
+  const bg    = value == null ? 'bg-surface-50'    : value >= 90 ? 'bg-emerald-50'    : value >= 70 ? 'bg-amber-50'    : 'bg-rose-50';
+  const Icon  = value == null ? Minus : value >= 90 ? TrendingUp : value >= 70 ? Minus : TrendingDown;
   return (
-    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium ${cfg.cls}`}>
-      <StatusIcon size={13} />
-      <span>{cfg.text}</span>
-      {lastSync && status === 'connected' && (
-        <span className="ml-2 text-surface-400 font-normal">
-          {t.lastSync}: {new Date(lastSync).toLocaleString()}
-        </span>
-      )}
+    <div className={`rounded-lg border border-surface-200 p-3 ${bg} flex items-center gap-2`}>
+      <Icon size={14} className={color} />
+      <div className="min-w-0">
+        <p className="text-[10px] text-surface-500 font-medium truncate">{label}</p>
+        {loading ? (
+          <div className="h-4 w-8 bg-surface-100 rounded animate-pulse mt-0.5" />
+        ) : (
+          <p className={`text-sm font-bold ${color}`}>{value != null ? `${value}%` : ts.noData}</p>
+        )}
+      </div>
     </div>
   );
+}
+
+// ── Incidents Grid column definitions ────────────────────────────────────────
+function buildGridColumns() {
+  const cols = tg.columns;
+  const slaLabels = tg.slaStatusLabels;
+  return [
+    { key: 'number', label: cols.number, sortable: true, width: '110px',
+      render: (v) => <span className="font-mono text-xs text-brand-600 font-semibold">{v}</span> },
+    { key: 'shortDescription', label: cols.shortDescription, sortable: true,
+      render: (v) => <span className="text-xs text-surface-700 max-w-[260px] truncate block">{v || '—'}</span> },
+    { key: 'priority', label: cols.priority, sortable: true, align: 'center', width: '100px',
+      render: (v) => <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border ${PRIORITY_STYLES[v] || PRIORITY_STYLES.low}`}>{v || '—'}</span> },
+    { key: 'state', label: cols.state, sortable: true, align: 'center', width: '80px' },
+    { key: 'assignedTo', label: cols.assignedTo, sortable: true,
+      render: (v) => <span className="text-xs text-surface-500">{v || '—'}</span> },
+    { key: 'createdAt', label: cols.createdAt, sortable: true, width: '150px',
+      render: (v) => <span className="text-xs text-surface-600">{v || '—'}</span> },
+    { key: 'closedAt', label: cols.closedAt, sortable: true, width: '150px',
+      render: (v) => v ? <span className="text-xs font-bold text-emerald-700">{v}</span> : <span className="text-xs text-surface-400">—</span> },
+    { key: 'expectedClosure', label: cols.expectedClosure, sortable: true, width: '150px',
+      render: (v) => v ? <span className="text-xs font-bold text-surface-800">{v}</span> : <span className="text-xs text-surface-400">—</span> },
+    { key: 'resolutionMinutes', label: cols.resolutionTime, sortable: true, align: 'right', width: '110px',
+      render: (v) => <span className="text-xs text-surface-600 font-medium">{formatMinutes(v)}</span> },
+    { key: 'targetMinutes', label: cols.slaTarget, sortable: true, align: 'right', width: '100px',
+      render: (v) => <span className="text-xs text-surface-500">{formatMinutes(v)}</span> },
+    { key: 'slaVariance', label: cols.slaVariance, sortable: true, align: 'right', width: '100px',
+      render: (v) => {
+        if (v == null) return <span className="text-xs text-surface-400">—</span>;
+        const color = v >= 0 ? 'text-emerald-600' : 'text-rose-600';
+        return <span className={`text-xs font-semibold ${color}`}>{v >= 0 ? '+' : ''}{formatMinutes(v)}</span>;
+      } },
+    { key: 'slaStatus', label: cols.slaStatus, sortable: true, align: 'center', width: '90px',
+      render: (v) => <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${SLA_STATUS_STYLES[v] || SLA_STATUS_STYLES.pending}`}>
+        {v === 'met' ? <ShieldCheck size={10} /> : v === 'breached' ? <ShieldAlert size={10} /> : <Clock size={10} />}
+        {slaLabels[v] || v}
+      </span> },
+    { key: 'autoAcknowledged', label: cols.autoAcknowledged, sortable: true, align: 'center', width: '120px',
+      render: (v) => v
+        ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-brand-50 text-brand-700 border border-brand-200"><CheckCircle2 size={10} /> {uiText.common.yes}</span>
+        : <span className="text-xs text-surface-400">{uiText.common.no}</span> },
+    { key: 'autoAcknowledgedAt', label: cols.autoAcknowledgedAt, sortable: true, width: '150px',
+      render: (v) => <span className="text-xs text-surface-500">{v || '—'}</span> },
+  ];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 export default function ServiceNowDashboard({ onNavigate }) {
-  const [stats, setStats]             = useState(null);
-  const [incidents, setIncidents]     = useState([]);
-  const [syncStatus, setSyncStatus]   = useState(null);
-  const [configData, setConfigData]   = useState(null);
-  const [incidentConfig, setIncidentConfig] = useState(null);
-  const [loading, setLoading]         = useState(true);
-  const [syncing, setSyncing]         = useState(false);
-  const [error, setError]             = useState(null);
-  const [syncMessage, setSyncMessage] = useState(null); // { type: 'success'|'error', text, summary }
-  const [autoAckLog, setAutoAckLog]         = useState([]);
-  const [autoAckLoading, setAutoAckLoading] = useState(false);
-  const [autoAckStatus, setAutoAckStatus]   = useState(null);
+  const [stats, setStats]               = useState(null);
+  const [gridData, setGridData]         = useState(null);
+  const [configData, setConfigData]     = useState(null);
+  const [autoAckStatus, setAutoAckStatus] = useState(null);
+  const [ritmCount, setRitmCount]       = useState(null);
+  const [loading, setLoading]           = useState(true);
+  const [gridLoading, setGridLoading]   = useState(true);
+  const [error, setError]               = useState(null);
+  const [activeGrid, setActiveGrid]     = useState('today'); // 'today' | 'breaching'
   const initRan = useRef(false);
+  const lastFetchTime = useRef(null);
 
-  // ── Fetch dashboard stats ─────────────────────────────────────────────────
-  const fetchAutoAckLog = useCallback(async () => {
-    setAutoAckLoading(true);
-    try {
-      const [ackRes, statusRes] = await Promise.all([
-        ApiClient.get('/api/servicenow/auto-acknowledge/log').catch(() => null),
-        ApiClient.get('/api/servicenow/auto-acknowledge/status').catch(() => null),
-      ]);
-      if (ackRes?.success) setAutoAckLog(ackRes.data || []);
-      if (statusRes?.success) setAutoAckStatus(statusRes.data);
-    } catch { /* ignore */ } finally {
-      setAutoAckLoading(false);
-    }
-  }, []);
+  const gridColumns = useMemo(() => buildGridColumns(), []);
 
-  const fetchStats = useCallback(async () => {
-    log.debug('fetchStats', 'Fetching dashboard stats');
+  // ── Fetch all dashboard data ──────────────────────────────────────────────
+  const fetchDashboard = useCallback(async () => {
+    log.debug('fetchDashboard', 'Fetching dashboard data');
     setLoading(true);
+    setGridLoading(true);
     setError(null);
     try {
-      const [statsRes, incRes, syncRes, cfgRes, incCfgRes] = await Promise.all([
-        ApiClient.get(snApi.stats),
-        ApiClient.get(`${snApi.incidents}?limit=5`),
-        ApiClient.get(snApi.syncStatus).catch(() => null),
+      const [statsRes, gridRes, cfgRes, ackStatusRes, ritmRes] = await Promise.all([
+        ApiClient.get(snApi.dashboardStats),
+        ApiClient.get(snApi.dashboardIncidents),
         ApiClient.get(snApi.config).catch(() => null),
-        ApiClient.get('/api/servicenow/config/incidents').catch(() => null),
+        ApiClient.get(snApi.autoAckStatus).catch(() => null),
+        ApiClient.get(`${snApi.ritms}?limit=1`).catch(() => null),
       ]);
 
       if (statsRes?.success) {
-        log.info('fetchStats', 'Stats loaded', { connectionStatus: statsRes.data.connectionStatus });
+        log.info('fetchDashboard', 'Stats loaded', { connectionStatus: statsRes.data.connectionStatus });
         setStats(statsRes.data);
       } else {
-        log.warn('fetchStats', 'Stats fetch failed', { error: statsRes?.error?.message });
+        log.warn('fetchDashboard', 'Stats fetch failed', { error: statsRes?.error?.message });
         setError(statsRes?.error?.message || uiText.common.fetchError);
       }
 
-      if (incRes?.success) {
-        log.debug('fetchStats', 'Recent incidents loaded', { count: incRes.data.incidents?.length });
-        setIncidents(incRes.data.incidents || []);
+      if (gridRes?.success) {
+        log.debug('fetchDashboard', 'Grid data loaded', { today: gridRes.data.totalToday, breaching: gridRes.data.totalBreaching });
+        setGridData(gridRes.data);
       }
-      if (syncRes?.success) setSyncStatus(syncRes.data);
-      if (cfgRes?.success) setConfigData(cfgRes.data);
-      if (incCfgRes?.success) setIncidentConfig(incCfgRes.data);
 
-      // Fetch today's auto-acknowledged incidents + poller status
-      try {
-        const [ackRes, statusRes] = await Promise.all([
-          ApiClient.get('/api/servicenow/auto-acknowledge/log').catch(() => null),
-          ApiClient.get('/api/servicenow/auto-acknowledge/status').catch(() => null),
-        ]);
-        if (ackRes?.success) setAutoAckLog(ackRes.data || []);
-        if (statusRes?.success) setAutoAckStatus(statusRes.data);
-      } catch { /* ignore */ }
+      if (cfgRes?.success)       setConfigData(cfgRes.data);
+      if (ackStatusRes?.success) setAutoAckStatus(ackStatusRes.data);
+      if (ritmRes?.success)      setRitmCount(ritmRes.data?.totalCount ?? ritmRes.data?.ritms?.length ?? null);
+
+      lastFetchTime.current = new Date().toISOString();
     } catch (err) {
-      log.error('fetchStats', 'Unexpected error', { error: err.message });
+      log.error('fetchDashboard', 'Unexpected error', { error: err.message });
       setError(uiText.common.fetchError);
     } finally {
       setLoading(false);
+      setGridLoading(false);
     }
   }, []);
 
@@ -195,52 +230,23 @@ export default function ServiceNowDashboard({ onNavigate }) {
     if (initRan.current) return;
     initRan.current = true;
     log.info('mount', 'ServiceNow Dashboard mounted');
-    fetchStats();
+    fetchDashboard();
 
-    // Auto-refresh when user returns to this tab (e.g., after creating incident in Test Incidents)
     const handleVisibilityChange = () => {
       if (!document.hidden) {
         log.info('visibilitychange', 'Dashboard regained focus — refreshing data');
-        fetchStats();
+        fetchDashboard();
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [fetchStats]);
+  }, [fetchDashboard]);
 
-  // ── Manual sync ───────────────────────────────────────────────────────────
-  const handleSync = useCallback(async () => {
-    log.info('handleSync', 'Manual sync triggered');
-    setSyncing(true);
-    setSyncMessage(null);
-    try {
-      const res = await ApiClient.post(snApi.sync, {});
-      if (res?.success) {
-        const summary = res.data?.summary;
-        const msg = res.message || `Sync completed. Fetched ${summary?.totalFetched || 0} record(s) from ${summary?.tables?.length || 0} table(s) in ${res.data?.durationMs || 0}ms.`;
-        log.info('handleSync', msg, { summary });
-        setSyncMessage({ type: 'success', text: msg, summary });
-        await fetchStats();
-      } else {
-        const errMsg = res?.error?.message || 'Sync failed.';
-        log.warn('handleSync', errMsg);
-        setSyncMessage({ type: 'error', text: errMsg });
-      }
-    } catch (err) {
-      log.error('handleSync', 'Sync error', { error: err.message });
-      setSyncMessage({ type: 'error', text: `Sync failed: ${err.message}` });
-    } finally {
-      setSyncing(false);
-    }
-  }, [fetchStats]);
-
-  // Auto-dismiss sync message after 10s
-  useEffect(() => {
-    if (syncMessage) {
-      const timer = setTimeout(() => setSyncMessage(null), 10000);
-      return () => clearTimeout(timer);
-    }
-  }, [syncMessage]);
+  // Active grid data
+  const activeGridData = useMemo(() => {
+    if (!gridData) return [];
+    return activeGrid === 'today' ? gridData.todaysIncidents || [] : gridData.slaBreachingToday || [];
+  }, [gridData, activeGrid]);
 
   // ── Not configured state ──────────────────────────────────────────────────
   if (!loading && stats?.notConfigured) {
@@ -275,7 +281,7 @@ export default function ServiceNowDashboard({ onNavigate }) {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 space-y-6 animate-fade-in">
-      {/* Page header */}
+      {/* Page header — single refresh button */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-brand-50 flex items-center justify-center">
@@ -288,125 +294,176 @@ export default function ServiceNowDashboard({ onNavigate }) {
         </div>
         <div className="flex items-center gap-2">
           {stats?.connectionStatus && (
-            <ConnectionBanner status={stats.connectionStatus} lastSync={stats.lastSync} />
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium ${
+              stats.connectionStatus === 'connected' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+              stats.connectionStatus === 'error'     ? 'bg-rose-50 border-rose-200 text-rose-700' :
+              'bg-surface-50 border-surface-200 text-surface-600'
+            }`}>
+              {stats.connectionStatus === 'connected' ? <Wifi size={13} /> : <WifiOff size={13} />}
+              <span>{t.connectionStatus[stats.connectionStatus] || t.connectionStatus.not_configured}</span>
+            </div>
           )}
           <button
-            onClick={handleSync}
-            disabled={syncing || loading}
-            title={t.syncTooltip}
+            onClick={fetchDashboard}
+            disabled={loading}
+            title={t.refreshTooltip}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-50 text-brand-700 hover:bg-brand-100 disabled:opacity-50 transition-colors border border-brand-200"
           >
-            {syncing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-            {syncing ? uiText.sync.syncing : t.sync}
-          </button>
-          <button
-            onClick={fetchStats}
-            disabled={loading}
-            className="p-1.5 rounded-lg text-surface-400 hover:text-brand-600 hover:bg-brand-50 transition-colors disabled:opacity-40"
-          >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            {t.refresh}
           </button>
         </div>
       </div>
-
-      {/* Sync result banner */}
-      {syncMessage && (
-        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-          syncMessage.type === 'success'
-            ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
-            : 'bg-rose-50 border border-rose-200 text-rose-700'
-        }`}>
-          {syncMessage.type === 'success' ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
-          <div className="flex-1">
-            <span>{syncMessage.text}</span>
-            {syncMessage.summary?.tables?.length > 0 && (
-              <div className="mt-1 flex flex-wrap gap-3 text-xs opacity-80">
-                {syncMessage.summary.tables.map(t => (
-                  <span key={t.name} className="inline-flex items-center gap-1">
-                    <span className="font-semibold capitalize">{t.name}:</span> {t.recordsFetched} records
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-          <button onClick={() => setSyncMessage(null)} className="ml-2 text-xs opacity-60 hover:opacity-100">&times;</button>
-        </div>
-      )}
 
       {/* Error banner */}
       {error && (
         <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-sm">
           <AlertCircle size={15} />
           <span>{error}</span>
-          <button onClick={fetchStats} className="ml-auto text-xs underline">{uiText.common.retry}</button>
+          <button onClick={fetchDashboard} className="ml-auto text-xs underline">{uiText.common.retry}</button>
         </div>
       )}
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-        <StatCard label={t.stats.total}        value={stats?.total}        icon={Headset}       color="text-brand-600"   bg="bg-brand-50"    loading={loading} />
-        <StatCard label={t.stats.open}         value={stats?.open}         icon={Activity}      color="text-rose-600"    bg="bg-rose-50"     loading={loading} />
-        <StatCard label={t.stats.inProgress}   value={stats?.inProgress}   icon={Clock}         color="text-amber-600"   bg="bg-amber-50"    loading={loading} />
-        <StatCard label={t.stats.critical}     value={stats?.critical}     icon={AlertTriangle} color="text-rose-700"    bg="bg-rose-100"    loading={loading} />
-        <StatCard label={t.stats.slaBreached}  value={stats?.slaBreached}  icon={AlertCircle}   color="text-amber-600"   bg="bg-amber-50"    loading={loading} />
-        <StatCard label={t.stats.resolvedToday} value={stats?.resolvedToday} icon={CheckCircle2} color="text-emerald-600" bg="bg-emerald-50"  loading={loading} />
-      </div>
-
-      {/* Connection Health & Config Summary */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Connection Health */}
-        <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50">
-            <h3 className="text-sm font-bold text-surface-700">Connection Health</h3>
-          </div>
-          <div className="p-5 space-y-3">
-            {[
-              { label: 'Instance', value: configData?.connection?.instanceUrl || '—', ok: !!configData?.connection?.instanceUrl },
-              { label: 'Auth Method', value: configData?.connection?.authMethod || 'basic', ok: true },
-              { label: 'API Version', value: configData?.connection?.apiVersion || 'v2', ok: true },
-              { label: 'Status', value: stats?.connectionStatus === 'connected' ? 'Connected' : stats?.connectionStatus === 'error' ? 'Error' : 'Not Configured', ok: stats?.connectionStatus === 'connected' },
-            ].map(row => (
-              <div key={row.label} className="flex items-center justify-between">
-                <span className="text-xs font-medium text-surface-500">{row.label}</span>
-                <span className={`text-xs font-semibold flex items-center gap-1 ${row.ok ? 'text-emerald-600' : 'text-surface-400'}`}>
-                  {row.ok ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />}
-                  {row.value}
-                </span>
-              </div>
-            ))}
-          </div>
+      {/* ═══════════════════════════════════════════════════════════════════════
+         SECTION 1: SUMMARY
+         ═══════════════════════════════════════════════════════════════════════ */}
+      <div className="space-y-4">
+        {/* Row 1: Total / Open / Closed */}
+        <div className="grid grid-cols-3 gap-3">
+          <StatCard label={ts.total}  value={stats?.totalIncidents} icon={Headset}       color="text-brand-600"   bg="bg-brand-50"    loading={loading} />
+          <StatCard label={ts.open}   value={stats?.totalOpen}      icon={FolderOpen}    color="text-rose-600"    bg="bg-rose-50"     loading={loading} />
+          <StatCard label={ts.closed} value={stats?.totalClosed}    icon={FolderClosed}  color="text-emerald-600" bg="bg-emerald-50"  loading={loading} />
         </div>
 
-        {/* Sync Summary */}
-        <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50">
-            <h3 className="text-sm font-bold text-surface-700">Sync Summary</h3>
+        {/* Row 2: Created/Closed by period + Auto-Ack + Priority */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Created / Closed This Period */}
+          <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center gap-2">
+              <Calendar size={14} className="text-brand-600" />
+              <h3 className="text-sm font-bold text-surface-700">{ts.title}</h3>
+            </div>
+            <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-2">
+              {[
+                { label: ts.createdToday, value: stats?.created?.today },
+                { label: ts.closedToday,  value: stats?.closed?.today },
+                { label: ts.createdWeek,  value: stats?.created?.week },
+                { label: ts.closedWeek,   value: stats?.closed?.week },
+                { label: ts.createdMonth, value: stats?.created?.month },
+                { label: ts.closedMonth,  value: stats?.closed?.month },
+              ].map(row => (
+                <div key={row.label} className="flex items-center justify-between py-1">
+                  <span className="text-[11px] text-surface-500">{row.label}</span>
+                  {loading ? (
+                    <div className="h-4 w-6 bg-surface-100 rounded animate-pulse" />
+                  ) : (
+                    <span className="text-sm font-bold text-surface-800">{row.value ?? 0}</span>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="p-5 space-y-3">
-            {[
-              { label: 'Sync Scheduler', value: syncStatus?.running ? 'Running' : 'Stopped', ok: syncStatus?.running },
-              { label: 'Sync Interval', value: syncStatus?.syncIntervalMinutes ? `${syncStatus.syncIntervalMinutes} min` : '—', ok: !!syncStatus?.syncIntervalMinutes },
-              { label: 'Last Sync', value: stats?.lastSync ? new Date(stats.lastSync).toLocaleString() : (syncStatus?.lastSyncTime ? new Date(syncStatus.lastSyncTime).toLocaleString() : 'Never'), ok: !!(stats?.lastSync || syncStatus?.lastSyncTime) },
-              { label: 'Cached Incidents', value: stats?.total != null ? `${stats.total} record(s)` : '—', ok: stats?.total > 0 },
-              { label: 'SLA Config', value: configData?.sla ? 'Configured' : 'Default', ok: !!configData?.sla },
-              { label: 'Auto Acknowledge', value: autoAckStatus?.running ? `Running (every ${autoAckStatus.pollFreqMinutes}m)` : 'Stopped', ok: !!autoAckStatus?.running },
-            ].map(row => (
-              <div key={row.label} className="flex items-center justify-between">
-                <span className="text-xs font-medium text-surface-500">{row.label}</span>
-                <span className={`text-xs font-semibold flex items-center gap-1 ${row.ok ? 'text-emerald-600' : 'text-surface-400'}`}>
-                  {row.ok ? <CheckCircle2 size={11} /> : <Clock size={11} />}
-                  {row.value}
-                </span>
+
+          {/* SLA Compliance + Auto-Ack */}
+          <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center gap-2">
+              <BarChart3 size={14} className="text-brand-600" />
+              <h3 className="text-sm font-bold text-surface-700">{ts.slaResolution}</h3>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="grid grid-cols-3 gap-2">
+                <SlaPctCard label={ts.today} value={stats?.slaResolution?.today} loading={loading} />
+                <SlaPctCard label={ts.week}  value={stats?.slaResolution?.week}  loading={loading} />
+                <SlaPctCard label={ts.month} value={stats?.slaResolution?.month} loading={loading} />
               </div>
-            ))}
+              <div className="border-t border-surface-100 pt-3 space-y-1.5">
+                {[
+                  { label: ts.autoAckToday, value: stats?.autoAcknowledged?.today, icon: MessageSquare },
+                  { label: ts.autoAckWeek,  value: stats?.autoAcknowledged?.week,  icon: MessageSquare },
+                  { label: ts.autoAckMonth, value: stats?.autoAcknowledged?.month, icon: MessageSquare },
+                ].map(row => (
+                  <div key={row.label} className="flex items-center justify-between">
+                    <span className="text-[11px] text-surface-500 flex items-center gap-1">
+                      <row.icon size={10} className="text-surface-400" /> {row.label}
+                    </span>
+                    {loading ? (
+                      <div className="h-4 w-6 bg-surface-100 rounded animate-pulse" />
+                    ) : (
+                      <span className="text-sm font-bold text-brand-700">{row.value ?? 0}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* By Priority */}
+          <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center gap-2">
+              <AlertTriangle size={14} className="text-brand-600" />
+              <h3 className="text-sm font-bold text-surface-700">{ts.byPriority}</h3>
+            </div>
+            <div className="p-4 space-y-2">
+              {loading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="flex items-center justify-between py-1">
+                    <div className="h-4 w-20 bg-surface-100 rounded animate-pulse" />
+                    <div className="h-4 w-8 bg-surface-100 rounded animate-pulse" />
+                  </div>
+                ))
+              ) : stats?.priorityCounts && Object.keys(stats.priorityCounts).length > 0 ? (
+                Object.entries(stats.priorityCounts)
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([priority, count]) => (
+                    <div key={priority} className="flex items-center justify-between py-1">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border ${PRIORITY_STYLES[priority] || PRIORITY_STYLES.low}`}>
+                        {priority}
+                      </span>
+                      <span className="text-sm font-bold text-surface-800">{count}</span>
+                    </div>
+                  ))
+              ) : (
+                <p className="text-xs text-surface-400 text-center py-4">{ts.noData}</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Recent incidents */}
-      <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-surface-100 bg-surface-50/50">
-          <h3 className="text-sm font-bold text-surface-700">{t.recentIncidents}</h3>
+      {/* ═══════════════════════════════════════════════════════════════════════
+         SECTION 2: INCIDENTS GRID
+         ═══════════════════════════════════════════════════════════════════════ */}
+      <div className="space-y-0">
+        {/* Tab header */}
+        <div className="flex items-center justify-between px-5 py-3 bg-white border border-surface-200 rounded-t-2xl border-b-0">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setActiveGrid('today')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                activeGrid === 'today'
+                  ? 'bg-brand-50 text-brand-700 border border-brand-200'
+                  : 'text-surface-500 hover:text-brand-600 hover:bg-brand-50/50'
+              }`}
+            >
+              <Activity size={13} />
+              {tg.title}
+              {gridData && <span className="ml-1 px-1.5 py-0.5 rounded-full bg-brand-100 text-brand-700 text-[10px] font-bold">{gridData.totalToday}</span>}
+            </button>
+            <button
+              onClick={() => setActiveGrid('breaching')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                activeGrid === 'breaching'
+                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                  : 'text-surface-500 hover:text-rose-600 hover:bg-rose-50/50'
+              }`}
+            >
+              <ShieldAlert size={13} />
+              {tg.breachingTitle}
+              {gridData && gridData.totalBreaching > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold">{gridData.totalBreaching}</span>
+              )}
+            </button>
+          </div>
           <button
             onClick={() => onNavigate?.('incidents')}
             className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-semibold"
@@ -414,99 +471,95 @@ export default function ServiceNowDashboard({ onNavigate }) {
             {t.viewAll} <ArrowRight size={12} />
           </button>
         </div>
-
-        {loading ? (
-          <div className="p-8 flex items-center justify-center">
-            <Loader2 size={20} className="text-brand-400 animate-spin" />
-          </div>
-        ) : incidents.length === 0 ? (
-          <div className="p-8 text-center">
-            <p className="text-sm text-surface-400">{t.noIncidents}</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-surface-100 bg-surface-50/30">
-                  <th className="text-left px-4 py-2 text-xs font-semibold text-surface-500 uppercase tracking-wide">{inc.columns.number}</th>
-                  <th className="text-left px-4 py-2 text-xs font-semibold text-surface-500 uppercase tracking-wide">{inc.columns.title}</th>
-                  <th className="text-left px-4 py-2 text-xs font-semibold text-surface-500 uppercase tracking-wide">{inc.columns.priority}</th>
-                  <th className="text-left px-4 py-2 text-xs font-semibold text-surface-500 uppercase tracking-wide">{inc.columns.state}</th>
-                  <th className="text-left px-4 py-2 text-xs font-semibold text-surface-500 uppercase tracking-wide">{inc.columns.assignedTo}</th>
-                  <th className="text-left px-4 py-2 text-xs font-semibold text-surface-500 uppercase tracking-wide">{inc.columns.createdAt}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-50">
-                {incidents.map(incident => {
-                  // Helper to extract value from ServiceNow's {link, value} objects
-                  const getValue = (field) => typeof field === 'object' && field?.value ? field.value : field;
-                  const number = getValue(incident.number);
-                  const description = getValue(incident.short_description) || getValue(incident.title) || uiText.common.na;
-                  const priority = getValue(incident.priority);
-                  const state = getValue(incident.state);
-                  const assignedTo = getValue(incident.assigned_to) || getValue(incident.assignedTo) || uiText.common.na;
-                  const openedAt = getValue(incident.opened_at);
-                  
-                  return (
-                    <tr key={incident.sys_id || number} className="hover:bg-surface-50/50 transition-colors">
-                      <td className="px-4 py-2.5 font-mono text-xs text-brand-600 font-semibold">{number}</td>
-                      <td className="px-4 py-2.5 text-surface-700 max-w-[280px] truncate">{description}</td>
-                      <td className="px-4 py-2.5">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border ${PRIORITY_STYLES[priority] || PRIORITY_STYLES.low}`}>
-                          {inc.priority[priority] || priority}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${STATE_STYLES[state] || STATE_STYLES.open}`}>
-                          {inc.state[state] || state}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-surface-500 text-xs">{assignedTo}</td>
-                      <td className="px-4 py-2.5 text-surface-500 text-xs">{openedAt ? new Date(openedAt).toLocaleDateString() : uiText.common.na}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Auto Acknowledged Incidents Today */}
-      <div className="space-y-0">
-        <div className="flex items-center justify-between px-5 py-3 bg-brand-50/50 border border-surface-200 rounded-t-2xl">
-          <div className="flex items-center gap-2">
-            <MessageSquare size={14} className="text-brand-600" />
-            <h3 className="text-sm font-bold text-surface-700">Auto Acknowledged Today</h3>
-            {autoAckLog.length > 0 && <span className="px-1.5 py-0.5 rounded-full bg-brand-100 text-brand-700 text-[10px] font-bold">{autoAckLog.length}</span>}
-          </div>
-          <button onClick={fetchAutoAckLog} disabled={autoAckLoading}
-            className="p-1.5 rounded-lg text-surface-400 hover:text-brand-600 hover:bg-brand-50 transition-colors disabled:opacity-40"
-            title="Refresh">
-            <RefreshCw size={13} className={autoAckLoading ? 'animate-spin' : ''} />
-          </button>
-        </div>
         <DataTable
-          columns={[
-            { key: 'incident_number', label: 'Incident', sortable: true,
-              render: (v) => <span className="font-mono text-xs text-brand-600 font-semibold">{v}</span> },
-            { key: 'short_description', label: 'Description', sortable: true,
-              render: (v) => <span className="text-xs text-surface-700 max-w-[280px] truncate block">{v || '—'}</span> },
-            { key: 'priority', label: 'Priority', sortable: true, align: 'center' },
-            { key: 'status', label: 'Status', sortable: true, align: 'center',
-              render: (v) => <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                v === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
-              }`}>{v === 'success' ? <><CheckCircle2 size={10} /> Done</> : <><AlertCircle size={10} /> Failed</>}</span> },
-            { key: 'acknowledged_at', label: 'Time', sortable: true,
-              render: (v) => <span className="text-surface-500 text-xs">{v ? new Date(v).toLocaleTimeString() : '—'}</span> },
-          ]}
-          data={autoAckLog}
-          loading={autoAckLoading}
-          pageSize={10}
-          emptyMessage={loading || autoAckLoading ? 'Loading…' : 'No incidents auto-acknowledged today.'}
+          columns={gridColumns}
+          data={activeGridData}
+          loading={gridLoading}
+          pageSize={20}
+          searchable={true}
+          searchPlaceholder={tg.searchPlaceholder}
+          emptyMessage={activeGrid === 'today' ? tg.noIncidents : tg.noBreaching}
           compact={true}
           className="rounded-t-none border-t-0"
+          rowKeyField="sysId"
+          defaultSort={{ key: 'number', order: 'desc' }}
         />
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+         SECTION 3: CONNECTION HEALTH
+         ═══════════════════════════════════════════════════════════════════════ */}
+      <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center gap-2">
+          <Wifi size={14} className="text-brand-600" />
+          <h3 className="text-sm font-bold text-surface-700">{tc.title}</h3>
+        </div>
+        <div className="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3">
+          {/* Instance URL */}
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-surface-500">{tc.instanceUrl}</span>
+            <span className="text-xs font-semibold text-surface-700 truncate max-w-[200px]">
+              {configData?.connection?.instanceUrl || '—'}
+            </span>
+          </div>
+          {/* Connection Status */}
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-surface-500">{tc.connectionStatus}</span>
+            <span className={`text-xs font-semibold flex items-center gap-1 ${
+              stats?.connectionStatus === 'connected' ? 'text-emerald-600' : 'text-surface-400'
+            }`}>
+              {stats?.connectionStatus === 'connected' ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />}
+              {t.connectionStatus[stats?.connectionStatus] || t.connectionStatus.not_configured}
+            </span>
+          </div>
+          {/* ServiceNow Metadata link */}
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-surface-500">{tc.metadata}</span>
+            {configData?.connection?.instanceUrl ? (
+              <a
+                href={`${configData.connection.instanceUrl}/stats.do`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1"
+              >
+                {tc.metadataLink} <ExternalLink size={10} />
+              </a>
+            ) : (
+              <span className="text-xs text-surface-400">—</span>
+            )}
+          </div>
+          {/* Last Fetch */}
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-surface-500">{tc.lastFetch}</span>
+            <span className="text-xs font-semibold text-surface-700">
+              {lastFetchTime.current ? new Date(lastFetchTime.current).toLocaleString() : tc.never}
+            </span>
+          </div>
+          {/* Incidents Fetched */}
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-surface-500">{tc.incidentsFetched}</span>
+            <span className="text-xs font-bold text-surface-800">
+              {stats?.totalIncidents ?? '—'}
+            </span>
+          </div>
+          {/* RITMs Fetched */}
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-surface-500">{tc.ritmsFetched}</span>
+            <span className="text-xs font-bold text-surface-800">
+              {ritmCount ?? '—'}
+            </span>
+          </div>
+          {/* Auto Acknowledge Status */}
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-surface-500">{tc.autoAckStatus}</span>
+            <span className={`text-xs font-semibold flex items-center gap-1 ${
+              autoAckStatus?.running ? 'text-emerald-600' : 'text-surface-400'
+            }`}>
+              {autoAckStatus?.running ? <CheckCircle2 size={11} /> : <Clock size={11} />}
+              {autoAckStatus?.running ? `${tc.running} (${autoAckStatus.pollFreqMinutes}m)` : tc.stopped}
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );

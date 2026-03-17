@@ -3,6 +3,8 @@
 //
 // ENDPOINTS:
 //   GET /stats                          → Dashboard statistics (live from SNOW)
+//   GET /dashboard/stats                → Enhanced dashboard summary (counts, SLA %, auto-ack)
+//   GET /dashboard/incidents            → Today's incidents with SLA + auto-ack columns
 //   GET /reports/incidents              → Incident report (live from SNOW)
 //   GET /reports/ritms                  → RITM report
 //   GET /reports/sla                    → SLA compliance report
@@ -19,7 +21,8 @@ import {
   loadModuleConfig, saveModuleConfig,
 } from '#modules/servicenow/api/routes/helpers.js';
 import {
-  getStats, getIncidentReport, getRitmReport,
+  getStats, getDashboardStats, getDashboardIncidents,
+  getIncidentReport, getRitmReport,
   getSlaReport, getSlaResolutionReport, getSlaResponseReport,
 } from '#modules/servicenow/api/services/ReportService.js';
 import { getEffectiveTimezone } from '#modules/servicenow/api/services/TimezoneService.js';
@@ -44,6 +47,40 @@ router.get('/stats', async (req, res) => {
   } catch (err) {
     log.error(`GET /stats failed: ${err.message}`);
     return res.status(500).json({ success: false, error: { message: apiErrors.reports.statsFailed.replace('{message}', err.message) } });
+  }
+});
+
+// ── GET /dashboard/stats ─────────────────────────────────────────────────────
+router.get('/dashboard/stats', async (req, res) => {
+  try {
+    const conn = loadConnectionConfig();
+    if (!conn.isConfigured) {
+      return res.json({ success: true, data: { notConfigured: true, connectionStatus: 'not_configured' } });
+    }
+    const [incidentConfig, tz] = await Promise.all([loadIncidentConfig(), getEffectiveTimezone()]);
+    const data = await getDashboardStats(conn, incidentConfig, tz);
+    log.debug(`GET /dashboard/stats — total:${data.totalIncidents} open:${data.totalOpen}`);
+    return res.json({ success: true, data: { connectionStatus: 'connected', ...data } });
+  } catch (err) {
+    log.error(`GET /dashboard/stats failed: ${err.message}`);
+    return res.status(500).json({ success: false, error: { message: apiErrors.reports.dashboardStatsFailed.replace('{message}', err.message) } });
+  }
+});
+
+// ── GET /dashboard/incidents ─────────────────────────────────────────────────
+router.get('/dashboard/incidents', async (req, res) => {
+  try {
+    const conn = loadConnectionConfig();
+    if (!conn.isConfigured) {
+      return res.json({ success: true, data: { todaysIncidents: [], slaBreachingToday: [], totalToday: 0, totalBreaching: 0 } });
+    }
+    const [incidentConfig, tz] = await Promise.all([loadIncidentConfig(), getEffectiveTimezone()]);
+    const data = await getDashboardIncidents(conn, incidentConfig, tz);
+    log.info(`GET /dashboard/incidents — today:${data.totalToday} breaching:${data.totalBreaching}`);
+    return res.json({ success: true, data });
+  } catch (err) {
+    log.error(`GET /dashboard/incidents failed: ${err.message}`);
+    return res.status(500).json({ success: false, error: { message: apiErrors.reports.dashboardIncidentsFailed.replace('{message}', err.message) } });
   }
 });
 

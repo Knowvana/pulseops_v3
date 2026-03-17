@@ -2,7 +2,7 @@
   "_meta": {
     "moduleId": "servicenow",
     "version": "2.0.0",
-    "description": "ServiceNow ITSM Integration — module database schema. Tables are provisioned when the module is enabled via Module Manager. Uses the same JSON format as DefaultDatabaseSchema.json. Architecture: sn_module_config for key-value JSONB config, sn_sla_config for structured SLA CRUD, sn_business_hours for 7-row weekly schedule, sn_incidents for cached data, sn_sync_history for audit."
+    "description": "ServiceNow ITSM Integration — module database schema. Tables are provisioned when the module is enabled via Module Manager. Uses the same JSON format as DefaultDatabaseSchema.json. Architecture: sn_module_config for key-value JSONB config, sn_sla_config for structured SLA CRUD, sn_business_hours for 7-row weekly schedule, sn_sync_history for audit, sn_auto_acknowledge_log for auto-ack audit. Incidents are fetched live from the ServiceNow API."
   },
   "tables": [
     {
@@ -54,43 +54,6 @@
       ],
       "indexes": [
         { "name": "idx_sn_business_hours_dow", "columns": ["day_of_week"], "unique": true }
-      ]
-    },
-    {
-      "name": "sn_incidents",
-      "description": "Cached ServiceNow incidents — synced from the ServiceNow REST API.",
-      "columns": [
-        { "name": "id",                 "type": "BIGSERIAL PRIMARY KEY" },
-        { "name": "sys_id",             "type": "VARCHAR(64) UNIQUE NOT NULL" },
-        { "name": "number",             "type": "VARCHAR(40) NOT NULL" },
-        { "name": "short_description",  "type": "TEXT" },
-        { "name": "description",        "type": "TEXT" },
-        { "name": "priority",           "type": "VARCHAR(10)" },
-        { "name": "state",              "type": "VARCHAR(10)" },
-        { "name": "state_label",        "type": "VARCHAR(50)" },
-        { "name": "category",           "type": "VARCHAR(100)" },
-        { "name": "subcategory",        "type": "VARCHAR(100)" },
-        { "name": "assignment_group",   "type": "VARCHAR(255)" },
-        { "name": "assigned_to",        "type": "VARCHAR(255)" },
-        { "name": "caller_id",          "type": "VARCHAR(255)" },
-        { "name": "opened_at",          "type": "TIMESTAMPTZ" },
-        { "name": "resolved_at",        "type": "TIMESTAMPTZ" },
-        { "name": "closed_at",          "type": "TIMESTAMPTZ" },
-        { "name": "response_time_ms",   "type": "BIGINT" },
-        { "name": "resolution_time_ms", "type": "BIGINT" },
-        { "name": "sla_breached",       "type": "BOOLEAN DEFAULT FALSE" },
-        { "name": "raw_data",           "type": "JSONB" },
-        { "name": "synced_at",          "type": "TIMESTAMPTZ DEFAULT NOW()" },
-        { "name": "created_at",         "type": "TIMESTAMPTZ DEFAULT NOW()" },
-        { "name": "updated_at",         "type": "TIMESTAMPTZ DEFAULT NOW()" }
-      ],
-      "indexes": [
-        { "name": "idx_sn_incidents_sys_id",     "columns": ["sys_id"],           "unique": true },
-        { "name": "idx_sn_incidents_number",     "columns": ["number"],           "unique": false },
-        { "name": "idx_sn_incidents_priority",   "columns": ["priority"],         "unique": false },
-        { "name": "idx_sn_incidents_state",      "columns": ["state"],            "unique": false },
-        { "name": "idx_sn_incidents_opened_at",  "columns": ["opened_at"],        "unique": false },
-        { "name": "idx_sn_incidents_group",      "columns": ["assignment_group"], "unique": false }
       ]
     },
     {

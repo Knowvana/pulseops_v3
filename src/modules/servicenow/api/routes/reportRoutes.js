@@ -72,11 +72,11 @@ router.get('/dashboard/incidents', async (req, res) => {
   try {
     const conn = loadConnectionConfig();
     if (!conn.isConfigured) {
-      return res.json({ success: true, data: { todaysIncidents: [], slaBreachingToday: [], totalToday: 0, totalBreaching: 0 } });
+      return res.json({ success: true, data: { todaysIncidents: [], slaBreachingToday: [], autoAckToday: [], totalToday: 0, totalBreaching: 0, totalAutoAck: 0 } });
     }
     const [incidentConfig, tz] = await Promise.all([loadIncidentConfig(), getEffectiveTimezone()]);
     const data = await getDashboardIncidents(conn, incidentConfig, tz);
-    log.info(`GET /dashboard/incidents — today:${data.totalToday} breaching:${data.totalBreaching}`);
+    log.info(`GET /dashboard/incidents — today:${data.totalToday} breaching:${data.totalBreaching} autoAck:${data.totalAutoAck}`);
     return res.json({ success: true, data });
   } catch (err) {
     log.error(`GET /dashboard/incidents failed: ${err.message}`);

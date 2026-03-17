@@ -768,6 +768,21 @@ All backend API endpoints in `api/src/core/routes/` MUST strictly follow REST co
 
 ---
 
-**Last Updated:** March 6, 2026
-**Version:** 2.3.0
+## 14. File Safety: No Bulk Deletes (ABSOLUTE)
+
+**PROHIBITED — The agent MUST NEVER:**
+- Delete, overwrite, or remove core project files (`.gitignore`, `package.json`, `vite.config.js`, `index.html`, `jsconfig.json`, `postcss.config.js`, `tailwind.config.js`, `.windsurfrules`, `.env.example`, `docker-compose-pgsql.yml`, `architecture.txt`, `package-lock.json`, `vite.module.config.js`).
+- Run `git checkout`, `git reset`, or `git restore` commands that affect the entire working tree (e.g., `git restore .` or `git checkout -- .`). Only target specific files explicitly.
+- Create temporary files (e.g., `_validate.cjs`, `_temp.js`) in the project root. Use OS temp directories instead.
+- Run any bulk `del`, `rm -rf`, or wildcard delete commands that could affect files outside the current task scope.
+
+**REQUIRED:**
+- When restoring git files, always specify each file individually — never use `.` or `*` wildcards.
+- Before any file delete operation, list the exact files to be deleted and confirm relevance to the current task.
+- Never modify or delete files that are not directly related to the current task.
+
+---
+
+**Last Updated:** March 17, 2026
+**Version:** 2.4.0
 **Scope:** PulseOps V2 (All code in this repository)

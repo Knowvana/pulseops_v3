@@ -269,9 +269,12 @@ export default function ServiceNowIncidents({ onNavigate }) {
     if (colKey === 'short_description') {
       return <span className="block truncate max-w-[300px]">{val || uiText.common.na}</span>;
     }
-    // Date columns
-    if (['opened_at','sys_created_on','resolved_at','closed_at','sys_updated_on'].includes(colKey)) {
-      return val ? new Date(val).toLocaleString() : uiText.common.na;
+    // Date columns — format without ISO "T" separator
+    if (['opened_at','sys_created_on','resolved_at','closed_at','sys_updated_on','sla_due'].includes(colKey)) {
+      if (!val) return uiText.common.na;
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return val;
+      return d.toLocaleString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
     }
     return val || uiText.common.na;
   }, []);
@@ -405,7 +408,7 @@ export default function ServiceNowIncidents({ onNavigate }) {
             <p className="text-xs text-surface-400 mt-1">{t.noIncidentsHint}</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-surface-300 scrollbar-track-surface-50 hover:scrollbar-thumb-surface-400">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-surface-50 border-b border-surface-200">

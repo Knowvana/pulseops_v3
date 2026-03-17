@@ -244,20 +244,55 @@ export async function getDashboardStats(conn, incidentConfig, tz) {
   const { slaByLabel, slaByPriorityValue } = await loadSlaThresholds();
   const { map: hoursMap } = await loadBusinessHoursMap();
 
+  // ── Batch-fetch first journal response for Response SLA ─────────────────
+  const firstResponseMap = {};
+  try {
+    // Fetch recent month's incident sys_ids for batch journal query
+    const monthSysIds = incidents
+      .filter(inc => {
+        const d = parseSnowDateUTC(snowVal(inc[incidentConfig.createdColumn || 'opened_at']));
+        return d && d >= monthStart;
+      })
+      .map(inc => snowVal(inc.sys_id))
+      .filter(Boolean);
+
+    // ServiceNow supports element_idIN<csv> for batch lookups (batches of 50)
+    for (let i = 0; i < monthSysIds.length; i += 50) {
+      const batch = monthSysIds.slice(i, i + 50);
+      const journalResult = await snowGet(
+        conn,
+        SNOW_JOURNAL,
+        `sysparm_query=element_idIN${batch.join(',')}^elementINcomments,work_notes&sysparm_fields=element_id,sys_created_on&sysparm_orderby=sys_created_on`,
+      );
+      if (isSnowSuccess(journalResult.statusCode) && journalResult.data?.result) {
+        for (const entry of journalResult.data.result) {
+          const eid = snowVal(entry.element_id);
+          // Keep only the earliest (first) response per incident
+          if (eid && !firstResponseMap[eid]) {
+            firstResponseMap[eid] = snowVal(entry.sys_created_on);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    log.debug('Batch journal fetch for dashboard stats failed', { error: err.message });
+  }
+
   // ── Accumulators ─────────────────────────────────────────────────────────
   let totalOpen = 0, totalClosed = 0;
   let createdToday = 0, createdWeek = 0, createdMonth = 0;
   let closedToday = 0, closedWeek = 0, closedMonth = 0;
   const priorityCounts = {};
 
-  // SLA accumulators per period: { met, breached } for resolution & response
-  const slaRes  = { today: { met: 0, total: 0 }, week: { met: 0, total: 0 }, month: { met: 0, total: 0 } };
-  const slaResp = { today: { met: 0, total: 0 }, week: { met: 0, total: 0 }, month: { met: 0, total: 0 } };
+  // SLA accumulators per period: { met, notMet, total } for resolution & response
+  const slaRes  = { today: { met: 0, notMet: 0, total: 0 }, week: { met: 0, notMet: 0, total: 0 }, month: { met: 0, notMet: 0, total: 0 } };
+  const slaResp = { today: { met: 0, notMet: 0, total: 0 }, week: { met: 0, notMet: 0, total: 0 }, month: { met: 0, notMet: 0, total: 0 } };
 
   for (const inc of incidents) {
     const pRaw   = String(snowVal(inc[incidentConfig.priorityColumn || 'priority']) || '4');
     const state  = String(snowVal(inc.state) || 'unknown');
     const pLabel = normalizePriority(pRaw) || pRaw;
+    const sysId  = snowVal(inc.sys_id);
 
     // Priority counts
     priorityCounts[pLabel] = (priorityCounts[pLabel] || 0) + 1;
@@ -292,10 +327,21 @@ export async function getDashboardStats(conn, incidentConfig, tz) {
       const resMinutes = calcBusinessMinutesBetween(createdDate, closedDate, hoursMap, tz);
       const met = resMinutes <= threshold.resolutionMinutes;
 
-      // Categorize by when the incident was created
-      if (createdDate >= todayStart) { slaRes.today.total++; if (met) slaRes.today.met++; }
-      if (createdDate >= weekStart)  { slaRes.week.total++;  if (met) slaRes.week.met++;  }
-      if (createdDate >= monthStart) { slaRes.month.total++; if (met) slaRes.month.met++; }
+      if (createdDate >= todayStart) { slaRes.today.total++; if (met) slaRes.today.met++; else slaRes.today.notMet++; }
+      if (createdDate >= weekStart)  { slaRes.week.total++;  if (met) slaRes.week.met++;  else slaRes.week.notMet++;  }
+      if (createdDate >= monthStart) { slaRes.month.total++; if (met) slaRes.month.met++; else slaRes.month.notMet++; }
+    }
+
+    // Response SLA compliance by period (uses first journal response)
+    const respondedRaw  = firstResponseMap[sysId];
+    const respondedDate = parseSnowDateUTC(respondedRaw);
+    if (createdDate && respondedDate && !isNaN(createdDate.getTime()) && !isNaN(respondedDate.getTime()) && threshold.responseMinutes > 0) {
+      const respMinutes = calcBusinessMinutesBetween(createdDate, respondedDate, hoursMap, tz);
+      const respMet = respMinutes <= threshold.responseMinutes;
+
+      if (createdDate >= todayStart) { slaResp.today.total++; if (respMet) slaResp.today.met++; else slaResp.today.notMet++; }
+      if (createdDate >= weekStart)  { slaResp.week.total++;  if (respMet) slaResp.week.met++;  else slaResp.week.notMet++;  }
+      if (createdDate >= monthStart) { slaResp.month.total++; if (respMet) slaResp.month.met++; else slaResp.month.notMet++; }
     }
   }
 
@@ -328,14 +374,14 @@ export async function getDashboardStats(conn, incidentConfig, tz) {
     created: { today: createdToday, week: createdWeek, month: createdMonth },
     closed:  { today: closedToday,  week: closedWeek,  month: closedMonth },
     slaResolution: {
-      today: slaPct(slaRes.today),
-      week:  slaPct(slaRes.week),
-      month: slaPct(slaRes.month),
+      today: { pct: slaPct(slaRes.today), met: slaRes.today.met, notMet: slaRes.today.notMet, total: slaRes.today.total },
+      week:  { pct: slaPct(slaRes.week),  met: slaRes.week.met,  notMet: slaRes.week.notMet,  total: slaRes.week.total  },
+      month: { pct: slaPct(slaRes.month), met: slaRes.month.met, notMet: slaRes.month.notMet, total: slaRes.month.total },
     },
     slaResponse: {
-      today: slaPct(slaResp.today),
-      week:  slaPct(slaResp.week),
-      month: slaPct(slaResp.month),
+      today: { pct: slaPct(slaResp.today), met: slaResp.today.met, notMet: slaResp.today.notMet, total: slaResp.today.total },
+      week:  { pct: slaPct(slaResp.week),  met: slaResp.week.met,  notMet: slaResp.week.notMet,  total: slaResp.week.total  },
+      month: { pct: slaPct(slaResp.month), met: slaResp.month.met, notMet: slaResp.month.notMet, total: slaResp.month.total },
     },
     autoAcknowledged: { today: autoAckToday, week: autoAckWeek, month: autoAckMonth },
     priorityCounts,
@@ -348,10 +394,14 @@ export async function getDashboardStats(conn, incidentConfig, tz) {
  *
  * Each incident row includes:
  *   - Standard fields (number, short_description, priority, state, assigned_to, createdAt, closedAt)
- *   - SLA columns: expectedClosure, resolutionMinutes, targetMinutes, slaVariance, slaStatus
+ *   - Resolution SLA: expectedClosure, resolutionMinutes, targetMinutes, slaVariance, resolutionSlaStatus
+ *   - Response SLA: expectedResponse, actualResponse, responseMinutes, responseTargetMinutes, responseSlaStatus
  *   - Auto-acknowledge: autoAcknowledged (boolean), autoAcknowledgedAt (tz-converted)
  *
- * Also returns a second list: incidents whose resolution SLA is breaching today.
+ * Returns three lists:
+ *   1. todaysIncidents — all incidents created today
+ *   2. slaBreachingToday — incidents whose resolution SLA is breaching today
+ *   3. autoAckToday — incidents auto-acknowledged today
  *
  * @param {object} conn           - ServiceNow connection config.
  * @param {object} incidentConfig - Loaded incident config.
@@ -391,11 +441,35 @@ export async function getDashboardIncidents(conn, incidentConfig, tz) {
   const { slaByLabel, slaByPriorityValue } = await loadSlaThresholds();
   const { map: hoursMap } = await loadBusinessHoursMap();
 
+  // Batch-fetch first journal response for Response SLA columns
+  const firstResponseMap = {};
+  try {
+    const sysIds = incidents.map(inc => snowVal(inc.sys_id)).filter(Boolean);
+    for (let i = 0; i < sysIds.length; i += 50) {
+      const batch = sysIds.slice(i, i + 50);
+      const journalResult = await snowGet(
+        conn,
+        SNOW_JOURNAL,
+        `sysparm_query=element_idIN${batch.join(',')}^elementINcomments,work_notes&sysparm_fields=element_id,sys_created_on&sysparm_orderby=sys_created_on`,
+      );
+      if (isSnowSuccess(journalResult.statusCode) && journalResult.data?.result) {
+        for (const entry of journalResult.data.result) {
+          const eid = snowVal(entry.element_id);
+          if (eid && !firstResponseMap[eid]) {
+            firstResponseMap[eid] = snowVal(entry.sys_created_on);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    log.debug('Batch journal fetch for dashboard incidents failed', { error: err.message });
+  }
+
   // Load auto-acknowledge log for today (indexed by incident sys_id)
   const autoAckMap = {};
   try {
     const ackResult = await DatabaseService.query(
-      `SELECT incident_sys_id, acknowledged_at FROM ${dbSchema}.sn_auto_acknowledge_log
+      `SELECT incident_sys_id, incident_number, acknowledged_at FROM ${dbSchema}.sn_auto_acknowledge_log
        WHERE acknowledged_at >= $1::date AND acknowledged_at < ($1::date + interval '1 day') AND status = 'success'
        ORDER BY acknowledged_at DESC`,
       [todayStr],
@@ -408,6 +482,7 @@ export async function getDashboardIncidents(conn, incidentConfig, tz) {
   // Process incidents with SLA calculation
   const todaysIncidents = [];
   const slaBreachingToday = [];
+  const autoAckToday = [];
 
   for (const inc of incidents) {
     const sysId        = snowVal(inc.sys_id);
@@ -421,7 +496,8 @@ export async function getDashboardIncidents(conn, incidentConfig, tz) {
     const createdDate  = parseSnowDateUTC(createdAtRaw);
     const closedDate   = parseSnowDateUTC(closedAtRaw);
 
-    let resolutionMinutes = null, slaMet = null, expectedClosure = null, slaVariance = null;
+    // ── Resolution SLA ──────────────────────────────────────────────────
+    let resolutionMinutes = null, resSlaMet = null, expectedClosure = null, slaVariance = null;
 
     if (createdDate && !isNaN(createdDate.getTime())) {
       const exp = addBusinessMinutes(createdDate, threshold.resolutionMinutes, hoursMap, tz);
@@ -429,44 +505,72 @@ export async function getDashboardIncidents(conn, incidentConfig, tz) {
     }
     if (createdDate && closedDate && !isNaN(createdDate.getTime()) && !isNaN(closedDate.getTime())) {
       resolutionMinutes = calcBusinessMinutesBetween(createdDate, closedDate, hoursMap, tz);
-      slaMet = resolutionMinutes <= threshold.resolutionMinutes;
+      resSlaMet = resolutionMinutes <= threshold.resolutionMinutes;
       slaVariance = threshold.resolutionMinutes - resolutionMinutes;
     } else if (createdDate && !['6', '7', '8'].includes(String(state))) {
-      // Still open — calculate elapsed
       resolutionMinutes = calcBusinessMinutesBetween(createdDate, now, hoursMap, tz);
-      slaMet = resolutionMinutes <= threshold.resolutionMinutes;
+      resSlaMet = resolutionMinutes <= threshold.resolutionMinutes;
       slaVariance = threshold.resolutionMinutes - resolutionMinutes;
     }
 
-    let slaStatus = 'pending';
-    if (slaMet === true)  slaStatus = 'met';
-    if (slaMet === false) slaStatus = 'breached';
+    let resolutionSlaStatus = 'pending';
+    if (resSlaMet === true)  resolutionSlaStatus = 'met';
+    if (resSlaMet === false) resolutionSlaStatus = 'breached';
+
+    // ── Response SLA ────────────────────────────────────────────────────
+    const respondedRaw  = firstResponseMap[sysId];
+    const respondedDate = parseSnowDateUTC(respondedRaw);
+    let responseMinutes = null, respSlaMet = null, expectedResponse = null;
+
+    if (createdDate && !isNaN(createdDate.getTime()) && threshold.responseMinutes > 0) {
+      const expResp = addBusinessMinutes(createdDate, threshold.responseMinutes, hoursMap, tz);
+      if (expResp) expectedResponse = expResp.toISOString();
+    }
+    if (createdDate && respondedDate && !isNaN(createdDate.getTime()) && !isNaN(respondedDate.getTime()) && threshold.responseMinutes > 0) {
+      responseMinutes = calcBusinessMinutesBetween(createdDate, respondedDate, hoursMap, tz);
+      respSlaMet = responseMinutes <= threshold.responseMinutes;
+    }
+
+    let responseSlaStatus = 'pending';
+    if (respSlaMet === true)  responseSlaStatus = 'met';
+    if (respSlaMet === false) responseSlaStatus = 'breached';
 
     const ackAt = autoAckMap[sysId] || null;
 
     const row = {
       sysId,
-      number:            snowVal(inc.number),
-      shortDescription:  snowVal(inc.short_description),
-      priority:          normalised || priorityRaw,
+      number:              snowVal(inc.number),
+      shortDescription:    snowVal(inc.short_description),
+      priority:            normalised || priorityRaw,
       state,
-      assignedTo:        snowVal(inc.assigned_to),
-      createdAt:         convertToTimezone(createdDate ? createdDate.toISOString() : createdAtRaw, tz),
-      closedAt:          convertToTimezone(closedDate  ? closedDate.toISOString()  : closedAtRaw,  tz),
-      expectedClosure:   convertToTimezone(expectedClosure, tz),
+      assignedTo:          snowVal(inc.assigned_to),
+      createdAt:           convertToTimezone(createdDate ? createdDate.toISOString() : createdAtRaw, tz),
+      closedAt:            convertToTimezone(closedDate  ? closedDate.toISOString()  : closedAtRaw,  tz),
+      // Resolution SLA columns
+      expectedClosure:     convertToTimezone(expectedClosure, tz),
       resolutionMinutes,
-      targetMinutes:     threshold.resolutionMinutes,
+      targetMinutes:       threshold.resolutionMinutes,
       slaVariance,
-      slaStatus,
+      resolutionSlaStatus,
+      // Response SLA columns
+      expectedResponse:    convertToTimezone(expectedResponse, tz),
+      actualResponse:      convertToTimezone(respondedDate ? respondedDate.toISOString() : respondedRaw, tz),
+      responseMinutes,
+      responseTargetMinutes: threshold.responseMinutes,
+      responseSlaStatus,
+      // Auto-acknowledge
       autoAcknowledged:    !!ackAt,
       autoAcknowledgedAt:  ackAt ? convertToTimezone(new Date(ackAt).toISOString(), tz) : null,
     };
 
     todaysIncidents.push(row);
 
-    // Breaching today: SLA is breached AND incident was created or breaching today
-    if (slaStatus === 'breached') {
+    if (resolutionSlaStatus === 'breached') {
       slaBreachingToday.push(row);
+    }
+
+    if (row.autoAcknowledged) {
+      autoAckToday.push(row);
     }
   }
 
@@ -474,8 +578,10 @@ export async function getDashboardIncidents(conn, incidentConfig, tz) {
     timezone: tz,
     todaysIncidents,
     slaBreachingToday,
+    autoAckToday,
     totalToday:     todaysIncidents.length,
     totalBreaching: slaBreachingToday.length,
+    totalAutoAck:   autoAckToday.length,
   };
 }
 

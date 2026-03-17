@@ -2,16 +2,15 @@
 // ServiceNowDashboard — PulseOps V3 ServiceNow Module
 //
 // PURPOSE: Main dashboard view for the ServiceNow module. Displays:
-//   1. Summary Section — incident metrics, SLA compliance %, auto-ack counts,
-//      priority breakdown (all fetched live from SNOW API via /dashboard/stats)
-//   2. Incidents Grid — "Today's Incidents" and "Resolution SLAs Breaching
-//      Today" using the DataTable component with SLA + auto-ack columns
-//   3. Connection Health — instance URL, connection status, metadata link,
-//      last fetch date/time, and counts of fetched incidents/RITMs
+//   1. Connection Health (top) — status, refresh, timezone, last fetch
+//   2. Summary Section — incident metrics, SLA compliance %, auto-ack counts,
+//      Response SLA % with met/notMet, priority breakdown (bordered cards)
+//   3. Incidents Grids (separate) — Today's Incidents, Resolution SLAs
+//      Breaching Today, Auto Acknowledged Incidents Today
 //
 // ARCHITECTURE:
 //   - Fetches dashboard data on mount (guarded with useRef for StrictMode)
-//   - Single refresh button — no duplicate refresh icons, no sync summary
+//   - Refresh button inside Connection Health section
 //   - Uses only project theme colors (brand/teal/surface palette)
 //   - All text from uiText.json — zero hardcoded strings
 //
@@ -27,9 +26,10 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Headset, RefreshCw, AlertTriangle, Activity, CheckCircle2,
-  Clock, AlertCircle, ArrowRight, Wifi, WifiOff, Loader2,
+  Clock, AlertCircle, ArrowRight, Wifi, WifiOff,
   BarChart3, ShieldCheck, ShieldAlert, MessageSquare, ExternalLink,
   TrendingUp, TrendingDown, Minus, Calendar, FolderOpen, FolderClosed,
+  Globe,
 } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
@@ -65,6 +65,19 @@ const PRIORITY_STYLES = {
   planning:       'bg-violet-100 text-violet-700 border-violet-200',
 };
 
+const PRIORITY_DOTS = {
+  '1 - Critical': 'bg-rose-500',
+  '2 - High':     'bg-amber-500',
+  '3 - Medium':   'bg-blue-500',
+  '4 - Low':      'bg-surface-400',
+  '5 - Planning': 'bg-violet-500',
+  critical:       'bg-rose-500',
+  high:           'bg-amber-500',
+  medium:         'bg-blue-500',
+  low:            'bg-surface-400',
+  planning:       'bg-violet-500',
+};
+
 const SLA_STATUS_STYLES = {
   met:      'bg-emerald-50 text-emerald-700 border-emerald-200',
   breached: 'bg-rose-50 text-rose-700 border-rose-200',
@@ -83,40 +96,48 @@ function formatMinutes(mins) {
 }
 
 // ── Stat card sub-component ────────────────────────────────────────────────────
-function StatCard({ label, value, icon: Icon, color = 'text-brand-600', bg = 'bg-brand-50', loading, small }) {
+function StatCard({ label, value, icon: Icon, color = 'text-brand-600', bg = 'bg-brand-50', loading }) {
   return (
-    <div className={`bg-white rounded-xl border border-surface-200 ${small ? 'p-3' : 'p-4'} flex items-center gap-3 shadow-sm`}>
-      <div className={`${small ? 'w-8 h-8' : 'w-10 h-10'} rounded-lg ${bg} flex items-center justify-center flex-shrink-0`}>
-        <Icon size={small ? 14 : 18} className={color} />
+    <div className="bg-white rounded-xl border border-surface-200 p-4 flex items-center gap-3 shadow-sm">
+      <div className={`w-10 h-10 rounded-lg ${bg} flex items-center justify-center flex-shrink-0`}>
+        <Icon size={18} className={color} />
       </div>
       <div className="min-w-0">
         <p className="text-[10px] text-surface-500 font-medium truncate leading-tight">{label}</p>
         {loading ? (
           <div className="h-5 w-10 bg-surface-100 rounded animate-pulse mt-0.5" />
         ) : (
-          <p className={`${small ? 'text-lg' : 'text-xl'} font-bold text-surface-800`}>{value ?? 0}</p>
+          <p className="text-xl font-bold text-surface-800">{value ?? 0}</p>
         )}
       </div>
     </div>
   );
 }
 
-// ── SLA % card ────────────────────────────────────────────────────────────────
-function SlaPctCard({ label, value, loading }) {
-  const color = value == null ? 'text-surface-400' : value >= 90 ? 'text-emerald-600' : value >= 70 ? 'text-amber-600' : 'text-rose-600';
-  const bg    = value == null ? 'bg-surface-50'    : value >= 90 ? 'bg-emerald-50'    : value >= 70 ? 'bg-amber-50'    : 'bg-rose-50';
-  const Icon  = value == null ? Minus : value >= 90 ? TrendingUp : value >= 70 ? Minus : TrendingDown;
+// ── SLA % card with met/notMet breakdown ─────────────────────────────────────
+function SlaPctCard({ label, pct, met, notMet, loading }) {
+  const color = pct == null ? 'text-surface-400' : pct >= 90 ? 'text-emerald-600' : pct >= 70 ? 'text-amber-600' : 'text-rose-600';
+  const bg    = pct == null ? 'bg-surface-50'    : pct >= 90 ? 'bg-emerald-50'    : pct >= 70 ? 'bg-amber-50'    : 'bg-rose-50';
+  const Icon  = pct == null ? Minus : pct >= 90 ? TrendingUp : pct >= 70 ? Minus : TrendingDown;
   return (
-    <div className={`rounded-lg border border-surface-200 p-3 ${bg} flex items-center gap-2`}>
-      <Icon size={14} className={color} />
-      <div className="min-w-0">
-        <p className="text-[10px] text-surface-500 font-medium truncate">{label}</p>
-        {loading ? (
-          <div className="h-4 w-8 bg-surface-100 rounded animate-pulse mt-0.5" />
-        ) : (
-          <p className={`text-sm font-bold ${color}`}>{value != null ? `${value}%` : ts.noData}</p>
-        )}
+    <div className={`rounded-lg border border-surface-200 p-3 ${bg}`}>
+      <div className="flex items-center gap-2">
+        <Icon size={14} className={color} />
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] text-surface-500 font-medium truncate">{label}</p>
+          {loading ? (
+            <div className="h-4 w-8 bg-surface-100 rounded animate-pulse mt-0.5" />
+          ) : (
+            <p className={`text-sm font-bold ${color}`}>{pct != null ? `${pct}%` : ts.noData}</p>
+          )}
+        </div>
       </div>
+      {!loading && pct != null && (
+        <div className="flex items-center gap-3 mt-1.5 pt-1.5 border-t border-surface-100/60">
+          <span className="text-[9px] text-emerald-600 font-semibold">{ts.met}: {met ?? 0}</span>
+          <span className="text-[9px] text-rose-600 font-semibold">{ts.notMet}: {notMet ?? 0}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -143,7 +164,7 @@ function buildGridColumns() {
       render: (v) => v ? <span className="text-xs font-bold text-surface-800">{v}</span> : <span className="text-xs text-surface-400">—</span> },
     { key: 'resolutionMinutes', label: cols.resolutionTime, sortable: true, align: 'right', width: '110px',
       render: (v) => <span className="text-xs text-surface-600 font-medium">{formatMinutes(v)}</span> },
-    { key: 'targetMinutes', label: cols.slaTarget, sortable: true, align: 'right', width: '100px',
+    { key: 'targetMinutes', label: cols.resolutionSlaTarget, sortable: true, align: 'right', width: '110px',
       render: (v) => <span className="text-xs text-surface-500">{formatMinutes(v)}</span> },
     { key: 'slaVariance', label: cols.slaVariance, sortable: true, align: 'right', width: '100px',
       render: (v) => {
@@ -151,7 +172,18 @@ function buildGridColumns() {
         const color = v >= 0 ? 'text-emerald-600' : 'text-rose-600';
         return <span className={`text-xs font-semibold ${color}`}>{v >= 0 ? '+' : ''}{formatMinutes(v)}</span>;
       } },
-    { key: 'slaStatus', label: cols.slaStatus, sortable: true, align: 'center', width: '90px',
+    { key: 'resolutionSlaStatus', label: cols.resolutionSlaStatus, sortable: true, align: 'center', width: '120px',
+      render: (v) => <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${SLA_STATUS_STYLES[v] || SLA_STATUS_STYLES.pending}`}>
+        {v === 'met' ? <ShieldCheck size={10} /> : v === 'breached' ? <ShieldAlert size={10} /> : <Clock size={10} />}
+        {slaLabels[v] || v}
+      </span> },
+    { key: 'expectedResponse', label: cols.expectedResponse, sortable: true, width: '150px',
+      render: (v) => v ? <span className="text-xs font-bold text-blue-700">{v}</span> : <span className="text-xs text-surface-400">—</span> },
+    { key: 'actualResponse', label: cols.actualResponse, sortable: true, width: '150px',
+      render: (v) => v ? <span className="text-xs font-bold text-teal-700">{v}</span> : <span className="text-xs text-surface-400">—</span> },
+    { key: 'responseTargetMinutes', label: cols.responseTargetMinutes, sortable: true, align: 'right', width: '120px',
+      render: (v) => <span className="text-xs text-surface-500">{formatMinutes(v)}</span> },
+    { key: 'responseSlaStatus', label: cols.responseSlaStatus, sortable: true, align: 'center', width: '120px',
       render: (v) => <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${SLA_STATUS_STYLES[v] || SLA_STATUS_STYLES.pending}`}>
         {v === 'met' ? <ShieldCheck size={10} /> : v === 'breached' ? <ShieldAlert size={10} /> : <Clock size={10} />}
         {slaLabels[v] || v}
@@ -163,6 +195,36 @@ function buildGridColumns() {
     { key: 'autoAcknowledgedAt', label: cols.autoAcknowledgedAt, sortable: true, width: '150px',
       render: (v) => <span className="text-xs text-surface-500">{v || '—'}</span> },
   ];
+}
+
+// ── Grid section sub-component ───────────────────────────────────────────────
+function GridSection({ icon: Icon, iconColor, title, count, countColor, data, columns, gridLoading, emptyMessage, searchPlaceholder }) {
+  return (
+    <div className="space-y-0">
+      <div className="flex items-center justify-between px-5 py-3 bg-white border border-surface-200 rounded-t-2xl border-b-0">
+        <div className="flex items-center gap-2">
+          <Icon size={14} className={iconColor} />
+          <h3 className="text-sm font-bold text-surface-700">{title}</h3>
+          {count != null && (
+            <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${countColor}`}>{count}</span>
+          )}
+        </div>
+      </div>
+      <DataTable
+        columns={columns}
+        data={data}
+        loading={gridLoading}
+        pageSize={20}
+        searchable={true}
+        searchPlaceholder={searchPlaceholder}
+        emptyMessage={emptyMessage}
+        compact={true}
+        className="rounded-t-none border-t-0"
+        rowKeyField="sysId"
+        defaultSort={{ key: 'number', order: 'desc' }}
+      />
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -177,7 +239,6 @@ export default function ServiceNowDashboard({ onNavigate }) {
   const [loading, setLoading]           = useState(true);
   const [gridLoading, setGridLoading]   = useState(true);
   const [error, setError]               = useState(null);
-  const [activeGrid, setActiveGrid]     = useState('today'); // 'today' | 'breaching'
   const initRan = useRef(false);
   const lastFetchTime = useRef(null);
 
@@ -207,7 +268,7 @@ export default function ServiceNowDashboard({ onNavigate }) {
       }
 
       if (gridRes?.success) {
-        log.debug('fetchDashboard', 'Grid data loaded', { today: gridRes.data.totalToday, breaching: gridRes.data.totalBreaching });
+        log.debug('fetchDashboard', 'Grid data loaded', { today: gridRes.data.totalToday, breaching: gridRes.data.totalBreaching, autoAck: gridRes.data.totalAutoAck });
         setGridData(gridRes.data);
       }
 
@@ -242,12 +303,6 @@ export default function ServiceNowDashboard({ onNavigate }) {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [fetchDashboard]);
 
-  // Active grid data
-  const activeGridData = useMemo(() => {
-    if (!gridData) return [];
-    return activeGrid === 'today' ? gridData.todaysIncidents || [] : gridData.slaBreachingToday || [];
-  }, [gridData, activeGrid]);
-
   // ── Not configured state ──────────────────────────────────────────────────
   if (!loading && stats?.notConfigured) {
     return (
@@ -281,37 +336,14 @@ export default function ServiceNowDashboard({ onNavigate }) {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 space-y-6 animate-fade-in">
-      {/* Page header — single refresh button */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-brand-50 flex items-center justify-center">
-            <Headset size={20} className="text-brand-600" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-surface-800">{t.title}</h1>
-            <p className="text-sm text-surface-500">{t.subtitle}</p>
-          </div>
+      {/* Page header */}
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-brand-50 flex items-center justify-center">
+          <Headset size={20} className="text-brand-600" />
         </div>
-        <div className="flex items-center gap-2">
-          {stats?.connectionStatus && (
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium ${
-              stats.connectionStatus === 'connected' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
-              stats.connectionStatus === 'error'     ? 'bg-rose-50 border-rose-200 text-rose-700' :
-              'bg-surface-50 border-surface-200 text-surface-600'
-            }`}>
-              {stats.connectionStatus === 'connected' ? <Wifi size={13} /> : <WifiOff size={13} />}
-              <span>{t.connectionStatus[stats.connectionStatus] || t.connectionStatus.not_configured}</span>
-            </div>
-          )}
-          <button
-            onClick={fetchDashboard}
-            disabled={loading}
-            title={t.refreshTooltip}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-50 text-brand-700 hover:bg-brand-100 disabled:opacity-50 transition-colors border border-brand-200"
-          >
-            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-            {t.refresh}
-          </button>
+        <div>
+          <h1 className="text-xl font-bold text-surface-800">{t.title}</h1>
+          <p className="text-sm text-surface-500">{t.subtitle}</p>
         </div>
       </div>
 
@@ -325,7 +357,109 @@ export default function ServiceNowDashboard({ onNavigate }) {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════════
-         SECTION 1: SUMMARY
+         SECTION 1: CONNECTION HEALTH (TOP)
+         ═══════════════════════════════════════════════════════════════════════ */}
+      <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Wifi size={14} className="text-brand-600" />
+                <h3 className="text-sm font-bold text-surface-700">{tc.title}</h3>
+              </div>
+              {/* Connection Status & Timezone */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1">
+                  {stats?.connectionStatus === 'connected' ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />}
+                  <span className={`text-xs font-semibold ${
+                    stats?.connectionStatus === 'connected' ? 'text-emerald-600' : 'text-surface-400'
+                  }`}>
+                    {t.connectionStatus[stats?.connectionStatus] || t.connectionStatus.not_configured}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] font-medium text-surface-500 uppercase tracking-wide">{tc.timezone}:</span>
+                  <Globe size={10} className="text-surface-400" />
+                  <span className="text-xs font-semibold text-surface-700">
+                    {gridData?.timezone || '—'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {/* Last Fetch */}
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-medium text-surface-500 uppercase tracking-wide">{tc.lastFetch}</span>
+                <span className="text-xs font-semibold text-surface-700">
+                  {lastFetchTime.current ? new Date(lastFetchTime.current).toLocaleString() : tc.never}
+                </span>
+              </div>
+              <button
+                onClick={fetchDashboard}
+                disabled={loading}
+                title={t.refreshTooltip}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md"
+              >
+                <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+                {t.refresh}
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="p-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 divide-x divide-surface-200">
+            {/* Instance URL */}
+            <div className="px-3 py-2">
+              <div className="flex flex-col">
+                <span className="text-[9px] font-medium text-surface-500 uppercase tracking-wide">{tc.instanceUrl}</span>
+                <span className="text-xs font-semibold text-surface-700 break-all leading-tight mt-0.5">
+                  {configData?.connection?.instanceUrl || '—'}
+                </span>
+              </div>
+            </div>
+            {/* ServiceNow Metadata link */}
+            <div className="px-3 py-2">
+              <div className="flex flex-col">
+                <span className="text-[9px] font-medium text-surface-500 uppercase tracking-wide">{tc.metadata}</span>
+                {configData?.connection?.instanceUrl ? (
+                  <a
+                    href={`${configData.connection.instanceUrl}/stats.do`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1 mt-0.5"
+                  >
+                    {tc.metadataLink} <ExternalLink size={10} />
+                  </a>
+                ) : (
+                  <span className="text-xs text-surface-400">—</span>
+                )}
+              </div>
+            </div>
+            {/* Incidents Fetched */}
+            <div className="px-3 py-2">
+              <div className="flex flex-col">
+                <span className="text-[9px] font-medium text-surface-500 uppercase tracking-wide">{tc.incidentsFetched}</span>
+                <span className="text-xs font-bold text-surface-800 mt-0.5">{stats?.totalIncidents ?? '—'}</span>
+              </div>
+            </div>
+            {/* Auto Acknowledge Status */}
+            <div className="px-3 py-2">
+              <div className="flex flex-col">
+                <span className="text-[9px] font-medium text-surface-500 uppercase tracking-wide">{tc.autoAckStatus}</span>
+                <span className={`text-xs font-semibold flex items-center gap-1 mt-0.5 ${
+                  autoAckStatus?.running ? 'text-emerald-600' : 'text-surface-400'
+                }`}>
+                  {autoAckStatus?.running ? <CheckCircle2 size={11} /> : <Clock size={11} />}
+                  {autoAckStatus?.running ? `${tc.running} (${autoAckStatus.pollFreqMinutes}m)` : tc.stopped}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+         SECTION 2: SUMMARY (bordered cards)
          ═══════════════════════════════════════════════════════════════════════ */}
       <div className="space-y-4">
         {/* Row 1: Total / Open / Closed */}
@@ -335,75 +469,177 @@ export default function ServiceNowDashboard({ onNavigate }) {
           <StatCard label={ts.closed} value={stats?.totalClosed}    icon={FolderClosed}  color="text-emerald-600" bg="bg-emerald-50"  loading={loading} />
         </div>
 
-        {/* Row 2: Created/Closed by period + Auto-Ack + Priority */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Row 2: 4-column layout — Period, Resolution SLA, Response SLA, Priority */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
           {/* Created / Closed This Period */}
           <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center gap-2">
+            <div className="px-4 py-2.5 border-b border-surface-100 bg-surface-50/50 flex items-center gap-2">
               <Calendar size={14} className="text-brand-600" />
-              <h3 className="text-sm font-bold text-surface-700">{ts.title}</h3>
+              <h3 className="text-xs font-bold text-surface-700">{ts.title}</h3>
             </div>
-            <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-2">
-              {[
-                { label: ts.createdToday, value: stats?.created?.today },
-                { label: ts.closedToday,  value: stats?.closed?.today },
-                { label: ts.createdWeek,  value: stats?.created?.week },
-                { label: ts.closedWeek,   value: stats?.closed?.week },
-                { label: ts.createdMonth, value: stats?.created?.month },
-                { label: ts.closedMonth,  value: stats?.closed?.month },
-              ].map(row => (
-                <div key={row.label} className="flex items-center justify-between py-1">
-                  <span className="text-[11px] text-surface-500">{row.label}</span>
-                  {loading ? (
-                    <div className="h-4 w-6 bg-surface-100 rounded animate-pulse" />
-                  ) : (
-                    <span className="text-sm font-bold text-surface-800">{row.value ?? 0}</span>
-                  )}
-                </div>
-              ))}
+            <div className="p-3">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-surface-100">
+                    <th className="text-left py-2 font-semibold text-surface-600 text-[10px] uppercase">{ts.tablePeriod}</th>
+                    <th className="text-center py-2 font-semibold text-surface-600 text-[10px] uppercase">{ts.tableCreated}</th>
+                    <th className="text-center py-2 font-semibold text-surface-600 text-[10px] uppercase">{ts.tableClosed}</th>
+                    <th className="text-center py-2 font-semibold text-surface-600 text-[10px] uppercase">{ts.tableAutoAck}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { period: ts.today, created: stats?.created?.today, closed: stats?.closed?.today, autoAck: stats?.autoAcknowledged?.today },
+                    { period: ts.week, created: stats?.created?.week, closed: stats?.closed?.week, autoAck: stats?.autoAcknowledged?.week },
+                    { period: ts.month, created: stats?.created?.month, closed: stats?.closed?.month, autoAck: stats?.autoAcknowledged?.month },
+                  ].map(row => (
+                    <tr key={row.period} className="border-b border-surface-50 last:border-0">
+                      <td className="py-2 text-[10px] text-surface-500 font-medium">{row.period}</td>
+                      <td className="py-2 text-center">
+                        {loading ? (
+                          <div className="h-3.5 w-6 bg-surface-100 rounded animate-pulse mx-auto" />
+                        ) : (
+                          <span className="text-xs font-bold text-surface-800">{row.created ?? 0}</span>
+                        )}
+                      </td>
+                      <td className="py-2 text-center">
+                        {loading ? (
+                          <div className="h-3.5 w-6 bg-surface-100 rounded animate-pulse mx-auto" />
+                        ) : (
+                          <span className="text-xs font-bold text-emerald-700">{row.closed ?? 0}</span>
+                        )}
+                      </td>
+                      <td className="py-2 text-center">
+                        {loading ? (
+                          <div className="h-3.5 w-6 bg-surface-100 rounded animate-pulse mx-auto" />
+                        ) : (
+                          <span className="text-xs font-bold text-brand-700">{row.autoAck ?? 0}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
-          {/* SLA Compliance + Auto-Ack */}
+          {/* Resolution SLA % */}
           <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center gap-2">
+            <div className="px-4 py-2.5 border-b border-surface-100 bg-surface-50/50 flex items-center gap-2">
               <BarChart3 size={14} className="text-brand-600" />
-              <h3 className="text-sm font-bold text-surface-700">{ts.slaResolution}</h3>
+              <h3 className="text-xs font-bold text-surface-700">{ts.slaResolution}</h3>
             </div>
-            <div className="p-4 space-y-3">
-              <div className="grid grid-cols-3 gap-2">
-                <SlaPctCard label={ts.today} value={stats?.slaResolution?.today} loading={loading} />
-                <SlaPctCard label={ts.week}  value={stats?.slaResolution?.week}  loading={loading} />
-                <SlaPctCard label={ts.month} value={stats?.slaResolution?.month} loading={loading} />
-              </div>
-              <div className="border-t border-surface-100 pt-3 space-y-1.5">
-                {[
-                  { label: ts.autoAckToday, value: stats?.autoAcknowledged?.today, icon: MessageSquare },
-                  { label: ts.autoAckWeek,  value: stats?.autoAcknowledged?.week,  icon: MessageSquare },
-                  { label: ts.autoAckMonth, value: stats?.autoAcknowledged?.month, icon: MessageSquare },
-                ].map(row => (
-                  <div key={row.label} className="flex items-center justify-between">
-                    <span className="text-[11px] text-surface-500 flex items-center gap-1">
-                      <row.icon size={10} className="text-surface-400" /> {row.label}
-                    </span>
-                    {loading ? (
-                      <div className="h-4 w-6 bg-surface-100 rounded animate-pulse" />
-                    ) : (
-                      <span className="text-sm font-bold text-brand-700">{row.value ?? 0}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
+            <div className="p-3">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-surface-100">
+                    <th className="text-left py-2 font-semibold text-surface-600 text-[10px] uppercase">{ts.tablePeriod}</th>
+                    <th className="text-center py-2 font-semibold text-surface-600 text-[10px] uppercase">SLA %</th>
+                    <th className="text-center py-2 font-semibold text-surface-600 text-[10px] uppercase">{ts.met}</th>
+                    <th className="text-center py-2 font-semibold text-surface-600 text-[10px] uppercase">{ts.notMet}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { period: ts.today, pct: stats?.slaResolution?.today?.pct, met: stats?.slaResolution?.today?.met, notMet: stats?.slaResolution?.today?.notMet },
+                    { period: ts.week,  pct: stats?.slaResolution?.week?.pct,  met: stats?.slaResolution?.week?.met,  notMet: stats?.slaResolution?.week?.notMet },
+                    { period: ts.month, pct: stats?.slaResolution?.month?.pct, met: stats?.slaResolution?.month?.met, notMet: stats?.slaResolution?.month?.notMet },
+                  ].map(row => {
+                    const color = row.pct == null ? 'text-surface-400' : row.pct >= 90 ? 'text-emerald-600' : row.pct >= 70 ? 'text-amber-600' : 'text-rose-600';
+                    return (
+                      <tr key={row.period} className="border-b border-surface-50 last:border-0">
+                        <td className="py-2 text-[10px] text-surface-500 font-medium">{row.period}</td>
+                        <td className="py-2 text-center">
+                          {loading ? (
+                            <div className="h-3.5 w-8 bg-surface-100 rounded animate-pulse mx-auto" />
+                          ) : (
+                            <span className={`text-xs font-bold ${color}`}>{row.pct != null ? `${row.pct}%` : ts.noData}</span>
+                          )}
+                        </td>
+                        <td className="py-2 text-center">
+                          {loading ? (
+                            <div className="h-3.5 w-6 bg-surface-100 rounded animate-pulse mx-auto" />
+                          ) : (
+                            <span className="text-xs font-bold text-emerald-600">{row.met ?? 0}</span>
+                          )}
+                        </td>
+                        <td className="py-2 text-center">
+                          {loading ? (
+                            <div className="h-3.5 w-6 bg-surface-100 rounded animate-pulse mx-auto" />
+                          ) : (
+                            <span className="text-xs font-bold text-rose-600">{row.notMet ?? 0}</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Response SLA % */}
+          <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-surface-100 bg-surface-50/50 flex items-center gap-2">
+              <ShieldCheck size={14} className="text-teal-600" />
+              <h3 className="text-xs font-bold text-surface-700">{ts.slaResponse}</h3>
+            </div>
+            <div className="p-3">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-surface-100">
+                    <th className="text-left py-2 font-semibold text-surface-600 text-[10px] uppercase">{ts.tablePeriod}</th>
+                    <th className="text-center py-2 font-semibold text-surface-600 text-[10px] uppercase">SLA %</th>
+                    <th className="text-center py-2 font-semibold text-surface-600 text-[10px] uppercase">{ts.met}</th>
+                    <th className="text-center py-2 font-semibold text-surface-600 text-[10px] uppercase">{ts.notMet}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { period: ts.today, pct: stats?.slaResponse?.today?.pct, met: stats?.slaResponse?.today?.met, notMet: stats?.slaResponse?.today?.notMet },
+                    { period: ts.week,  pct: stats?.slaResponse?.week?.pct,  met: stats?.slaResponse?.week?.met,  notMet: stats?.slaResponse?.week?.notMet },
+                    { period: ts.month, pct: stats?.slaResponse?.month?.pct, met: stats?.slaResponse?.month?.met, notMet: stats?.slaResponse?.month?.notMet },
+                  ].map(row => {
+                    const color = row.pct == null ? 'text-surface-400' : row.pct >= 90 ? 'text-emerald-600' : row.pct >= 70 ? 'text-amber-600' : 'text-rose-600';
+                    return (
+                      <tr key={row.period} className="border-b border-surface-50 last:border-0">
+                        <td className="py-2 text-[10px] text-surface-500 font-medium">{row.period}</td>
+                        <td className="py-2 text-center">
+                          {loading ? (
+                            <div className="h-3.5 w-8 bg-surface-100 rounded animate-pulse mx-auto" />
+                          ) : (
+                            <span className={`text-xs font-bold ${color}`}>{row.pct != null ? `${row.pct}%` : ts.noData}</span>
+                          )}
+                        </td>
+                        <td className="py-2 text-center">
+                          {loading ? (
+                            <div className="h-3.5 w-6 bg-surface-100 rounded animate-pulse mx-auto" />
+                          ) : (
+                            <span className="text-xs font-bold text-emerald-600">{row.met ?? 0}</span>
+                          )}
+                        </td>
+                        <td className="py-2 text-center">
+                          {loading ? (
+                            <div className="h-3.5 w-6 bg-surface-100 rounded animate-pulse mx-auto" />
+                          ) : (
+                            <span className="text-xs font-bold text-rose-600">{row.notMet ?? 0}</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
 
           {/* By Priority */}
           <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center gap-2">
+            <div className="px-4 py-2.5 border-b border-surface-100 bg-surface-50/50 flex items-center gap-2">
               <AlertTriangle size={14} className="text-brand-600" />
-              <h3 className="text-sm font-bold text-surface-700">{ts.byPriority}</h3>
+              <h3 className="text-xs font-bold text-surface-700">{ts.byPriority}</h3>
             </div>
-            <div className="p-4 space-y-2">
+            <div className="p-3 space-y-1.5">
               {loading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <div key={i} className="flex items-center justify-between py-1">
@@ -414,14 +650,27 @@ export default function ServiceNowDashboard({ onNavigate }) {
               ) : stats?.priorityCounts && Object.keys(stats.priorityCounts).length > 0 ? (
                 Object.entries(stats.priorityCounts)
                   .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([priority, count]) => (
-                    <div key={priority} className="flex items-center justify-between py-1">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border ${PRIORITY_STYLES[priority] || PRIORITY_STYLES.low}`}>
-                        {priority}
-                      </span>
-                      <span className="text-sm font-bold text-surface-800">{count}</span>
-                    </div>
-                  ))
+                  .map(([priority, count]) => {
+                    const total = stats.totalIncidents || 1;
+                    const pct = Math.round((count / total) * 100);
+                    return (
+                      <div key={priority} className="space-y-0.5">
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-1.5 text-[10px] font-semibold text-surface-700">
+                            <span className={`w-2 h-2 rounded-full ${PRIORITY_DOTS[priority] || 'bg-surface-400'}`} />
+                            {priority}
+                          </span>
+                          <span className="text-xs font-bold text-surface-800">{count}</span>
+                        </div>
+                        <div className="w-full bg-surface-100 rounded-full h-1">
+                          <div
+                            className={`h-1 rounded-full transition-all ${PRIORITY_DOTS[priority]?.replace('bg-', 'bg-') || 'bg-surface-400'}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })
               ) : (
                 <p className="text-xs text-surface-400 text-center py-4">{ts.noData}</p>
               )}
@@ -431,135 +680,61 @@ export default function ServiceNowDashboard({ onNavigate }) {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════════
-         SECTION 2: INCIDENTS GRID
+         SECTION 3: TODAY'S INCIDENTS GRID
          ═══════════════════════════════════════════════════════════════════════ */}
-      <div className="space-y-0">
-        {/* Tab header */}
-        <div className="flex items-center justify-between px-5 py-3 bg-white border border-surface-200 rounded-t-2xl border-b-0">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setActiveGrid('today')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                activeGrid === 'today'
-                  ? 'bg-brand-50 text-brand-700 border border-brand-200'
-                  : 'text-surface-500 hover:text-brand-600 hover:bg-brand-50/50'
-              }`}
-            >
-              <Activity size={13} />
-              {tg.title}
-              {gridData && <span className="ml-1 px-1.5 py-0.5 rounded-full bg-brand-100 text-brand-700 text-[10px] font-bold">{gridData.totalToday}</span>}
-            </button>
-            <button
-              onClick={() => setActiveGrid('breaching')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                activeGrid === 'breaching'
-                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                  : 'text-surface-500 hover:text-rose-600 hover:bg-rose-50/50'
-              }`}
-            >
-              <ShieldAlert size={13} />
-              {tg.breachingTitle}
-              {gridData && gridData.totalBreaching > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold">{gridData.totalBreaching}</span>
-              )}
-            </button>
-          </div>
-          <button
-            onClick={() => onNavigate?.('incidents')}
-            className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-semibold"
-          >
-            {t.viewAll} <ArrowRight size={12} />
-          </button>
-        </div>
-        <DataTable
-          columns={gridColumns}
-          data={activeGridData}
-          loading={gridLoading}
-          pageSize={20}
-          searchable={true}
-          searchPlaceholder={tg.searchPlaceholder}
-          emptyMessage={activeGrid === 'today' ? tg.noIncidents : tg.noBreaching}
-          compact={true}
-          className="rounded-t-none border-t-0"
-          rowKeyField="sysId"
-          defaultSort={{ key: 'number', order: 'desc' }}
-        />
-      </div>
+      <GridSection
+        icon={Activity}
+        iconColor="text-brand-600"
+        title={tg.title}
+        count={gridData?.totalToday}
+        countColor="bg-brand-100 text-brand-700"
+        data={gridData?.todaysIncidents || []}
+        columns={gridColumns}
+        gridLoading={gridLoading}
+        emptyMessage={tg.noIncidents}
+        searchPlaceholder={tg.searchPlaceholder}
+      />
 
       {/* ═══════════════════════════════════════════════════════════════════════
-         SECTION 3: CONNECTION HEALTH
+         SECTION 4: RESOLUTION SLAs BREACHING TODAY
          ═══════════════════════════════════════════════════════════════════════ */}
-      <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center gap-2">
-          <Wifi size={14} className="text-brand-600" />
-          <h3 className="text-sm font-bold text-surface-700">{tc.title}</h3>
-        </div>
-        <div className="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3">
-          {/* Instance URL */}
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-surface-500">{tc.instanceUrl}</span>
-            <span className="text-xs font-semibold text-surface-700 truncate max-w-[200px]">
-              {configData?.connection?.instanceUrl || '—'}
-            </span>
-          </div>
-          {/* Connection Status */}
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-surface-500">{tc.connectionStatus}</span>
-            <span className={`text-xs font-semibold flex items-center gap-1 ${
-              stats?.connectionStatus === 'connected' ? 'text-emerald-600' : 'text-surface-400'
-            }`}>
-              {stats?.connectionStatus === 'connected' ? <CheckCircle2 size={11} /> : <AlertCircle size={11} />}
-              {t.connectionStatus[stats?.connectionStatus] || t.connectionStatus.not_configured}
-            </span>
-          </div>
-          {/* ServiceNow Metadata link */}
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-surface-500">{tc.metadata}</span>
-            {configData?.connection?.instanceUrl ? (
-              <a
-                href={`${configData.connection.instanceUrl}/stats.do`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs font-semibold text-brand-600 hover:text-brand-700 flex items-center gap-1"
-              >
-                {tc.metadataLink} <ExternalLink size={10} />
-              </a>
-            ) : (
-              <span className="text-xs text-surface-400">—</span>
-            )}
-          </div>
-          {/* Last Fetch */}
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-surface-500">{tc.lastFetch}</span>
-            <span className="text-xs font-semibold text-surface-700">
-              {lastFetchTime.current ? new Date(lastFetchTime.current).toLocaleString() : tc.never}
-            </span>
-          </div>
-          {/* Incidents Fetched */}
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-surface-500">{tc.incidentsFetched}</span>
-            <span className="text-xs font-bold text-surface-800">
-              {stats?.totalIncidents ?? '—'}
-            </span>
-          </div>
-          {/* RITMs Fetched */}
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-surface-500">{tc.ritmsFetched}</span>
-            <span className="text-xs font-bold text-surface-800">
-              {ritmCount ?? '—'}
-            </span>
-          </div>
-          {/* Auto Acknowledge Status */}
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-surface-500">{tc.autoAckStatus}</span>
-            <span className={`text-xs font-semibold flex items-center gap-1 ${
-              autoAckStatus?.running ? 'text-emerald-600' : 'text-surface-400'
-            }`}>
-              {autoAckStatus?.running ? <CheckCircle2 size={11} /> : <Clock size={11} />}
-              {autoAckStatus?.running ? `${tc.running} (${autoAckStatus.pollFreqMinutes}m)` : tc.stopped}
-            </span>
-          </div>
-        </div>
+      <GridSection
+        icon={ShieldAlert}
+        iconColor="text-rose-600"
+        title={tg.breachingTitle}
+        count={gridData?.totalBreaching}
+        countColor="bg-rose-100 text-rose-700"
+        data={gridData?.slaBreachingToday || []}
+        columns={gridColumns}
+        gridLoading={gridLoading}
+        emptyMessage={tg.noBreaching}
+        searchPlaceholder={tg.searchPlaceholder}
+      />
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+         SECTION 5: AUTO ACKNOWLEDGED INCIDENTS TODAY
+         ═══════════════════════════════════════════════════════════════════════ */}
+      <GridSection
+        icon={CheckCircle2}
+        iconColor="text-brand-600"
+        title={tg.autoAckTitle}
+        count={gridData?.totalAutoAck}
+        countColor="bg-brand-100 text-brand-700"
+        data={gridData?.autoAckToday || []}
+        columns={gridColumns}
+        gridLoading={gridLoading}
+        emptyMessage={tg.noAutoAck}
+        searchPlaceholder={tg.searchPlaceholder}
+      />
+
+      {/* View All link */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => onNavigate?.('incidents')}
+          className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-semibold"
+        >
+          {t.viewAll} <ArrowRight size={12} />
+        </button>
       </div>
     </div>
   );

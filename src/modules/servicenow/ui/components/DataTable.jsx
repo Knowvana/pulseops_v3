@@ -49,7 +49,7 @@
 // USED BY: ServiceNowSlaReport, ServiceNowReports (DataGrid), Dashboard
 // ============================================================================
 
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
   Loader2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   ArrowUpDown, ArrowUp, ArrowDown, Search, GripVertical, X,
@@ -113,8 +113,18 @@ export default function DataTable({
   const [pageSize, setPageSize] = useState(initialPageSize);
   const [searchQuery, setSearchQuery] = useState('');
   const [columnOrder, setColumnOrder] = useState(() => initialColumns.map(c => c.key));
+  const [columnWidths, setColumnWidths] = useState(() => {
+    const widths = {};
+    initialColumns.forEach(col => {
+      widths[col.key] = col.width || '150px';
+    });
+    return widths;
+  });
   const dragItem = useRef(null);
   const dragOverItem = useRef(null);
+  const resizingColumn = useRef(null);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
 
   // ── Ordered columns (based on drag reorder) ─────────────────────────────
   const columns = useMemo(() => {
@@ -129,6 +139,34 @@ export default function DataTable({
     }
     return ordered;
   }, [initialColumns, columnOrder]);
+
+  // ── Column resizing handlers ───────────────────────────────────────────────
+  const handleMouseDown = useCallback((e, columnKey) => {
+    e.preventDefault();
+    resizingColumn.current = columnKey;
+    startX.current = e.clientX;
+    const th = e.target.closest('th');
+    startWidth.current = th.offsetWidth;
+    
+    const handleMouseMove = (e) => {
+      if (!resizingColumn.current) return;
+      const diff = e.clientX - startX.current;
+      const newWidth = Math.max(50, startWidth.current + diff); // Minimum 50px width
+      setColumnWidths(prev => ({
+        ...prev,
+        [columnKey]: `${newWidth}px`
+      }));
+    };
+    
+    const handleMouseUp = () => {
+      resizingColumn.current = null;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, []);
 
   // ── Search filter ───────────────────────────────────────────────────────
   const filteredData = useMemo(() => {
@@ -203,25 +241,55 @@ export default function DataTable({
   // ── Render ──────────────────────────────────────────────────────────────
   return (
     <div className={`bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden ${className}`}>
-      {/* Search bar (optional) */}
-      {searchable && (
-        <div className="px-4 py-2.5 border-b border-surface-100 bg-surface-50/30 flex items-center gap-2">
-          <Search size={13} className="text-surface-400 flex-shrink-0" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
-            placeholder={searchPlaceholder}
-            className="flex-1 text-xs text-surface-700 bg-transparent outline-none placeholder:text-surface-400"
-          />
-          {searchQuery && (
-            <button onClick={() => { setSearchQuery(''); setPage(0); }} className="text-surface-400 hover:text-surface-600">
-              <X size={12} />
-            </button>
+      {/* Toolbar: search (left) + pagination (right) */}
+      {(searchable || (!loading && sortedData.length > 0)) && (
+        <div className="px-4 py-2 border-b border-surface-100 bg-surface-50/30 flex items-center justify-between gap-3">
+          {/* Search (left) */}
+          {searchable ? (
+            <div className="flex items-center gap-2 max-w-[260px] w-full">
+              <Search size={13} className="text-surface-400 flex-shrink-0" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => { setSearchQuery(e.target.value); setPage(0); }}
+                placeholder={searchPlaceholder}
+                className="flex-1 text-xs text-surface-700 bg-transparent outline-none placeholder:text-surface-400 min-w-0"
+              />
+              {searchQuery && (
+                <button onClick={() => { setSearchQuery(''); setPage(0); }} className="text-surface-400 hover:text-surface-600">
+                  <X size={12} />
+                </button>
+              )}
+              <span className="text-[10px] text-surface-400 whitespace-nowrap">
+                {filteredData.length}/{data.length}
+              </span>
+            </div>
+          ) : <div />}
+
+          {/* Pagination (right, inline) */}
+          {!loading && sortedData.length > 0 && (
+            <div className="flex items-center gap-2 text-xs text-surface-500 flex-shrink-0">
+              <span className="text-[10px] text-surface-400 whitespace-nowrap">
+                {safePage * pageSize + 1}–{Math.min((safePage + 1) * pageSize, sortedData.length)} of {sortedData.length}
+              </span>
+              <select
+                value={pageSize}
+                onChange={e => handlePageSizeChange(Number(e.target.value))}
+                className="px-1 py-0.5 rounded border border-surface-200 text-[10px] text-surface-600 bg-white focus:outline-none focus:ring-1 focus:ring-brand-200"
+              >
+                {pageSizeOptions.map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+              <div className="flex items-center gap-0.5">
+                <button onClick={() => setPage(0)} disabled={safePage === 0} className="p-0.5 rounded hover:bg-surface-100 disabled:opacity-30 transition-colors" title="First"><ChevronsLeft size={13} /></button>
+                <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={safePage === 0} className="p-0.5 rounded hover:bg-surface-100 disabled:opacity-30 transition-colors" title="Previous"><ChevronLeft size={13} /></button>
+                <span className="px-1.5 py-0.5 font-medium text-surface-600 text-[10px]">{safePage + 1}/{totalPages}</span>
+                <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={safePage >= totalPages - 1} className="p-0.5 rounded hover:bg-surface-100 disabled:opacity-30 transition-colors" title="Next"><ChevronRight size={13} /></button>
+                <button onClick={() => setPage(totalPages - 1)} disabled={safePage >= totalPages - 1} className="p-0.5 rounded hover:bg-surface-100 disabled:opacity-30 transition-colors" title="Last"><ChevronsRight size={13} /></button>
+              </div>
+            </div>
           )}
-          <span className="text-[10px] text-surface-400 ml-2">
-            {filteredData.length} of {data.length}
-          </span>
         </div>
       )}
 
@@ -236,7 +304,7 @@ export default function DataTable({
           <p className="text-sm text-surface-500">{emptyMessage}</p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-surface-300 scrollbar-track-surface-50 hover:scrollbar-thumb-surface-400 scrollbar-thumb-rounded-full">
           <table className="w-full text-sm">
             <thead>
               <tr className={`bg-surface-50 border-b border-surface-200 ${stickyHeader ? 'sticky top-0 z-10' : ''}`}>
@@ -253,8 +321,8 @@ export default function DataTable({
                       onDragEnd={handleDragEnd}
                       onDragOver={e => e.preventDefault()}
                       onClick={() => isSortable && handleSort(col.key)}
-                      style={col.width ? { width: col.width, minWidth: col.width } : undefined}
-                      className={`${headerPx} ${align} text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap select-none ${
+                      style={{ width: columnWidths[col.key], minWidth: columnWidths[col.key] }}
+                      className={`${headerPx} ${align} text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap select-none relative ${
                         isSortable ? 'cursor-pointer hover:text-brand-600 hover:bg-brand-50/30' : ''
                       } transition-colors group`}
                     >
@@ -269,6 +337,12 @@ export default function DataTable({
                             : <ArrowUpDown size={11} className="text-surface-300 opacity-0 group-hover:opacity-100" />
                         )}
                       </span>
+                      {/* Resize handle */}
+                      <div
+                        className="absolute top-0 right-0 w-2 h-full cursor-col-resize hover:bg-brand-400 opacity-0 hover:opacity-100 transition-opacity z-10"
+                        onMouseDown={(e) => handleMouseDown(e, col.key)}
+                        onClick={(e) => e.stopPropagation()} // Prevent column sort when resizing
+                      />
                     </th>
                   );
                 })}
@@ -289,7 +363,7 @@ export default function DataTable({
                         ? col.render(row[col.key], row)
                         : (row[col.key] ?? '—');
                     return (
-                      <td key={col.key} className={`${cellPx} ${align} text-surface-700 text-xs whitespace-nowrap`}>
+                      <td key={col.key} className={`${cellPx} ${align} text-surface-700 text-xs whitespace-nowrap`} style={{ width: columnWidths[col.key] }}>
                         {cellContent}
                       </td>
                     );
@@ -301,68 +375,7 @@ export default function DataTable({
         </div>
       )}
 
-      {/* Pagination footer */}
-      {!loading && sortedData.length > 0 && (
-        <div className="flex items-center justify-between px-4 py-2.5 border-t border-surface-100 bg-surface-50/30 text-xs text-surface-500">
-          {/* Left: rows info + page size selector */}
-          <div className="flex items-center gap-3">
-            <span>
-              {safePage * pageSize + 1}–{Math.min((safePage + 1) * pageSize, sortedData.length)} of {sortedData.length}
-            </span>
-            <div className="flex items-center gap-1">
-              <span className="text-surface-400">Rows:</span>
-              <select
-                value={pageSize}
-                onChange={e => handlePageSizeChange(Number(e.target.value))}
-                className="px-1.5 py-0.5 rounded border border-surface-200 text-xs text-surface-600 bg-white focus:outline-none focus:ring-1 focus:ring-brand-200"
-              >
-                {pageSizeOptions.map(s => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Right: page navigation */}
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setPage(0)}
-              disabled={safePage === 0}
-              className="p-1 rounded hover:bg-surface-100 disabled:opacity-30 transition-colors"
-              title="First page"
-            >
-              <ChevronsLeft size={14} />
-            </button>
-            <button
-              onClick={() => setPage(p => Math.max(0, p - 1))}
-              disabled={safePage === 0}
-              className="p-1 rounded hover:bg-surface-100 disabled:opacity-30 transition-colors"
-              title="Previous page"
-            >
-              <ChevronLeft size={14} />
-            </button>
-            <span className="px-2 py-0.5 font-medium text-surface-600">
-              {safePage + 1} / {totalPages}
-            </span>
-            <button
-              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-              disabled={safePage >= totalPages - 1}
-              className="p-1 rounded hover:bg-surface-100 disabled:opacity-30 transition-colors"
-              title="Next page"
-            >
-              <ChevronRight size={14} />
-            </button>
-            <button
-              onClick={() => setPage(totalPages - 1)}
-              disabled={safePage >= totalPages - 1}
-              className="p-1 rounded hover:bg-surface-100 disabled:opacity-30 transition-colors"
-              title="Last page"
-            >
-              <ChevronsRight size={14} />
-            </button>
-          </div>
-        </div>
-      )}
+      {/* No separate pagination footer — pagination is now inline with the search bar above */}
     </div>
   );
 }

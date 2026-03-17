@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ServiceNow ITSM Module — PulseOps V3</title>
+<style>
+  :root {
+    --brand: #2563eb;
+    --brand-light: #dbeafe;
+    --surface-50: #f8fafc;
+    --surface-100: #f1f5f9;
+    --surface-200: #e2e8f0;
+    --surface-600: #475569;
+    --surface-700: #334155;
+    --surface-800: #1e293b;
+    --surface-900: #0f172a;
+    --green: #059669;
+    --green-light: #d1fae5;
+    --amber: #d97706;
+    --amber-light: #fef3c7;
+    --rose: #dc2626;
+    --rose-light: #ffe4e6;
+    --teal: #0d9488;
+    --teal-light: #ccfbf1;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--surface-50); color: var(--surface-800); }
+
+  /* Slide container */
+  .slide {
+    width: 960px; min-height: 540px; margin: 40px auto; background: white;
+    border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    padding: 48px 56px; page-break-after: always; position: relative; overflow: hidden;
+  }
+  .slide::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+    background: linear-gradient(90deg, var(--brand), var(--teal));
+  }
+
+  /* Typography */
+  h1 { font-size: 32px; font-weight: 800; color: var(--surface-900); margin-bottom: 8px; }
+  h2 { font-size: 24px; font-weight: 700; color: var(--brand); margin-bottom: 20px; }
+  h3 { font-size: 18px; font-weight: 700; color: var(--surface-800); margin-bottom: 12px; }
+  p { font-size: 15px; line-height: 1.6; color: var(--surface-600); margin-bottom: 12px; }
+  .subtitle { font-size: 18px; color: var(--surface-600); font-weight: 400; margin-bottom: 32px; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; padding: 3px 10px; border-radius: 99px; margin-right: 6px; }
+  .tag-brand { background: var(--brand-light); color: var(--brand); }
+  .tag-green { background: var(--green-light); color: var(--green); }
+  .tag-amber { background: var(--amber-light); color: var(--amber); }
+  .tag-teal  { background: var(--teal-light); color: var(--teal); }
+
+  /* Grid */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 14px; }
+
+  /* Cards */
+  .card {
+    background: var(--surface-50); border: 1px solid var(--surface-200);
+    border-radius: 12px; padding: 20px;
+  }
+  .card-brand { border-left: 4px solid var(--brand); }
+  .card-green { border-left: 4px solid var(--green); }
+  .card-amber { border-left: 4px solid var(--amber); }
+  .card-teal  { border-left: 4px solid var(--teal); }
+  .card h3 { font-size: 15px; margin-bottom: 6px; }
+  .card p { font-size: 13px; margin-bottom: 0; }
+
+  /* Stat */
+  .stat { text-align: center; padding: 16px; }
+  .stat-value { font-size: 36px; font-weight: 800; color: var(--brand); }
+  .stat-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--surface-600); margin-top: 4px; }
+
+  /* Lists */
+  ul { padding-left: 20px; margin-bottom: 12px; }
+  li { font-size: 14px; line-height: 1.8; color: var(--surface-700); }
+  li strong { color: var(--surface-800); }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: var(--surface-100); color: var(--surface-600); font-weight: 700;
+    text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px;
+    padding: 10px 12px; text-align: left; border-bottom: 2px solid var(--surface-200); }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--surface-100); color: var(--surface-700); }
+  tr:hover td { background: var(--surface-50); }
+
+  /* Footer */
+  .slide-footer {
+    position: absolute; bottom: 16px; left: 56px; right: 56px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; color: var(--surface-600); opacity: 0.6;
+  }
+  .slide-num { font-weight: 700; }
+
+  /* Print */
+  @media print {
+    body { background: white; }
+    .slide { box-shadow: none; margin: 0; border-radius: 0; page-break-after: always; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 1 — Title -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide" style="display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
+  <div style="margin-bottom:24px;">
+    <span class="tag tag-brand">PulseOps V3</span>
+    <span class="tag tag-green">Enterprise Module</span>
+    <span class="tag tag-teal">Hot-Deployable</span>
+  </div>
+  <h1 style="font-size:40px; margin-bottom:12px;">ServiceNow ITSM Integration</h1>
+  <p class="subtitle" style="max-width:600px;">
+    Enterprise-grade incident management, SLA compliance tracking, and automated operations
+    — deployed as a zero-downtime plug-and-play module.
+  </p>
+  <div style="margin-top:24px; font-size:13px; color:var(--surface-600);">
+    <strong>Platform:</strong> PulseOps V3 &nbsp;|&nbsp;
+    <strong>Architecture:</strong> Microkernel + Micro-Frontend &nbsp;|&nbsp;
+    <strong>Stack:</strong> React + Express + PostgreSQL
+  </div>
+  <div class="slide-footer"><span>Confidential</span><span class="slide-num">1</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 2 — Business Value -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Business Value</h2>
+  <div class="grid-2" style="margin-bottom:24px;">
+    <div class="card card-brand">
+      <h3>Operational Visibility</h3>
+      <p>Live dashboard with real-time incident stats, SLA breach alerts, and priority-based metrics directly from ServiceNow.</p>
+    </div>
+    <div class="card card-green">
+      <h3>SLA Compliance</h3>
+      <p>Automated SLA tracking with business-hour-aware resolution and response time calculations. Per-priority thresholds.</p>
+    </div>
+    <div class="card card-amber">
+      <h3>Automated Operations</h3>
+      <p>Background auto-acknowledge poller transitions new incidents to "In Progress" automatically. Configurable frequency and message.</p>
+    </div>
+    <div class="card card-teal">
+      <h3>Zero-Downtime Deployment</h3>
+      <p>Hot-deployable module — build once, drop the bundle, enable via UI. No platform rebuild. No server restart.</p>
+    </div>
+  </div>
+  <div class="grid-4">
+    <div class="stat"><div class="stat-value">44</div><div class="stat-label">Source Files</div></div>
+    <div class="stat"><div class="stat-value" style="color:var(--green)">30+</div><div class="stat-label">API Endpoints</div></div>
+    <div class="stat"><div class="stat-value" style="color:var(--teal)">12</div><div class="stat-label">Config Tabs</div></div>
+    <div class="stat"><div class="stat-value" style="color:var(--amber)">7</div><div class="stat-label">Views</div></div>
+  </div>
+  <div class="slide-footer"><span>Confidential</span><span class="slide-num">2</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 3 — Architecture -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Architecture Overview</h2>
+  <div style="background:var(--surface-900); border-radius:12px; padding:28px 32px; margin-bottom:20px; font-family:'Consolas','Courier New',monospace; font-size:13px; line-height:1.8; color:#94a3b8;">
+<pre style="margin:0; white-space:pre;">
+<span style="color:#60a5fa;">PulseOps Platform (Core)</span>
+  PlatformDashboard ──▶ moduleRegistry.js ──▶ <span style="color:#34d399;">dynamic import()</span>
+                                                    │
+  <span style="color:#fbbf24;">ServiceNow Module</span> (self-contained, hot-deployable)
+  ┌─────────────────────────────────────────────────┐
+  │  <span style="color:#34d399;">UI Layer</span>          <span style="color:#60a5fa;">API Layer</span>        <span style="color:#fbbf24;">Services</span>      │
+  │  manifest.jsx      Express Router   IncidentSvc   │
+  │  DataTable.jsx     10 route files   ReportSvc     │
+  │  7 views           helpers.js       SlaService    │
+  │  12 config tabs    moduleLogger     AutoAckPoller │
+  └──────────────────────┬──────────────────┬─────────┘
+                         │                  │
+               <span style="color:#94a3b8;">PostgreSQL DB</span>      <span style="color:#f87171;">ServiceNow REST API</span>
+               (module tables)     (Table API v2)
+</pre>
+  </div>
+  <div class="grid-3">
+    <div class="card"><h3>Stateless API</h3><p>No in-memory caches. Safe for Kubernetes multi-pod horizontal scaling.</p></div>
+    <div class="card"><h3>Zero Hardcoding</h3><p>All text in JSON config files. UI labels, errors, messages, API URLs — nothing hardcoded.</p></div>
+    <div class="card"><h3>Structured Logging</h3><p>Winston logger with DB persistence. Synthetic context for background jobs. Full tracing.</p></div>
+  </div>
+  <div class="slide-footer"><span>Confidential</span><span class="slide-num">3</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 4 — Feature Summary -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Feature Summary</h2>
+  <div class="grid-2">
+    <div>
+      <h3>Incident Management</h3>
+      <ul>
+        <li><strong>Live incident list</strong> with priority, state, and search filtering</li>
+        <li><strong>CRUD operations</strong> — create, update, close (two-step resolve/close)</li>
+        <li><strong>Server-side pagination</strong> via SNOW Table API sysparm_limit/offset</li>
+        <li><strong>Test incidents</strong> — create and close test data from the UI</li>
+        <li><strong>Assignment group filtering</strong> — scope incidents to specific teams</li>
+      </ul>
+      <h3 style="margin-top:16px;">Auto-Acknowledge</h3>
+      <ul>
+        <li><strong>Background poller</strong> — configurable frequency (1–60 min)</li>
+        <li><strong>Auto-transition</strong> — New (state=1) to In Progress (state=2)</li>
+        <li><strong>DB-only dedup</strong> — stateless, safe for K8s pod restarts</li>
+        <li><strong>Manual trigger</strong> + historical log viewer with search</li>
+      </ul>
+    </div>
+    <div>
+      <h3>SLA Compliance Reporting</h3>
+      <ul>
+        <li><strong>Resolution SLA</strong> — business-hour-aware expected close times</li>
+        <li><strong>Response SLA</strong> — configurable response column mapping</li>
+        <li><strong>Per-priority thresholds</strong> — P1: 4h, P2: 8h, P3: 24h, P4: 72h</li>
+        <li><strong>Date range filters</strong> — Daily, Weekly, Monthly, Custom</li>
+        <li><strong>PDF export</strong> for all SLA reports</li>
+      </ul>
+      <h3 style="margin-top:16px;">Analytics & Dashboards</h3>
+      <ul>
+        <li><strong>Live stats</strong> — total, open, critical, resolved today</li>
+        <li><strong>Incident analytics</strong> — by priority, state, category</li>
+        <li><strong>RITM reports</strong> — catalog item breakdown</li>
+        <li><strong>DataTable grids</strong> — sort, paginate, column reorder, search</li>
+      </ul>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Confidential</span><span class="slide-num">4</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 5 — Configuration -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Configuration Management</h2>
+  <p>The module provides 12 configuration tabs accessible via the Settings view. All settings are stored in the PostgreSQL database and take effect immediately — no restart required.</p>
+  <table style="margin-top:16px;">
+    <thead>
+      <tr><th>Config Tab</th><th>Purpose</th><th>Key Fields</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Connection</strong></td><td>ServiceNow API credentials</td><td>Instance URL, Username, Password + live test</td></tr>
+      <tr><td><strong>Assignment Group</strong></td><td>Scope incidents to a team</td><td>Group sys_id or display name + search</td></tr>
+      <tr><td><strong>Business Hours</strong></td><td>Define working hours</td><td>Per day-of-week start/end times</td></tr>
+      <tr><td><strong>Timezone</strong></td><td>Display timezone</td><td>Auto-detect from SNOW or manual IANA override</td></tr>
+      <tr><td><strong>Incident Columns</strong></td><td>Select display columns</td><td>Checkbox list from SNOW sys_dictionary</td></tr>
+      <tr><td><strong>SLA Column Mapping</strong></td><td>Map SNOW fields to SLA calc</td><td>Created, Closed, Response columns</td></tr>
+      <tr><td><strong>SLA Thresholds</strong></td><td>Per-priority SLA targets</td><td>Resolution + Response minutes per P1–P5</td></tr>
+      <tr><td><strong>Auto Acknowledge</strong></td><td>Background ack config</td><td>Enabled, message, poll frequency</td></tr>
+      <tr><td><strong>Sync</strong></td><td>Data sync schedule</td><td>Enabled, interval, table selection</td></tr>
+      <tr><td><strong>General Settings</strong></td><td>Module-level preferences</td><td>Extensible key-value store</td></tr>
+      <tr><td><strong>Data Management</strong></td><td>Schema & seed data</td><td>View schema, seed defaults, reset data</td></tr>
+    </tbody>
+  </table>
+  <div class="slide-footer"><span>Confidential</span><span class="slide-num">5</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 6 — Deployment -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Deployment & Operations</h2>
+  <div class="grid-2" style="margin-bottom:24px;">
+    <div>
+      <h3>Hot-Drop Deployment</h3>
+      <div style="background:var(--surface-900); border-radius:10px; padding:16px 20px; font-family:'Consolas',monospace; font-size:12px; line-height:2; color:#94a3b8;">
+        <span style="color:#60a5fa;"># 1. Build the module</span><br>
+        npm run build:module -- servicenow<br><br>
+        <span style="color:#60a5fa;"># 2. Output</span><br>
+        dist-modules/servicenow/manifest.js<br><br>
+        <span style="color:#60a5fa;"># 3. Enable via Module Manager UI</span><br>
+        <span style="color:#34d399;">POST /api/modules/servicenow/enable</span>
+      </div>
+      <p style="margin-top:12px; font-size:13px;">No platform rebuild. No server restart. The Module Manager UI handles enable/disable lifecycle.</p>
+    </div>
+    <div>
+      <h3>Database Auto-Provisioning</h3>
+      <table>
+        <thead><tr><th>Table</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><strong>sn_module_config</strong></td><td>Key-value config store</td></tr>
+          <tr><td><strong>sn_sla_thresholds</strong></td><td>SLA targets per priority</td></tr>
+          <tr><td><strong>sn_business_hours</strong></td><td>Business hours per day</td></tr>
+          <tr><td><strong>sn_auto_acknowledge_log</strong></td><td>Auto-ack execution log</td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:12px; font-size:13px;">Tables are auto-created from <code>Schema.json</code> on first enable. Seed data from <code>DefaultData.json</code>.</p>
+    </div>
+  </div>
+  <div class="grid-3">
+    <div class="card card-brand"><h3>Dev Mode</h3><p>Vite dev server loads source manifest.jsx directly. Full HMR + alias resolution.</p></div>
+    <div class="card card-green"><h3>Prod Mode</h3><p>Self-contained ES module bundle. Loaded via dynamic import() with cache-busting.</p></div>
+    <div class="card card-teal"><h3>K8s Ready</h3><p>Stateless API, DB-only dedup, no in-memory state. Safe for multi-pod horizontal scaling.</p></div>
+  </div>
+  <div class="slide-footer"><span>Confidential</span><span class="slide-num">6</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 7 — Quality & Standards -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Quality & Engineering Standards</h2>
+  <div class="grid-2" style="margin-bottom:20px;">
+    <div>
+      <h3>Code Quality</h3>
+      <ul>
+        <li><strong>Zero hardcoded strings</strong> — All text in JSON config files</li>
+        <li><strong>Comprehensive file headers</strong> — Purpose, usage, architecture in every file</li>
+        <li><strong>Structured logging</strong> — Winston + DB persistence at all levels</li>
+        <li><strong>Dead code cleanup</strong> — Unused components flagged as deprecated</li>
+        <li><strong>Reusable DataTable</strong> — Single component for all grids across module</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Security & Performance</h3>
+      <ul>
+        <li><strong>Password redaction</strong> — Connection config never exposes credentials</li>
+        <li><strong>Basic Auth over HTTPS</strong> — ServiceNow API authentication</li>
+        <li><strong>Request timeouts</strong> — 15s timeout on all SNOW API calls</li>
+        <li><strong>Field projection</strong> — Only requested columns fetched (sysparm_fields)</li>
+        <li><strong>Pagination</strong> — Server-side limit/offset for all list endpoints</li>
+      </ul>
+    </div>
+  </div>
+  <div class="grid-2">
+    <div>
+      <h3>Module Contract</h3>
+      <ul>
+        <li><strong>manifest.jsx</strong> — Self-describing entry point with navItems, getViews(), getConfigTabs()</li>
+        <li><strong>constants.json</strong> — Module metadata (id, name, version, description)</li>
+        <li><strong>Schema.json</strong> — Database table definitions (auto-provisioned)</li>
+        <li><strong>Lifecycle hooks</strong> — onEnable() / onDisable() for startup/teardown</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Timezone Handling</h3>
+      <ul>
+        <li><strong>UTC parsing</strong> — SNOW dates always parsed as UTC (no 'Z' suffix)</li>
+        <li><strong>IANA conversion</strong> — Intl.DateTimeFormat for display timezone</li>
+        <li><strong>Business hours</strong> — SLA calculations use configured business hours</li>
+        <li><strong>Auto-detect</strong> — Fetch timezone from SNOW instance properties</li>
+      </ul>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Confidential</span><span class="slide-num">7</span></div>
+</div>
+
+</body>
+</html>

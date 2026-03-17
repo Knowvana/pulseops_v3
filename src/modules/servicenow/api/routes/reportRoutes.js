@@ -24,7 +24,9 @@ import {
 } from '#modules/servicenow/api/services/ReportService.js';
 import { getEffectiveTimezone } from '#modules/servicenow/api/services/TimezoneService.js';
 import { apiErrors, apiMessages } from '#modules/servicenow/api/config/index.js';
+import { createSnowLogger } from '#modules/servicenow/api/lib/moduleLogger.js';
 
+const log = createSnowLogger('Reports');
 const router = Router();
 
 // ── GET /stats ───────────────────────────────────────────────────────────────
@@ -37,8 +39,10 @@ router.get('/stats', async (req, res) => {
     }
     const incidentConfig = await loadIncidentConfig();
     const data = await getStats(conn, incidentConfig, defaults);
+    log.debug(`GET /stats — total:${data.total || 0} open:${data.open || 0} critical:${data.critical || 0}`);
     return res.json({ success: true, data: { connectionStatus: 'connected', ...data } });
   } catch (err) {
+    log.error(`GET /stats failed: ${err.message}`);
     return res.status(500).json({ success: false, error: { message: apiErrors.reports.statsFailed.replace('{message}', err.message) } });
   }
 });
@@ -50,8 +54,10 @@ router.get('/reports/incidents', async (req, res) => {
     if (!conn.isConfigured) return res.json({ success: true, data: { totalCount: 0, incidents: [] } });
     const [incidentConfig, tz] = await Promise.all([loadIncidentConfig(), getEffectiveTimezone()]);
     const data = await getIncidentReport(conn, incidentConfig, tz, req.query);
+    log.info(`GET /reports/incidents — count:${data.totalCount || 0}`);
     return res.json({ success: true, data });
   } catch (err) {
+    log.error(`GET /reports/incidents failed: ${err.message}`);
     return res.status(500).json({ success: false, error: { message: apiErrors.reports.incidentReportFailed.replace('{message}', err.message) } });
   }
 });
@@ -62,8 +68,10 @@ router.get('/reports/ritms', async (req, res) => {
     const conn = loadConnectionConfig();
     const tz   = await getEffectiveTimezone();
     const data = await getRitmReport(conn, tz, req.query);
+    log.info(`GET /reports/ritms — count:${data.totalCount || 0}`);
     return res.json({ success: true, data });
   } catch (err) {
+    log.error(`GET /reports/ritms failed: ${err.message}`);
     return res.status(500).json({ success: false, error: { message: apiErrors.reports.ritmReportFailed.replace('{message}', err.message) } });
   }
 });
@@ -75,8 +83,10 @@ router.get('/reports/sla', async (req, res) => {
     if (!conn.isConfigured) return res.json({ success: true, data: { incidentSla: { byPriority: {} }, ritmSla: { byPriority: {} } } });
     const incidentConfig = await loadIncidentConfig();
     const data = await getSlaReport(conn, incidentConfig);
+    log.info('GET /reports/sla — SLA compliance report generated');
     return res.json({ success: true, data });
   } catch (err) {
+    log.error(`GET /reports/sla failed: ${err.message}`);
     return res.status(500).json({ success: false, error: { message: apiErrors.reports.slaReportFailed.replace('{message}', err.message) } });
   }
 });
@@ -88,8 +98,10 @@ router.get('/reports/sla/incidents', async (req, res) => {
     if (!conn.isConfigured) return res.status(400).json({ success: false, error: { message: apiErrors.connection.notConfigured } });
     const [incidentConfig, tz] = await Promise.all([loadIncidentConfig(), getEffectiveTimezone()]);
     const data = await getSlaResolutionReport(conn, incidentConfig, tz, req.query);
+    log.info(`GET /reports/sla/incidents — period:${req.query.period || 'monthly'} total:${data.totalIncidents || 0}`);
     return res.json({ success: true, data });
   } catch (err) {
+    log.error(`GET /reports/sla/incidents failed: ${err.message}`);
     return res.status(500).json({ success: false, error: { message: apiErrors.reports.slaIncidentReportFailed.replace('{message}', err.message) } });
   }
 });
@@ -101,11 +113,14 @@ router.get('/reports/sla/incidents/response', async (req, res) => {
     if (!conn.isConfigured) return res.status(400).json({ success: false, error: { message: apiErrors.connection.notConfigured } });
     const [incidentConfig, tz] = await Promise.all([loadIncidentConfig(), getEffectiveTimezone()]);
     const data = await getSlaResponseReport(conn, incidentConfig, tz, req.query);
+    log.info(`GET /reports/sla/incidents/response — period:${req.query.period || 'monthly'} total:${data.totalIncidents || 0}`);
     return res.json({ success: true, data });
   } catch (err) {
     if (err.message === 'RESPONSE_COLUMN_NOT_CONFIGURED') {
+      log.warn('Response SLA report requested but response column not configured');
       return res.status(400).json({ success: false, error: { message: apiErrors.incidentConfig.responseColumnRequired } });
     }
+    log.error(`GET /reports/sla/incidents/response failed: ${err.message}`);
     return res.status(500).json({ success: false, error: { message: apiErrors.reports.responseReportFailed.replace('{message}', err.message) } });
   }
 });
@@ -124,8 +139,10 @@ router.get('/config/settings', async (req, res) => {
 router.put('/config/settings', async (req, res) => {
   try {
     await saveModuleConfig('general_settings', req.body, 'General module settings');
+    log.info('General settings saved');
     return res.json({ success: true, message: apiMessages.settings.saved });
   } catch (err) {
+    log.error(`PUT /config/settings failed: ${err.message}`);
     return res.status(500).json({ success: false, error: { message: apiErrors.config.saveSettingsFailed.replace('{message}', err.message) } });
   }
 });

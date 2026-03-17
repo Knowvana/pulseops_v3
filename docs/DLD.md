@@ -217,51 +217,105 @@ export default {
 ```
 src/modules/servicenow/
 ├── api/
-│   ├── index.js              # Express router + onEnable/onDisable hooks
-│   ├── servicenowRoutes.js   # Route handlers
-│   ├── servicenowService.js  # Business logic, ServiceNow Table API client
-│   └── config/               # Module API config
-├── ui/
-│   ├── manifest.jsx          # Module manifest (contract with platform)
+│   ├── index.js                      # Router orchestrator + onEnable/onDisable lifecycle
 │   ├── config/
-│   │   ├── constants.json    # Module metadata (id, name, version)
-│   │   ├── uiText.json       # All UI strings
-│   │   ├── urls.json         # Module API endpoints
-│   │   ├── uiErrors.json     # Error messages
-│   │   └── uiMessages.json   # Success messages
-│   └── components/
-│       ├── ServiceNowDashboard.jsx   # Dashboard view
-│       ├── ServiceNowIncidents.jsx   # Incident list view
-│       ├── ServiceNowReports.jsx     # Reports view
-│       └── config/                   # Config tab components
+│   │   ├── index.js                  # Config loader (urls, errors, messages)
+│   │   ├── urls.json                 # SNOW table paths + internal route paths
+│   │   ├── APIErrors.json            # API error messages
+│   │   └── APIMessages.json          # API success messages
+│   ├── lib/
+│   │   ├── SnowApiClient.js          # HTTP client for SNOW REST API (snowGet, snowWrite)
+│   │   ├── dateUtils.js              # UTC parse, timezone conversion, date field mapping
+│   │   └── moduleLogger.js           # Winston logger + DB persistence + synthetic context
+│   ├── routes/
+│   │   ├── helpers.js                # Shared utilities (config I/O, DB queries, schema)
+│   │   ├── configRoutes.js           # GET/PUT /config, POST /config/test
+│   │   ├── incidentRoutes.js         # CRUD /incidents
+│   │   ├── ritmRoutes.js             # CRUD /ritms
+│   │   ├── incidentConfigRoutes.js   # /config/incidents/*, /schema/*, /config/sla/*
+│   │   ├── reportRoutes.js           # /stats, /reports/*, /config/settings
+│   │   ├── syncRoutes.js             # /sync, /sync/status, /sync/schedule
+│   │   ├── dataRoutes.js             # /schema/info, /data/defaults, /data/reset
+│   │   ├── autoAcknowledgeRoutes.js  # /config/auto-acknowledge, /auto-acknowledge/*
+│   │   └── timezoneRoutes.js         # /config/timezone/*
+│   └── services/
+│       ├── IncidentService.js        # Incident CRUD + field projection + TZ conversion
+│       ├── RitmService.js            # RITM CRUD operations
+│       ├── ReportService.js          # Stats, SLA calculations, analytics
+│       ├── SlaService.js             # SLA threshold CRUD + business-hour math
+│       ├── TimezoneService.js        # TZ detection + effective TZ resolution
+│       └── AutoAcknowledgePoller.js  # Background poller (singleton timer, DB dedup)
+├── database/
+│   ├── Schema.json                   # DB table definitions (auto-provisioned)
+│   └── DefaultData.json              # Seed data (business hours, SLA defaults)
+├── ui/
+│   ├── manifest.jsx                  # Module manifest (platform contract)
+│   ├── config/                       # constants.json, uiText.json, urls.json, errors, messages
+│   ├── components/
+│   │   ├── DataTable.jsx             # Reusable grid (sort, paginate, column reorder, search)
+│   │   ├── ServiceNowDashboard.jsx   # Dashboard view with live stats + auto-ack table
+│   │   ├── ServiceNowIncidents.jsx   # Incident list (server-side pagination + filtering)
+│   │   ├── ServiceNowTestIncidents.jsx # Create/close test incidents
+│   │   ├── ServiceNowReports.jsx     # Analytics reports (tabbed: incidents, RITMs, SLA)
+│   │   ├── ServiceNowSlaReport.jsx   # Resolution SLA report with DataTable
+│   │   ├── ServiceNowResponseSlaReport.jsx # Response SLA report with DataTable
+│   │   └── settings/                 # 12 config tab components
+│   └── views/                        # Standalone view wrappers for nav routing
 └── README.md
 ```
 
 ### 3.2 API Endpoints (mounted at `/api/servicenow/`)
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/config` | Get connection config (token redacted) |
-| PUT | `/config` | Save connection + SLA + sync settings |
-| POST | `/config/test` | Test ServiceNow connectivity |
-| GET | `/stats` | Dashboard statistics |
-| GET | `/incidents` | Paginated + filtered incidents |
-| POST | `/sync` | Manual data synchronization |
-| GET | `/reports` | SLA compliance + volume reports |
+| Category | Method | Path | Purpose |
+|----------|--------|------|---------|
+| Config | GET/PUT | `/config` | Connection config (password redacted) |
+| Config | POST | `/config/test` | Test SNOW connectivity |
+| Config | GET/PUT | `/config/incidents` | Incident display config |
+| Config | GET/PUT | `/config/incidents/sla-mapping` | SLA column mapping |
+| Config | GET/POST/PUT/DELETE | `/config/sla` | SLA thresholds CRUD |
+| Config | GET/PUT | `/config/auto-acknowledge` | Auto-ack config + poller restart |
+| Config | GET/PUT | `/config/timezone` | Timezone config |
+| Incidents | GET/POST | `/incidents` | List (filtered, paginated) / Create |
+| Incidents | PUT | `/incidents/:id` | Update incident |
+| Incidents | POST | `/incidents/:id/close` | Close (two-step resolve → close) |
+| RITMs | GET/POST | `/ritms` | List / Create |
+| RITMs | PUT/POST | `/ritms/:id`, `/ritms/:id/close` | Update / Close |
+| Reports | GET | `/stats` | Dashboard statistics |
+| Reports | GET | `/reports/incidents` | Incident analytics |
+| Reports | GET | `/reports/sla/incidents` | Resolution SLA detail |
+| Reports | GET | `/reports/sla/incidents/response` | Response SLA detail |
+| Auto-Ack | POST | `/auto-acknowledge/poll` | Manual poll trigger |
+| Auto-Ack | GET | `/auto-acknowledge/log/history` | Historical ack log |
+| Sync | POST | `/sync` | Manual data sync |
+| Data | GET | `/schema/info` | DB schema info |
+| Data | POST | `/data/defaults`, `/data/reset` | Seed / reset data |
 
 ### 3.3 Data Flow
 ```
-ServiceNow Instance (Table API)
-        │ HTTPS + Basic Auth
+ServiceNow Instance (Table API v2)
+        │ HTTPS + Basic Auth (SnowApiClient.js)
+        │ sysparm_fields projection + sysparm_query filtering
         ▼
-servicenowService.js (fetch + normalize + cache)
-        │ In-memory cache (5-min TTL)
+Service Layer (IncidentService, ReportService, SlaService)
+        │ snowVal() unwrap + TZ conversion + SLA math
+        │ STATELESS — no in-memory caching
         ▼
-servicenowRoutes.js (Express handlers)
-        │ JSON response
+Route Layer (10 Express sub-routers)
+        │ JSON response + structured logging (moduleLogger)
         ▼
-React Views (Dashboard, Incidents, Reports)
+React Views (Dashboard, Incidents, Reports, SLA Reports)
+        │ DataTable component (sort, paginate, column reorder)
+        ▼
+User Interface (Tailwind CSS + Lucide Icons)
 ```
+
+### 3.4 Background Services
+
+**AutoAcknowledgePoller** — Singleton `setInterval` timer:
+- Polls SNOW for incidents in `state=1` (New)
+- Checks `sn_auto_acknowledge_log` DB table for dedup (stateless across pod restarts)
+- Posts comment + sets `state=2` (In Progress) via SNOW Table API
+- Lifecycle: `onEnable()` → `startIfEnabled()`, `onDisable()` → `stop()`
 
 ---
 

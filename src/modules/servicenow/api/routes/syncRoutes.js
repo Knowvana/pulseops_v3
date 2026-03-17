@@ -56,6 +56,7 @@ router.post('/sync', async (req, res) => {
     writeJsonFile(DEFAULTS_CONFIG, defaults);
 
     const durationMs = Date.now() - startTime;
+    log.info(`Sync completed — fetched:${summary.totalFetched} errors:${summary.errors.length} duration:${durationMs}ms`);
 
     return res.json({
       success: summary.errors.length === 0,
@@ -69,6 +70,7 @@ router.post('/sync', async (req, res) => {
         : apiMessages.sync.completedWithErrors.replace('{errors}', summary.errors.length),
     });
   } catch (err) {
+    log.error(`POST /sync failed: ${err.message}`);
     return res.status(500).json({ success: false, error: { message: apiErrors.sync.failed.replace('{message}', err.message) } });
   }
 });
@@ -123,6 +125,7 @@ router.put('/sync/schedule', (req, res) => {
       syncChanges: syncChanges !== false,
     };
     writeJsonFile(DEFAULTS_CONFIG, defaults);
+    log.info(`Sync schedule updated — enabled:${defaults.sync.enabled} interval:${defaults.sync.intervalMinutes}m`);
     return res.json({ success: true, message: apiMessages.sync.scheduleSaved });
   } catch (err) {
     return res.status(500).json({ success: false, error: { message: apiErrors.sync.scheduleSaveFailed.replace('{message}', err.message) } });

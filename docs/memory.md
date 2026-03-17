@@ -1,7 +1,7 @@
 # PulseOps V2 — Development Memory
 
 > **Auto-updated by Cascade after each work session.**
-> Last updated: 2026-06-28 (Session 6)
+> Last updated: 2025-07-14 (Session 7+)
 
 ---
 
@@ -92,7 +92,55 @@ PulseOps V2 is an enterprise modular operations platform with a plug-and-play mo
 | T21 | App.jsx: thin auth wrapper, URL-driven PlatformDashboard orchestrator | DONE |
 | T22 | moduleRegistry.js: dynamic-only (no core modules), V1-style getAllManifests API | DONE |
 
-## Recent Updates (2026-06-28 — Session 6: SuperAdmin + RBAC + Settings Overhaul)
+## Recent Updates (2025-07-14 — Session 7+: ServiceNow Module Finalization)
+
+### ServiceNow Module — Complete Enterprise Integration
+The ServiceNow ITSM module has been finalized as the first production add-on module for PulseOps V3.
+
+#### Reusable DataTable Component
+- **`src/modules/servicenow/ui/components/DataTable.jsx`** — Enterprise-grade data grid:
+  - Column sorting (click header — asc/desc/none tri-state)
+  - Client-side pagination with configurable page sizes (10/25/50/100)
+  - Drag-and-drop column reordering (HTML5 drag API)
+  - Built-in search with debounce
+  - Custom cell renderers via column `render` function
+  - Integrated into all module grids: SLA Report, Response SLA Report, Reports DataGrid, Dashboard auto-ack table
+
+#### Code Review & Cleanup
+- **Dead code flagged as DEPRECATED**: `GlobalPageLoader.jsx`, `ProgressModal.jsx`, `SlaComplianceView.jsx` — none are imported by any module file
+- **Unused imports removed**: `Search` from SLA reports (DataTable has built-in search), `ChevronLeft`/`ChevronRight` from Reports (DataTable handles pagination)
+- **All file headers verified**: Every API and UI file has comprehensive headers with PURPOSE, USAGE, ARCHITECTURE comments
+
+#### Production-Grade Logging
+- **`reportRoutes.js`** — Added 14 log statements (was 0): debug for stats, info for report generation, error for failures, warn for missing config
+- **`syncRoutes.js`** — Added 3 log statements: info for sync completion + schedule updates, error for failures
+- All logging uses `createSnowLogger` from `moduleLogger.js` with synthetic context for background jobs
+
+#### Module Architecture (44 source files)
+- **API Layer**: 10 Express sub-routers, 6 services, 3 lib utilities, structured config
+- **UI Layer**: 7 views, 12 config tabs, 1 reusable DataTable, module manifest
+- **Background Services**: AutoAcknowledgePoller (singleton timer, DB-only dedup, K8s-safe)
+- **Database**: 4 auto-provisioned tables (Schema.json + DefaultData.json seed)
+
+#### Documentation
+- **`src/modules/servicenow/README.md`** — Complete rewrite with architecture diagram, full file tree, API endpoint reference, feature summary, build/deploy instructions
+- **`docs/DLD.md`** Section 3 — Updated with current SNOW module structure, 30+ API endpoints, data flow diagram, background service details
+- **`docs/ServiceNow_Module_Overview.html`** — 7-slide management presentation (HTML) with architecture, features, deployment, quality standards
+
+#### Build Verified
+- Module build: `npm run build:module -- servicenow` → 495 KB manifest.js (3503 modules)
+- Frontend build: `npm run build` → 320 KB index.js (1794 modules)
+- Both builds pass cleanly with zero errors
+
+### V3 Architecture Notes (Updated from V2)
+- **Backend path changed**: V2 used `api/` → V3 uses `src/apiserver/`
+- **Module path**: `src/modules/<id>/` with `api/` and `ui/` subdirectories
+- **Import aliases**: Frontend `@shared`, `@config`, `@core`, `@modules`, `@layouts`; Backend `#config/*`, `#shared/*`, `#core/*`, `#root/*`, `#modules/*`
+- **Dual-mode module loading**: Dev → Vite source import; Prod → pre-built manifest.js bundle via API
+
+---
+
+## Previous (2026-06-28 — Session 6: SuperAdmin + RBAC + Settings Overhaul)
 
 ### SuperAdmin Authentication (Backend)
 - **`api/src/config/DefaultSuperAdmin.json`** — SuperAdmin credential store (bcrypt-hashed password, requirePasswordChange flag, role: super_admin)

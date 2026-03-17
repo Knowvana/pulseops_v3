@@ -25,11 +25,12 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   BarChart3, RefreshCw, WifiOff, ArrowRight, Loader2,
   AlertCircle, CheckCircle2, Clock, TrendingUp,
-  ChevronLeft, ChevronRight, FileText, ShieldCheck, ListChecks,
+  FileText, ShieldCheck, ListChecks,
 } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
 import ServiceNowSlaReport from './ServiceNowSlaReport';
+import DataTable from './DataTable';
 const snApi = {
   reports:          '/api/servicenow/reports',
   reportIncidents:  '/api/servicenow/reports/incidents',
@@ -244,45 +245,7 @@ function BreakdownTable({ title, data, loading }) {
   );
 }
 
-// ── Data grid sub-component ─────────────────────────────────────────────────
-function DataGrid({ columns, rows, loading }) {
-  if (loading) {
-    return (
-      <div className="p-8 flex items-center justify-center">
-        <Loader2 size={20} className="text-brand-400 animate-spin" />
-      </div>
-    );
-  }
-  if (!rows || rows.length === 0) {
-    return <div className="p-8 text-center text-sm text-surface-400">{t.noData}</div>;
-  }
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="bg-surface-50 border-b border-surface-200">
-            {columns.map(col => (
-              <th key={col.key} className="text-left px-4 py-2.5 text-xs font-semibold text-surface-500 uppercase tracking-wide whitespace-nowrap">
-                {col.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-surface-50">
-          {rows.map((row, i) => (
-            <tr key={i} className="hover:bg-surface-50/50 transition-colors">
-              {columns.map(col => (
-                <td key={col.key} className="px-4 py-2.5 text-surface-700 text-xs whitespace-nowrap">
-                  {row[col.key] ?? uiText.common.na}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
+// DataGrid replaced by imported DataTable component with sorting/pagination/column reorder
 
 // ── SLA compliance table sub-component ──────────────────────────────────────
 function SlaComplianceGrid({ slaData, loading }) {
@@ -552,13 +515,16 @@ export default function ServiceNowReports({ onNavigate }) {
               <BreakdownTable title="By State" data={incData?.byState} loading={!incData} />
             </div>
 
-            <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
-              <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center justify-between">
-                <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide">Incident Details</p>
-                <span className="text-xs text-surface-400">{incData?.totalCount ?? 0} records</span>
-              </div>
-              <DataGrid columns={INCIDENT_GRID_COLS} rows={incData?.incidents} loading={!incData} />
-            </div>
+            <DataTable
+              columns={INCIDENT_GRID_COLS.map(c => ({ ...c, sortable: true }))}
+              data={incData?.incidents || []}
+              loading={!incData}
+              pageSize={20}
+              searchable={true}
+              searchPlaceholder="Search incidents..."
+              emptyMessage={t.noData}
+              compact={true}
+            />
           </div>
         )}
 
@@ -575,13 +541,16 @@ export default function ServiceNowReports({ onNavigate }) {
               <BreakdownTable title="By Priority" data={ritmData?.byPriority} loading={!ritmData} />
               <BreakdownTable title="By Catalog Item" data={ritmData?.byCatalogItem} loading={!ritmData} />
             </div>
-            <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
-              <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center justify-between">
-                <p className="text-xs font-semibold text-surface-500 uppercase tracking-wide">RITM Details</p>
-                <span className="text-xs text-surface-400">{ritmData?.totalCount ?? 0} records</span>
-              </div>
-              <DataGrid columns={RITM_GRID_COLS} rows={ritmData?.ritms} loading={!ritmData} />
-            </div>
+            <DataTable
+              columns={RITM_GRID_COLS.map(c => ({ ...c, sortable: true }))}
+              data={ritmData?.ritms || []}
+              loading={!ritmData}
+              pageSize={20}
+              searchable={true}
+              searchPlaceholder="Search RITMs..."
+              emptyMessage={t.noData}
+              compact={true}
+            />
           </div>
         )}
 

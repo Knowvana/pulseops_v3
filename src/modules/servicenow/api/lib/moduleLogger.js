@@ -60,6 +60,13 @@ function _extractCaller() {
  */
 function _persistToDb(level, moduleName, fileName, functionName, msg, meta) {
   const ctx = getRequestContext();
+  // For background processes (no HTTP context), generate synthetic tracking IDs
+  // so no log entry has blank sessionId/transactionId/correlationId/user fields.
+  const sessionId     = ctx.sessionId     || `bg-${moduleName.toLowerCase()}-${process.pid}`;
+  const transactionId = ctx.transactionId || `bg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const correlationId = ctx.correlationId || `${moduleName}:${fileName}:${functionName}`;
+  const user          = ctx.userEmail     || 'system';
+
   import('#core/services/logService.js').then(mod => {
     mod.default.writeModuleLog({
       level,
@@ -69,10 +76,10 @@ function _persistToDb(level, moduleName, fileName, functionName, msg, meta) {
       module: moduleName,
       fileName: `${fileName}:${functionName}`,
       data: meta && typeof meta === 'object' ? meta : (meta != null ? { detail: meta } : null),
-      transactionId: ctx.transactionId || null,
-      sessionId: ctx.sessionId || null,
-      correlationId: ctx.correlationId || null,
-      user: ctx.userEmail || null,
+      transactionId,
+      sessionId,
+      correlationId,
+      user,
       timestamp: new Date().toISOString(),
     });
   }).catch(() => {});

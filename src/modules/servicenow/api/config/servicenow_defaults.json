@@ -9,7 +9,7 @@
     "enabled": false,
     "intervalMinutes": 30,
     "maxIncidents": 500,
-    "lastSync": null
+    "lastSync": "2026-03-17T04:40:09.449Z"
   },
   "stateMapping": {
     "incident": {

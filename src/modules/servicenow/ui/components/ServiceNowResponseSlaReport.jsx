@@ -16,10 +16,12 @@ import {
   ShieldCheck, Loader2, AlertCircle, CheckCircle2, XCircle,
   Clock, Calendar, CalendarDays, CalendarRange, RefreshCw,
   FileText, TrendingUp, ArrowUpRight, ArrowDownRight, Filter,
-  Download, Search, ArrowRight, Settings, Globe,
+  Download, ArrowRight, Settings, Globe,
 } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
+
+import DataTable from './DataTable';
 
 const log = createLogger('ServiceNowResponseSlaReport');
 
@@ -187,7 +189,6 @@ export default function ServiceNowResponseSlaReport({ onNavigate }) {
   const [period, setPeriod]         = useState('monthly');
   const [customFrom, setCustomFrom] = useState(getIsoDate(30));
   const [customTo, setCustomTo]     = useState(getIsoDate(0));
-  const [searchQuery, setSearchQuery] = useState('');
   const initRan = useRef(false);
 
   // ── Fetch report data ───────────────────────────────────────────────────
@@ -292,18 +293,61 @@ export default function ServiceNowResponseSlaReport({ onNavigate }) {
     setTimeout(() => { printWindow.print(); }, 500);
   }, [data, period]);
 
-  // ── Filtered incidents (search) ────────────────────────────────────────
-  const filteredIncidents = useMemo(() => {
+  // ── Response SLA grid columns (with custom renderers) ──────────────────
+  const responseColumns = useMemo(() => [
+    { key: 'number', label: 'Number', sortable: true, width: '100px',
+      render: (v) => <span className="font-mono text-xs text-brand-600 font-semibold">{v}</span> },
+    { key: 'shortDescription', label: 'Description', sortable: true, width: '200px',
+      render: (v) => <span className="block truncate max-w-[200px]" title={v}>{v || '—'}</span> },
+    { key: 'priority', label: 'Priority', sortable: true,
+      render: (v) => {
+        const cfg = PRIORITY_CONFIG[v] || PRIORITY_CONFIG['4 - Low'];
+        return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border ${cfg.badge}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />{cfg.short}
+        </span>;
+      } },
+    { key: 'state', label: 'State', sortable: true,
+      render: (v) => <span className="text-xs text-surface-600">{STATE_MAP[v] || v}</span> },
+    { key: 'assignedTo', label: 'Assigned To', sortable: true,
+      render: (v) => <span className="text-xs text-surface-500 max-w-[120px] truncate block">{v || '—'}</span> },
+    { key: 'createdAt', label: 'Created', sortable: true,
+      render: (v) => <span className="text-xs text-surface-500 whitespace-nowrap">{formatDate(v)}</span> },
+    { key: 'expectedResponse', label: 'Expected Response', sortable: true,
+      render: (v) => <span className="text-xs font-semibold text-teal-700 whitespace-nowrap">{v ? formatDate(v) : '—'}</span> },
+    { key: 'respondedAt', label: 'Actual Response', sortable: true,
+      render: (v) => <span className="text-xs text-surface-500 whitespace-nowrap">{formatDate(v)}</span> },
+    { key: 'responseMinutes', label: 'Response Time', sortable: true, align: 'right',
+      render: (v) => <span className="text-xs font-semibold text-surface-700">{formatMinutes(v)}</span> },
+    { key: 'targetMinutes', label: 'SLA Target', sortable: true, align: 'right',
+      render: (v) => <span className="text-xs text-surface-500">{formatMinutes(v)}</span> },
+    { key: '_variance', label: 'Variance', sortable: true, align: 'right',
+      render: (_, row) => {
+        const variance = (row.targetMinutes != null && row.responseMinutes != null)
+          ? row.targetMinutes - row.responseMinutes : null;
+        return variance !== null
+          ? <span className={`text-xs font-semibold ${variance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {variance >= 0 ? '+' : ''}{formatMinutes(variance)}
+            </span>
+          : <span className="text-xs text-surface-400">—</span>;
+      } },
+    { key: 'slaMet', label: 'SLA Status', sortable: true, align: 'center',
+      render: (v) => v === true
+        ? <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200"><CheckCircle2 size={10} /> Met</span>
+        : v === false
+          ? <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200"><XCircle size={10} /> Breached</span>
+          : <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-surface-400 bg-surface-50 px-2 py-0.5 rounded-full border border-surface-200"><Clock size={10} /> Pending</span>
+    },
+  ], []);
+
+  // Add computed _variance field for sorting
+  const incidentsWithVariance = useMemo(() => {
     if (!data?.incidents) return [];
-    if (!searchQuery.trim()) return data.incidents;
-    const q = searchQuery.toLowerCase();
-    return data.incidents.filter(inc =>
-      (inc.number || '').toLowerCase().includes(q) ||
-      (inc.shortDescription || '').toLowerCase().includes(q) ||
-      (inc.assignedTo || '').toLowerCase().includes(q) ||
-      (inc.priority || '').toLowerCase().includes(q)
-    );
-  }, [data, searchQuery]);
+    return data.incidents.map(inc => ({
+      ...inc,
+      _variance: (inc.targetMinutes != null && inc.responseMinutes != null)
+        ? inc.targetMinutes - inc.responseMinutes : null,
+    }));
+  }, [data]);
 
   // ── Render ─────────────────────────────────────────────────────────────
   return (
@@ -563,112 +607,19 @@ export default function ServiceNowResponseSlaReport({ onNavigate }) {
           )}
 
           {/* ── Incident Detail Grid ───────────────────────────────────────── */}
-          {data.incidents?.length > 0 && (
-            <div className="bg-white rounded-xl border border-surface-200 shadow-sm overflow-hidden">
-              {/* Grid header with search */}
-              <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-xs font-bold text-surface-600 uppercase tracking-wide">Incident Details</h3>
-                  <span className="text-[10px] bg-surface-200 text-surface-500 px-1.5 py-0.5 rounded-full font-bold">
-                    {filteredIncidents.length} of {data.incidents.length}
-                  </span>
-                </div>
-                <div className="relative">
-                  <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-surface-400" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={e => setSearchQuery(e.target.value)}
-                    placeholder="Search incidents..."
-                    className="pl-7 pr-3 py-1.5 rounded-lg border border-surface-200 text-xs text-surface-700 w-56
-                      focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 placeholder:text-surface-400"
-                  />
-                </div>
-              </div>
-
-              {/* Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-surface-50 border-b border-surface-200">
-                      <th className="text-left px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">Number</th>
-                      <th className="text-left px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">Description</th>
-                      <th className="text-left px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">Priority</th>
-                      <th className="text-left px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">State</th>
-                      <th className="text-left px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">Assigned To</th>
-                      <th className="text-left px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">Created</th>
-                      <th className="text-left px-3 py-2.5 text-[10px] font-bold text-teal-600 uppercase tracking-wider whitespace-nowrap bg-teal-50/50">Expected Response</th>
-                      <th className="text-left px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">Actual Response</th>
-                      <th className="text-right px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">Response Time</th>
-                      <th className="text-right px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">SLA Target</th>
-                      <th className="text-right px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">Variance</th>
-                      <th className="text-center px-3 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider whitespace-nowrap">SLA Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-surface-50">
-                    {filteredIncidents.map((inc, idx) => {
-                      const cfg = PRIORITY_CONFIG[inc.priority] || PRIORITY_CONFIG['4 - Low'];
-                      const variance = (inc.targetMinutes != null && inc.responseMinutes != null)
-                        ? inc.targetMinutes - inc.responseMinutes
-                        : null;
-
-                      return (
-                        <tr key={idx} className="hover:bg-surface-50/50 transition-colors group">
-                          <td className="px-3 py-2 font-mono text-xs text-brand-600 font-semibold whitespace-nowrap">{inc.number}</td>
-                          <td className="px-3 py-2 text-surface-700 max-w-[200px] truncate text-xs" title={inc.shortDescription}>
-                            {inc.shortDescription || '—'}
-                          </td>
-                          <td className="px-3 py-2">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border ${cfg.badge}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-                              {cfg.short}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-xs text-surface-600">{STATE_MAP[inc.state] || inc.state}</td>
-                          <td className="px-3 py-2 text-xs text-surface-500 max-w-[120px] truncate">{inc.assignedTo || '—'}</td>
-                          <td className="px-3 py-2 text-xs text-surface-500 whitespace-nowrap">{formatDate(inc.createdAt)}</td>
-                          <td className="px-3 py-2 text-xs font-semibold text-teal-700 whitespace-nowrap bg-teal-50/30">
-                            {inc.expectedResponse ? formatDate(inc.expectedResponse) : '—'}
-                          </td>
-                          <td className="px-3 py-2 text-xs text-surface-500 whitespace-nowrap">{formatDate(inc.respondedAt)}</td>
-                          <td className="px-3 py-2 text-right text-xs font-semibold text-surface-700">{formatMinutes(inc.responseMinutes)}</td>
-                          <td className="px-3 py-2 text-right text-xs text-surface-500">{formatMinutes(inc.targetMinutes)}</td>
-                          <td className="px-3 py-2 text-right text-xs font-semibold whitespace-nowrap">
-                            {variance !== null ? (
-                              <span className={variance >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
-                                {variance >= 0 ? '+' : ''}{formatMinutes(variance)}
-                              </span>
-                            ) : '—'}
-                          </td>
-                          <td className="px-3 py-2 text-center">
-                            {inc.slaMet === true ? (
-                              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                                <CheckCircle2 size={10} /> Met
-                              </span>
-                            ) : inc.slaMet === false ? (
-                              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
-                                <XCircle size={10} /> Breached
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-surface-400 bg-surface-50 px-2 py-0.5 rounded-full border border-surface-200">
-                                <Clock size={10} /> Pending
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Grid footer */}
-              {filteredIncidents.length === 0 && searchQuery && (
-                <div className="p-8 text-center text-sm text-surface-400">
-                  No incidents match "{searchQuery}"
-                </div>
-              )}
-            </div>
+          {incidentsWithVariance.length > 0 && (
+            <DataTable
+              columns={responseColumns}
+              data={incidentsWithVariance}
+              loading={loading}
+              pageSize={20}
+              searchable={true}
+              searchPlaceholder="Search incidents..."
+              emptyMessage="No incidents found for this period."
+              compact={true}
+              defaultSort={{ key: 'number', order: 'desc' }}
+              rowKeyField="number"
+            />
           )}
         </>
       )}

@@ -1,0 +1,40 @@
+{
+  "_description": "HealthCheck module UI API endpoints. Self-contained — no dependency on platform urls.json.",
+  "api": {
+    "status":              "/api/healthcheck/status",
+
+    "configPoller":        "/api/healthcheck/config/poller",
+    "configGeneral":       "/api/healthcheck/config/general",
+    "configDowntimeSource":"/api/healthcheck/config/downtime-source",
+
+    "applications":        "/api/healthcheck/applications",
+    "applicationById":     "/api/healthcheck/applications/{id}",
+    "applicationToggle":   "/api/healthcheck/applications/{id}/toggle",
+
+    "categories":          "/api/healthcheck/categories",
+    "categoryById":        "/api/healthcheck/categories/{id}",
+
+    "pollerStatus":        "/api/healthcheck/poller/status",
+    "pollerStart":         "/api/healthcheck/poller/start",
+    "pollerStop":          "/api/healthcheck/poller/stop",
+    "pollerPollNow":       "/api/healthcheck/poller/poll-now",
+
+    "dashboard":           "/api/healthcheck/dashboard",
+    "dashboardLive":       "/api/healthcheck/dashboard/live",
+
+    "reportUptime":        "/api/healthcheck/reports/uptime",
+    "reportDowntime":      "/api/healthcheck/reports/downtime",
+    "reportPollVerification": "/api/healthcheck/reports/poll-verification",
+
+    "slaTargets":          "/api/healthcheck/sla",
+    "slaTargetById":       "/api/healthcheck/sla/{id}",
+
+    "plannedDowntime":     "/api/healthcheck/planned-downtime",
+    "plannedDowntimeById": "/api/healthcheck/planned-downtime/{id}",
+    "plannedDowntimeSync": "/api/healthcheck/planned-downtime/sync",
+
+    "schemaInfo":          "/api/healthcheck/schema/info",
+    "loadDefaults":        "/api/healthcheck/data/defaults",
+    "resetData":           "/api/healthcheck/data/reset"
+  }
+}

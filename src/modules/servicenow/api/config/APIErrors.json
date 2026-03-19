@@ -126,5 +126,16 @@
 
   "assignmentGroups": {
     "searchFailed":             "Assignment group search failed: {message}"
+  },
+
+  "change": {
+    "loadConfigFailed":         "Failed to load change configuration: {message}",
+    "saveConfigFailed":         "Failed to save change configuration: {message}"
+  },
+
+  "plannedDowntime": {
+    "fetchFailed":              "Failed to fetch planned downtime: {message}",
+    "syncFailed":               "Failed to sync planned downtime from ServiceNow: {message}",
+    "notConfigured":            "Change configuration is not set up. Configure it in Configuration → Change Configuration."
   }
 }

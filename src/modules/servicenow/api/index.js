@@ -45,6 +45,7 @@ import reportRoutes          from '#modules/servicenow/api/routes/reportRoutes.j
 import dataRoutes            from '#modules/servicenow/api/routes/dataRoutes.js';
 import autoAcknowledgeRoutes from '#modules/servicenow/api/routes/autoAcknowledgeRoutes.js';
 import timezoneRoutes        from '#modules/servicenow/api/routes/timezoneRoutes.js';
+import plannedDowntimeRoutes from '#modules/servicenow/api/routes/plannedDowntimeRoutes.js';
 
 const router = Router();
 
@@ -60,6 +61,7 @@ router.use('/', reportRoutes);          // /stats, /reports/*, /business-hours, 
 router.use('/', dataRoutes);            // /schema/info, /data/defaults, /data/demo, /data/reset
 router.use('/', autoAcknowledgeRoutes); // /config/auto-acknowledge, /auto-acknowledge/*
 router.use('/', timezoneRoutes);        // /config/timezone, /config/timezone/servicenow, /config/timezone/list
+router.use('/', plannedDowntimeRoutes); // /config/change, /planned-downtime, /planned-downtime/sync
 
 // ═════════════════════════════════════════════════════════════════════════════
 // LIFECYCLE HOOKS

@@ -23,7 +23,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Plus, Edit3, XCircle, CheckCircle2, AlertCircle,
-  Loader2, ClipboardList, Clock, Trash2, Search, RefreshCw, Users, MessageSquare,
+  Loader2, ClipboardList, Clock, Trash2, Search, RefreshCw, Users, MessageSquare, CalendarRange, Globe,
 } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
@@ -41,7 +41,38 @@ const snApi = {
   autoAckTest: '/api/servicenow/auto-acknowledge/test',
   autoAckConfig: '/api/servicenow/config/auto-acknowledge',
   closeCodes: '/api/servicenow/schema/close-codes',
+  changes: '/api/servicenow/changes',
+  changesOpen: '/api/servicenow/changes/open',
+  changeClose: (sysId) => `/api/servicenow/changes/${sysId}/close`,
+  configChange: '/api/servicenow/config/change',
+  configIncidents: '/api/servicenow/config/incidents',
+  configTimezone: '/api/servicenow/config/timezone',
 };
+
+// Format a Date in a given IANA timezone as YYYY-MM-DD HH:MM:SS
+function formatInTz(date, tz) {
+  try {
+    const parts = new Intl.DateTimeFormat('sv-SE', {
+      timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    }).formatToParts(date);
+    const get = (type) => (parts.find(p => p.type === type) || {}).value || '';
+    return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`;
+  } catch {
+    return date.toISOString().slice(0, 19).replace('T', ' ');
+  }
+}
+
+// Live clock string for a timezone
+function useTimezoneClock(tz) {
+  const [now, setNow] = useState(() => formatInTz(new Date(), tz || 'UTC'));
+  useEffect(() => {
+    if (!tz) return;
+    const id = setInterval(() => setNow(formatInTz(new Date(), tz)), 1000);
+    return () => clearInterval(id);
+  }, [tz]);
+  return now;
+}
 
 // ServiceNow Impact/Urgency values (3-level)
 const IMPACT_OPTIONS = [
@@ -137,6 +168,26 @@ export default function ServiceNowTestIncidents() {
   const [ackMessage, setAckMessage] = useState('');
   const [acknowledging, setAcknowledging] = useState(false);
 
+  // Config state — fetched on mount
+  const [configuredGroup, setConfiguredGroup] = useState('');
+  const [effectiveTimezone, setEffectiveTimezone] = useState('UTC');
+  const [changeConfig, setChangeConfig]   = useState(null);
+
+  // Create Change state
+  const [changeDesc, setChangeDesc]       = useState('');
+  const [changeStart, setChangeStart]     = useState('');
+  const [changeEnd, setChangeEnd]         = useState('');
+  const [changeGroup, setChangeGroup]     = useState('');
+  const [creatingChange, setCreatingChange] = useState(false);
+
+  // Close Change state
+  const [changeCloseSysId, setChangeCloseSysId] = useState('');
+  const [changeCloseNotes, setChangeCloseNotes] = useState('');
+  const [closingChange, setClosingChange]       = useState(false);
+  // Open changes from ServiceNow for close dropdown
+  const [openChanges, setOpenChanges]           = useState([]);
+  const [openChangesLoading, setOpenChangesLoading] = useState(false);
+
   // Operations log
   const [operations, setOperations] = useState([]);
 
@@ -177,11 +228,26 @@ export default function ServiceNowTestIncidents() {
     }
   }, []);
 
+  // ── Fetch open changes for close dropdown ──────────────────────────────
+  const fetchOpenChanges = useCallback(async () => {
+    setOpenChangesLoading(true);
+    try {
+      const res = await ApiClient.get(snApi.changesOpen);
+      if (res?.success) setOpenChanges(res.data.changes || []);
+    } catch (err) {
+      log.error('fetchOpenChanges', 'Failed', { error: err.message });
+    } finally {
+      setOpenChangesLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (initRan.current) return;
     initRan.current = true;
     fetchOpenIncidents();
     fetchCloseCodes();
+    fetchOpenChanges();
+
     // Load auto acknowledge default message
     (async () => {
       try {
@@ -189,7 +255,48 @@ export default function ServiceNowTestIncidents() {
         if (res?.success && res.data?.message) setAckMessage(res.data.message);
       } catch { /* ignore */ }
     })();
-  }, [fetchOpenIncidents, fetchCloseCodes]);
+
+    // Load incident config → assignment group
+    (async () => {
+      try {
+        const res = await ApiClient.get(snApi.configIncidents);
+        if (res?.success && res.data?.assignmentGroup) {
+          const ag = res.data.assignmentGroup;
+          setConfiguredGroup(ag);
+          setCreateGroup(ag);
+          setChangeGroup(ag);
+        }
+      } catch { /* ignore */ }
+    })();
+
+    // Load timezone config
+    (async () => {
+      try {
+        const res = await ApiClient.get(snApi.configTimezone);
+        if (res?.success && res.data?.effectiveTimezone) {
+          setEffectiveTimezone(res.data.effectiveTimezone);
+        }
+      } catch { /* ignore */ }
+    })();
+
+    // Load change config for downtime field mapping info
+    (async () => {
+      try {
+        const res = await ApiClient.get(snApi.configChange);
+        if (res?.success) setChangeConfig(res.data);
+      } catch { /* ignore */ }
+    })();
+  }, [fetchOpenIncidents, fetchCloseCodes, fetchOpenChanges]);
+
+  // Pre-fill start/end dates in the configured timezone once loaded
+  useEffect(() => {
+    if (!effectiveTimezone) return;
+    const now = new Date();
+    const later = new Date(now.getTime() + 60 * 60 * 1000);
+    setChangeStart(formatInTz(now, effectiveTimezone));
+    setChangeEnd(formatInTz(later, effectiveTimezone));
+    setChangeDesc(`Test Change - ${formatInTz(now, effectiveTimezone).substring(0, 16)}`);
+  }, [effectiveTimezone]);
 
   // ── Assignment group search (debounced) ─────────────────────────────────
   useEffect(() => {
@@ -303,21 +410,96 @@ export default function ServiceNowTestIncidents() {
     }
   }, [closeIncident, closeNotes, closeCode, addOp, fetchOpenIncidents]);
 
+  // ── Create Change ────────────────────────────────────────────────────
+  const handleCreateChange = useCallback(async () => {
+    if (!changeDesc.trim()) return;
+    log.info('handleCreateChange', 'Creating change', { desc: changeDesc.substring(0, 60) });
+    setCreatingChange(true);
+    try {
+      const body = {
+        shortDescription: changeDesc,
+        startDate: changeStart || undefined,
+        endDate: changeEnd || undefined,
+      };
+      if (changeGroup) body.assignmentGroup = changeGroup;
+      const res = await ApiClient.post(snApi.changes, body);
+      if (res?.success) {
+        const taskInfo = res.data?.task ? ` + Task ${res.data.task.number}` : '';
+        addOp('CREATE CHANGE', true, res.message || `Change ${res.data?.number}${taskInfo} created`, res.data);
+        // Reset desc with new timestamp
+        setChangeDesc(`Test Change - ${formatInTz(new Date(), effectiveTimezone).substring(0, 16)}`);
+        fetchOpenChanges();
+        log.info('handleCreateChange', 'Change created', { number: res.data?.number, task: res.data?.task?.number });
+      } else {
+        addOp('CREATE CHANGE', false, res?.error?.message || 'Create change failed');
+      }
+    } catch (err) {
+      addOp('CREATE CHANGE', false, err.message);
+    } finally {
+      setCreatingChange(false);
+    }
+  }, [changeDesc, changeStart, changeEnd, changeGroup, addOp, effectiveTimezone, fetchOpenChanges]);
+
+  // ── Close Change ─────────────────────────────────────────────────────────
+  const handleCloseChange = useCallback(async () => {
+    if (!changeCloseSysId) return;
+    log.info('handleCloseChange', 'Closing change', { sysId: changeCloseSysId });
+    setClosingChange(true);
+    try {
+      const res = await ApiClient.post(snApi.changeClose(changeCloseSysId), {
+        closeNotes: changeCloseNotes || 'Closed via PulseOps Test Page',
+        state: '3',
+      });
+      if (res?.success) {
+        addOp('CLOSE CHANGE', true, res.message || 'Change closed', res.data);
+        setChangeCloseSysId('');
+        fetchOpenChanges();
+        log.info('handleCloseChange', 'Change closed');
+      } else {
+        addOp('CLOSE CHANGE', false, res?.error?.message || 'Close change failed');
+      }
+    } catch (err) {
+      addOp('CLOSE CHANGE', false, err.message);
+    } finally {
+      setClosingChange(false);
+    }
+  }, [changeCloseSysId, changeCloseNotes, addOp, fetchOpenChanges]);
+
   // ── Select styling helpers ─────────────────────────────────────────────
   const selectCls = 'w-full px-3 py-2 rounded-lg border border-surface-200 bg-white text-sm text-surface-700 focus:outline-none focus:ring-2 focus:ring-brand-300 focus:border-brand-400';
   const inputCls = selectCls;
   const btnPrimary = 'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50';
 
+  // Live clock in configured timezone
+  const clockNow = useTimezoneClock(effectiveTimezone);
+
   return (
     <div className="p-6 space-y-5 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-brand-50 flex items-center justify-center">
-          <ClipboardList size={20} className="text-brand-600" />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-brand-50 flex items-center justify-center">
+            <ClipboardList size={20} className="text-brand-600" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-surface-800">{t.title}</h1>
+            <p className="text-sm text-surface-500">{t.subtitle}</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-xl font-bold text-surface-800">{t.title}</h1>
-          <p className="text-sm text-surface-500">{t.subtitle}</p>
+        <div className="flex items-center gap-3 text-right">
+          <div className="flex flex-col items-end">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-surface-600">
+              <Globe size={12} className="text-brand-500" />
+              {effectiveTimezone}
+            </div>
+            <span className="text-sm font-mono text-surface-700">{clockNow}</span>
+          </div>
+          {configuredGroup && (
+            <div className="flex flex-col items-end border-l border-surface-200 pl-3">
+              <span className="text-[10px] font-semibold text-surface-400 uppercase tracking-wider">Assignment Group</span>
+              <span className="text-xs font-semibold text-brand-600">{configuredGroup}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -581,6 +763,111 @@ export default function ServiceNowTestIncidents() {
               {acknowledging ? <Loader2 size={14} className="animate-spin" /> : <MessageSquare size={14} />}
               {acknowledging ? 'Acknowledging...' : 'Test Auto Acknowledge'}
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Create & Close Change (end-to-end downtime test) ─────────── */}
+      <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-3 border-b border-surface-100 bg-indigo-50/50 flex items-center gap-2">
+          <CalendarRange size={15} className="text-indigo-600" />
+          <h3 className="text-sm font-bold text-surface-700">Create & Close Change</h3>
+          <span className="ml-auto text-[10px] text-surface-400 font-mono">
+            change_request + change_task
+          </span>
+        </div>
+        <div className="p-5 space-y-4">
+          {/* Info */}
+          <div className="text-xs text-surface-400 bg-surface-50 rounded-lg px-3 py-2 space-y-1">
+            <p>Creates a <strong>change_request</strong> + linked <strong>change_task</strong> (implementation task). Downtime dates are set on the task columns
+              (<span className="font-mono">{changeConfig?.downtimeMapping?.startDateField || 'work_start'}</span> / <span className="font-mono">{changeConfig?.downtimeMapping?.endDateField || 'work_end'}</span>).</p>
+            <p className="flex items-center gap-1"><Globe size={10} /> Times shown in <strong>{effectiveTimezone}</strong></p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Create Change */}
+            <div className="space-y-3">
+              <p className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Create Change</p>
+              <div>
+                <label className="text-xs font-semibold text-surface-600 mb-1 block">Short Description</label>
+                <input type="text" value={changeDesc} onChange={e => setChangeDesc(e.target.value)}
+                  placeholder="Test Change - ..." className={inputCls} />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-surface-600 mb-1 block">
+                  Start Date/Time <span className="font-normal text-surface-400">({effectiveTimezone})</span>
+                </label>
+                <input type="text" value={changeStart} onChange={e => setChangeStart(e.target.value)}
+                  placeholder="YYYY-MM-DD HH:MM:SS" className={inputCls} />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-surface-600 mb-1 block">
+                  End Date/Time <span className="font-normal text-surface-400">({effectiveTimezone})</span>
+                </label>
+                <input type="text" value={changeEnd} onChange={e => setChangeEnd(e.target.value)}
+                  placeholder="YYYY-MM-DD HH:MM:SS" className={inputCls} />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-surface-600 mb-1 block">
+                  <Users size={11} className="inline mr-1" />Assignment Group
+                </label>
+                <input type="text" value={changeGroup} onChange={e => setChangeGroup(e.target.value)}
+                  placeholder="From config..." className={inputCls} />
+                {changeGroup && (
+                  <p className="text-[10px] text-emerald-600 mt-0.5 flex items-center gap-1">
+                    <CheckCircle2 size={10} /> {changeGroup}
+                  </p>
+                )}
+              </div>
+              <button onClick={handleCreateChange} disabled={creatingChange || !changeDesc.trim()}
+                className={`${btnPrimary} bg-indigo-600 text-white hover:bg-indigo-700 w-full justify-center`}>
+                {creatingChange ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                {creatingChange ? 'Creating...' : 'Create Change + Task'}
+              </button>
+            </div>
+
+            {/* Close Change */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold text-rose-700 uppercase tracking-wider">Close Change</p>
+                <button onClick={fetchOpenChanges} disabled={openChangesLoading}
+                  className="p-1 rounded text-surface-400 hover:text-brand-600 hover:bg-brand-50 transition-colors disabled:opacity-40"
+                  title="Refresh open changes">
+                  <RefreshCw size={12} className={openChangesLoading ? 'animate-spin' : ''} />
+                </button>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-surface-600 mb-1 block">Select Open Change</label>
+                {openChangesLoading ? (
+                  <div className="flex items-center gap-2 px-3 py-2 text-xs text-surface-400">
+                    <Loader2 size={12} className="animate-spin" /> Loading open changes...
+                  </div>
+                ) : (
+                  <select value={changeCloseSysId} onChange={e => setChangeCloseSysId(e.target.value)} className={selectCls}>
+                    <option value="">— Select an open change —</option>
+                    {openChanges.map(c => (
+                      <option key={c.sysId} value={c.sysId}>
+                        {c.number} — {(c.shortDescription || '').slice(0, 50)}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <p className="text-[10px] text-surface-400 mt-0.5">
+                  {openChanges.length} open change(s) for {configuredGroup || 'all groups'}
+                </p>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-surface-600 mb-1 block">Close Notes</label>
+                <textarea value={changeCloseNotes} onChange={e => setChangeCloseNotes(e.target.value)}
+                  placeholder="Maintenance completed successfully." rows={2}
+                  className={`${inputCls} resize-none`} />
+              </div>
+              <button onClick={handleCloseChange} disabled={closingChange || !changeCloseSysId}
+                className={`${btnPrimary} bg-rose-600 text-white hover:bg-rose-700 w-full justify-center`}>
+                {closingChange ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
+                {closingChange ? 'Closing...' : 'Close Change'}
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -1,0 +1,401 @@
+{
+  "sideNav": {
+    "title": "HealthCheck",
+    "subtitle": "System Monitoring"
+  },
+  "navItems": {
+    "dashboard": "Dashboard",
+    "uptimeReport": "Uptime Report",
+    "downtime": "Downtime",
+    "config": "Configuration"
+  },
+  "common": {
+    "loading": "Loading...",
+    "saving": "Saving...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "close": "Close",
+    "refresh": "Refresh",
+    "search": "Search...",
+    "noData": "No data available.",
+    "fetchError": "Failed to load data.",
+    "actions": "Actions",
+    "status": "Status",
+    "name": "Name",
+    "url": "URL",
+    "description": "Description",
+    "category": "Category",
+    "active": "Active",
+    "inactive": "Inactive",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "yes": "Yes",
+    "no": "No",
+    "unknown": "Unknown",
+    "up": "UP",
+    "down": "DOWN"
+  },
+  "dashboard": {
+    "title": "HealthCheck Dashboard",
+    "subtitle": "Live monitoring status for all configured applications.",
+    "notConfiguredTitle": "No Applications Configured",
+    "notConfiguredSubtitle": "Add monitoring URLs in Configuration → Applications to start health monitoring.",
+    "goToConfig": "Go to Configuration",
+    "refresh": "Refresh",
+    "pollNow": "Poll Now",
+    "summary": {
+      "totalApps": "Total Applications",
+      "appsUp": "UP",
+      "appsDown": "DOWN",
+      "appsUnknown": "Unknown",
+      "pollsToday": "Polls Today",
+      "pollsMonth": "Polls This Month",
+      "upToday": "UP Today",
+      "downToday": "DOWN Today"
+    },
+    "poller": {
+      "title": "Poller Status",
+      "running": "Running",
+      "stopped": "Stopped",
+      "lastPoll": "Last Poll",
+      "pollCount": "Polls Since Start",
+      "interval": "Interval",
+      "seconds": "s",
+      "notStarted": "Not started"
+    },
+    "liveStatus": {
+      "title": "Live Health Status",
+      "subtitle": "Real-time probe results from the latest poll cycle.",
+      "noApps": "No active applications to monitor.",
+      "responseTime": "Response",
+      "httpCode": "HTTP",
+      "lastChecked": "Last Checked",
+      "textMatch": "Text Match",
+      "error": "Error",
+      "ms": "ms",
+      "passed": "Passed",
+      "failed": "Failed",
+      "na": "N/A"
+    },
+    "categories": {
+      "title": "By Category",
+      "noCategories": "No categories defined."
+    }
+  },
+  "uptimeReport": {
+    "title": "Monthly Uptime Report",
+    "subtitle": "SLA compliance, poll verification, and uptime metrics per application.",
+    "monthLabel": "Report Month",
+    "generateButton": "Generate Report",
+    "generating": "Generating...",
+    "exportButton": "Export",
+    "summary": {
+      "title": "Report Summary",
+      "month": "Month",
+      "totalApps": "Applications",
+      "intervalSeconds": "Poll Interval",
+      "expectedPollsTotal": "Expected Polls (Month)",
+      "expectedPollsElapsed": "Expected Polls (Elapsed)",
+      "elapsedMinutes": "Elapsed Minutes",
+      "totalMinutes": "Total Minutes in Month"
+    },
+    "grid": {
+      "application": "Application",
+      "category": "Category",
+      "slaTarget": "SLA Target %",
+      "actualUptime": "Actual Uptime %",
+      "verdict": "SLA Verdict",
+      "totalPolls": "Total Polls",
+      "upPolls": "UP Polls",
+      "downPolls": "DOWN Polls",
+      "expectedPolls": "Expected Polls",
+      "pollStatus": "Poll Status",
+      "actualDowntime": "Actual Downtime (min)",
+      "plannedDowntime": "Planned Downtime (min)",
+      "unplannedDowntime": "Unplanned Downtime (min)",
+      "plannedEntries": "Planned Entries",
+      "effectiveOperating": "Effective Operating (min)"
+    },
+    "verdict": {
+      "MET": "Met",
+      "NOT_MET": "Not Met",
+      "NO_DATA": "No Data"
+    },
+    "pollStatus": {
+      "ACCURATE": "Accurate",
+      "INCOMPLETE": "Incomplete"
+    },
+    "pollVerification": {
+      "title": "Poll Verification",
+      "subtitle": "Validates that polling coverage matches the expected frequency for accurate SLA calculations.",
+      "application": "Application",
+      "actualPolls": "Actual Polls",
+      "expectedPolls": "Expected Polls",
+      "coverage": "Coverage %",
+      "status": "Status",
+      "firstPoll": "First Poll",
+      "lastPoll": "Last Poll"
+    }
+  },
+  "downtime": {
+    "title": "Downtime Analysis",
+    "subtitle": "View unplanned and planned downtime windows.",
+    "monthLabel": "Month",
+    "appFilterLabel": "Application",
+    "allApps": "All Applications",
+    "loadButton": "Load",
+    "tabs": {
+      "unplanned": "Unplanned Downtime",
+      "planned": "Planned Downtime"
+    },
+    "unplanned": {
+      "title": "Unplanned Downtime Windows",
+      "subtitle": "Periods when monitored applications were DOWN without a planned maintenance window.",
+      "noData": "No unplanned downtime detected for this period.",
+      "grid": {
+        "application": "Application",
+        "startTime": "Start Time",
+        "endTime": "End Time",
+        "duration": "Duration (min)",
+        "pollCount": "Polls During Outage",
+        "errors": "Errors",
+        "type": "Type"
+      }
+    },
+    "planned": {
+      "title": "Planned Downtime",
+      "subtitle": "Maintenance windows — from ServiceNow Change/ITASK or manually entered.",
+      "noData": "No planned downtime entries for this period.",
+      "addButton": "Add Planned Downtime",
+      "syncButton": "Sync from ServiceNow",
+      "syncing": "Syncing...",
+      "grid": {
+        "changeNumber": "Change/ITASK #",
+        "changeType": "Type",
+        "description": "Description",
+        "application": "Application",
+        "startTime": "Start Time",
+        "endTime": "End Time",
+        "source": "Source",
+        "actions": "Actions"
+      },
+      "form": {
+        "title": "Add Planned Downtime",
+        "applicationLabel": "Application (optional — blank = all apps)",
+        "changeNumberLabel": "Change/ITASK Number",
+        "changeNumberPlaceholder": "CHG0012345",
+        "changeTypeLabel": "Type",
+        "changeTypeOptions": { "change": "Change", "itask": "ITASK" },
+        "descriptionLabel": "Short Description",
+        "descriptionPlaceholder": "Planned maintenance window",
+        "startTimeLabel": "Start Time",
+        "endTimeLabel": "End Time",
+        "sourceLabel": "Source",
+        "sourceOptions": { "manual": "Manual", "servicenow": "ServiceNow" }
+      }
+    }
+  },
+  "config": {
+    "title": "HealthCheck Configuration",
+    "subtitle": "Configure monitoring applications, poller settings, SLA targets, and planned downtime.",
+    "tabs": {
+      "pollerConfig": { "id": "hc_poller_config", "label": "Poller Configuration" },
+      "applications": { "id": "hc_applications", "label": "Applications" },
+      "categories": { "id": "hc_categories", "label": "Categories" },
+      "slaTargets": { "id": "hc_sla_targets", "label": "SLA Targets" },
+      "downtimeSource": { "id": "hc_downtime_source", "label": "Planned Downtime" },
+      "generalSettings": { "id": "hc_general_settings", "label": "General Settings" },
+      "dataManagement": { "id": "hc_data_management", "label": "Data Management" }
+    }
+  },
+  "pollerConfig": {
+    "title": "Poller Configuration",
+    "subtitle": "Configure the background health poller interval, timeout, and behavior.",
+    "enabledLabel": "Enable Background Poller",
+    "enabledDesc": "When enabled, the poller automatically checks all active applications at the configured interval.",
+    "intervalLabel": "Poll Interval (seconds)",
+    "intervalDesc": "Time between each poll cycle. Default: 60 seconds (1 minute).",
+    "intervalPlaceholder": "60",
+    "timeoutLabel": "HTTP Timeout (ms)",
+    "timeoutDesc": "Maximum time to wait for each HTTP probe response.",
+    "timeoutPlaceholder": "10000",
+    "retryLabel": "Retry on Failure",
+    "retryDesc": "Retry failed probes once before marking as DOWN.",
+    "maxRetriesLabel": "Max Retries",
+    "maxRetriesPlaceholder": "1",
+    "saveButton": "Save Poller Config",
+    "savingButton": "Saving...",
+    "pollerStatus": {
+      "title": "Current Poller Status",
+      "running": "Running",
+      "stopped": "Stopped",
+      "startButton": "Start Poller",
+      "stopButton": "Stop Poller",
+      "pollNowButton": "Poll Now",
+      "startingButton": "Starting...",
+      "stoppingButton": "Stopping...",
+      "pollingButton": "Polling...",
+      "lastPoll": "Last Poll",
+      "pollCount": "Polls Since Start",
+      "lastResult": "Last Result"
+    }
+  },
+  "applications": {
+    "title": "Monitored Applications",
+    "subtitle": "Add, edit, and manage the URLs to be monitored by the health poller.",
+    "addButton": "Add Application",
+    "noApps": "No applications configured. Add your first application to start monitoring.",
+    "grid": {
+      "name": "Name",
+      "url": "URL",
+      "category": "Category",
+      "expectedStatus": "Expected HTTP",
+      "expectedText": "Expected Text",
+      "timeout": "Timeout (ms)",
+      "slaTarget": "SLA Target %",
+      "active": "Active",
+      "actions": "Actions"
+    },
+    "form": {
+      "title": "Application Details",
+      "editTitle": "Edit Application",
+      "nameLabel": "Application Name",
+      "namePlaceholder": "My Production App",
+      "urlLabel": "URL to Monitor",
+      "urlPlaceholder": "https://example.com/health",
+      "categoryLabel": "Category",
+      "categoryPlaceholder": "Select a category...",
+      "noneOption": "None",
+      "expectedStatusLabel": "Expected HTTP Status Code",
+      "expectedStatusPlaceholder": "200",
+      "expectedTextLabel": "Expected Text in Response (optional)",
+      "expectedTextPlaceholder": "OK or any text that should be present",
+      "expectedTextDesc": "If specified, the response body must contain this text for the probe to be UP.",
+      "timeoutLabel": "Timeout (ms)",
+      "timeoutPlaceholder": "10000",
+      "slaTargetLabel": "SLA Target %",
+      "slaTargetPlaceholder": "99.00",
+      "descriptionLabel": "Description (optional)",
+      "descriptionPlaceholder": "Brief description of the application",
+      "sortOrderLabel": "Sort Order",
+      "sortOrderPlaceholder": "99",
+      "saveButton": "Save Application",
+      "savingButton": "Saving..."
+    },
+    "deleteConfirm": {
+      "title": "Delete Application",
+      "message": "This will permanently delete this application and all its poll history. This cannot be undone.",
+      "confirmButton": "Delete"
+    }
+  },
+  "categories": {
+    "title": "Categories",
+    "subtitle": "Define custom categories to group monitored applications.",
+    "addButton": "Add Category",
+    "noCategories": "No categories defined. Create categories to organize your applications.",
+    "grid": {
+      "name": "Name",
+      "description": "Description",
+      "color": "Color",
+      "appCount": "Applications",
+      "sortOrder": "Order",
+      "actions": "Actions"
+    },
+    "form": {
+      "title": "Category Details",
+      "editTitle": "Edit Category",
+      "nameLabel": "Category Name",
+      "namePlaceholder": "Production",
+      "descriptionLabel": "Description (optional)",
+      "descriptionPlaceholder": "Production environment services",
+      "colorLabel": "Color",
+      "sortOrderLabel": "Sort Order",
+      "sortOrderPlaceholder": "99",
+      "saveButton": "Save Category",
+      "savingButton": "Saving..."
+    },
+    "deleteConfirm": {
+      "title": "Delete Category",
+      "message": "Are you sure? Applications in this category will become uncategorized.",
+      "inUseMessage": "This category is assigned to {count} application(s). Remove them first or they will become uncategorized.",
+      "confirmButton": "Delete"
+    }
+  },
+  "slaTargets": {
+    "title": "SLA Targets",
+    "subtitle": "Override the default SLA target per application for a specific month. Applications without an override use their default target.",
+    "monthLabel": "Month",
+    "noTargets": "No SLA target overrides. Each application uses its configured default.",
+    "grid": {
+      "application": "Application",
+      "url": "URL",
+      "defaultTarget": "Default Target %",
+      "monthTarget": "Month Override %",
+      "isOverride": "Has Override",
+      "actions": "Actions"
+    },
+    "editLabel": "SLA Target %",
+    "editPlaceholder": "99.00",
+    "saveButton": "Save",
+    "savingButton": "Saving..."
+  },
+  "downtimeSource": {
+    "title": "Planned Downtime Source",
+    "subtitle": "Configure where to fetch planned downtime entries for SLA calculations.",
+    "enabledLabel": "Enable Planned Downtime Integration",
+    "enabledDesc": "When enabled, planned downtime windows are excluded from uptime SLA calculations.",
+    "sourceModuleLabel": "Source Module",
+    "sourceModuleDesc": "The module providing planned downtime data (e.g., ServiceNow).",
+    "apiUrlLabel": "Planned Downtime API URL",
+    "apiUrlPlaceholder": "/api/servicenow/planned-downtime",
+    "apiUrlDesc": "The REST API endpoint to fetch planned downtime entries. This should return JSON with start_time and end_time fields.",
+    "autoSyncLabel": "Auto Sync",
+    "autoSyncDesc": "Automatically sync planned downtime at the configured interval.",
+    "syncIntervalLabel": "Sync Interval (minutes)",
+    "syncIntervalPlaceholder": "60",
+    "saveButton": "Save Configuration",
+    "savingButton": "Saving...",
+    "manualSyncButton": "Sync Now",
+    "syncingButton": "Syncing..."
+  },
+  "generalSettings": {
+    "title": "General Settings",
+    "subtitle": "Default values applied to new applications and module-wide behavior.",
+    "defaultSlaLabel": "Default SLA Target %",
+    "defaultSlaDesc": "Applied to all new applications unless overridden.",
+    "defaultSlaPlaceholder": "99.00",
+    "defaultStatusCodeLabel": "Default Expected HTTP Status",
+    "defaultStatusCodeDesc": "Applied when creating new applications.",
+    "defaultStatusCodePlaceholder": "200",
+    "defaultTimeoutLabel": "Default Timeout (ms)",
+    "defaultTimeoutDesc": "Applied when creating new applications.",
+    "defaultTimeoutPlaceholder": "10000",
+    "saveButton": "Save Settings",
+    "savingButton": "Saving..."
+  },
+  "dataManagement": {
+    "title": "Data Management",
+    "subtitle": "View schema status, load default data, or reset all module data.",
+    "schemaStatus": "Schema Status",
+    "loadDefaultsButton": "Load Default Data",
+    "loadingDefaultsButton": "Loading...",
+    "resetButton": "Reset All Data",
+    "resettingButton": "Resetting...",
+    "resetConfirm": {
+      "title": "Reset Module Data",
+      "message": "This will drop ALL HealthCheck module tables and data. This action cannot be undone.",
+      "confirmButton": "Reset"
+    },
+    "tableColumns": {
+      "name": "Table",
+      "exists": "Exists",
+      "rowCount": "Rows",
+      "columns": "Columns",
+      "indexes": "Indexes"
+    }
+  }
+}

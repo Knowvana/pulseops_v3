@@ -30,7 +30,7 @@ export default function PageSpinner({
 
   if (modal) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm animate-fade-in">
+      <div className="absolute inset-0 z-30 flex items-center justify-center bg-white/70 backdrop-blur-[2px] animate-fade-in rounded-inherit">
         <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-4 border border-surface-200">
           <Loader size={32} className="animate-spin text-brand-500" />
           {message && <p className="text-sm text-surface-500 font-medium">{message}</p>}

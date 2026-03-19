@@ -1,0 +1,29 @@
+{
+  "id": "healthcheck",
+  "name": "HealthCheck",
+  "shortName": "HC",
+  "version": "1.0.0",
+  "description": "System HealthCheck — URL monitoring, uptime SLA tracking, health probes, and monthly uptime reports with planned downtime integration.",
+  "roles": ["super_admin", "admin", "user"],
+  "isCore": false,
+  "order": 3,
+  "defaultView": "dashboard",
+  "configDefaultTab": "hc_poller_config",
+  "moduleDetails": {
+    "features": [
+      "Live health probe dashboard for all monitored URLs",
+      "Configurable background poller with per-minute polling",
+      "User-defined monitoring URLs with custom categories",
+      "HTTP status code and optional text match verification",
+      "Monthly uptime SLA report with planned downtime exclusion",
+      "Poll verification — expected vs actual polls per month",
+      "Unplanned downtime detection and DataGrid view",
+      "Planned downtime sync from ServiceNow Change/ITASK",
+      "Per-application SLA target configuration",
+      "Poller status monitoring — running/paused, poll counts"
+    ],
+    "author": "PulseOps Team",
+    "license": "Proprietary",
+    "dependencies": []
+  }
+}

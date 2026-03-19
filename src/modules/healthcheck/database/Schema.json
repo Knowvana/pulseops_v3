@@ -1,0 +1,99 @@
+{
+  "_meta": {
+    "moduleId": "healthcheck",
+    "version": "1.0.0",
+    "description": "System HealthCheck Module — database schema. Tables are provisioned when the module is enabled via Module Manager. Stores monitored applications, custom categories, poll results, uptime SLA targets, and module configuration. Planned downtime is fetched live from ServiceNow API — no local table required."
+  },
+  "tables": [
+    {
+      "name": "hc_module_config",
+      "description": "Consolidated module configuration — key-value store with JSONB values. Keys: poller_config, general_settings, planned_downtime_source.",
+      "columns": [
+        { "name": "id",           "type": "SERIAL PRIMARY KEY" },
+        { "name": "config_key",   "type": "VARCHAR(100) UNIQUE NOT NULL" },
+        { "name": "config_value", "type": "JSONB NOT NULL DEFAULT '{}'::jsonb" },
+        { "name": "description",  "type": "TEXT" },
+        { "name": "created_at",   "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "updated_at",   "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_hc_module_config_key", "columns": ["config_key"], "unique": true }
+      ]
+    },
+    {
+      "name": "hc_categories",
+      "description": "User-defined categories for grouping monitored applications. Each app belongs to exactly one category.",
+      "columns": [
+        { "name": "id",           "type": "SERIAL PRIMARY KEY" },
+        { "name": "name",         "type": "VARCHAR(100) UNIQUE NOT NULL" },
+        { "name": "description",  "type": "TEXT" },
+        { "name": "color",        "type": "VARCHAR(20) DEFAULT '#6366f1'" },
+        { "name": "sort_order",   "type": "INTEGER NOT NULL DEFAULT 99" },
+        { "name": "created_at",   "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "updated_at",   "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_hc_categories_name", "columns": ["name"], "unique": true }
+      ]
+    },
+    {
+      "name": "hc_applications",
+      "description": "Monitored applications — each row is a URL endpoint to be polled. Includes expected HTTP status, optional text match, and SLA target.",
+      "columns": [
+        { "name": "id",                   "type": "SERIAL PRIMARY KEY" },
+        { "name": "name",                 "type": "VARCHAR(255) NOT NULL" },
+        { "name": "url",                  "type": "TEXT NOT NULL" },
+        { "name": "category_id",          "type": "INTEGER REFERENCES hc_categories(id) ON DELETE SET NULL" },
+        { "name": "expected_status_code", "type": "INTEGER NOT NULL DEFAULT 200" },
+        { "name": "expected_text",        "type": "TEXT" },
+        { "name": "timeout_ms",           "type": "INTEGER NOT NULL DEFAULT 10000" },
+        { "name": "is_active",            "type": "BOOLEAN NOT NULL DEFAULT TRUE" },
+        { "name": "sla_target_percent",   "type": "NUMERIC(5,2) NOT NULL DEFAULT 99.00" },
+        { "name": "description",          "type": "TEXT" },
+        { "name": "sort_order",           "type": "INTEGER NOT NULL DEFAULT 99" },
+        { "name": "created_at",           "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "updated_at",           "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_hc_applications_category",  "columns": ["category_id"],  "unique": false },
+        { "name": "idx_hc_applications_active",     "columns": ["is_active"],    "unique": false },
+        { "name": "idx_hc_applications_url",        "columns": ["url"],          "unique": false }
+      ]
+    },
+    {
+      "name": "hc_poll_results",
+      "description": "Individual poll results — one row per application per poll cycle. Status is UP or DOWN. Partitioned by month for performance at scale.",
+      "columns": [
+        { "name": "id",              "type": "BIGSERIAL PRIMARY KEY" },
+        { "name": "application_id",  "type": "INTEGER NOT NULL REFERENCES hc_applications(id) ON DELETE CASCADE" },
+        { "name": "status",          "type": "VARCHAR(10) NOT NULL" },
+        { "name": "http_status_code","type": "INTEGER" },
+        { "name": "response_time_ms","type": "INTEGER" },
+        { "name": "text_match",      "type": "BOOLEAN" },
+        { "name": "error_message",   "type": "TEXT" },
+        { "name": "polled_at",       "type": "TIMESTAMPTZ NOT NULL DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_hc_poll_results_app_id",     "columns": ["application_id"], "unique": false },
+        { "name": "idx_hc_poll_results_status",      "columns": ["status"],         "unique": false },
+        { "name": "idx_hc_poll_results_polled_at",   "columns": ["polled_at"],      "unique": false },
+        { "name": "idx_hc_poll_results_app_polled",  "columns": ["application_id", "polled_at"], "unique": false }
+      ]
+    },
+    {
+      "name": "hc_uptime_sla",
+      "description": "Monthly uptime SLA targets per application. One row per app per month. Stores the target percentage and is used for report generation.",
+      "columns": [
+        { "name": "id",                  "type": "SERIAL PRIMARY KEY" },
+        { "name": "application_id",      "type": "INTEGER NOT NULL REFERENCES hc_applications(id) ON DELETE CASCADE" },
+        { "name": "month",               "type": "VARCHAR(7) NOT NULL" },
+        { "name": "sla_target_percent",  "type": "NUMERIC(5,2) NOT NULL DEFAULT 99.00" },
+        { "name": "created_at",          "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "updated_at",          "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_hc_uptime_sla_app_month", "columns": ["application_id", "month"], "unique": true }
+      ]
+    }
+  ]
+}

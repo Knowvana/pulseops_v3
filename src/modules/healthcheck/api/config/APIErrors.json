@@ -1,0 +1,73 @@
+{
+  "_description": "HealthCheck module — all backend API error messages. All error strings must originate from this file.",
+
+  "config": {
+    "loadFailed":               "Failed to load config: {message}",
+    "saveFailed":               "Failed to save config: {message}",
+    "pollerConfigLoadFailed":   "Failed to load poller configuration: {message}",
+    "pollerConfigSaveFailed":   "Failed to save poller configuration: {message}",
+    "generalSettingsLoadFailed":"Failed to load general settings: {message}",
+    "generalSettingsSaveFailed":"Failed to save general settings: {message}",
+    "downtimeSourceLoadFailed": "Failed to load planned downtime source config: {message}",
+    "downtimeSourceSaveFailed": "Failed to save planned downtime source config: {message}"
+  },
+
+  "applications": {
+    "nameRequired":             "Application name is required.",
+    "urlRequired":              "Application URL is required.",
+    "urlInvalid":               "Application URL must be a valid HTTP or HTTPS URL.",
+    "fetchFailed":              "Failed to fetch applications: {message}",
+    "createFailed":             "Failed to create application: {message}",
+    "updateFailed":             "Failed to update application: {message}",
+    "deleteFailed":             "Failed to delete application: {message}",
+    "notFound":                 "Application not found."
+  },
+
+  "categories": {
+    "nameRequired":             "Category name is required.",
+    "fetchFailed":              "Failed to fetch categories: {message}",
+    "createFailed":             "Failed to create category: {message}",
+    "updateFailed":             "Failed to update category: {message}",
+    "deleteFailed":             "Failed to delete category: {message}",
+    "notFound":                 "Category not found.",
+    "inUse":                    "Category cannot be deleted — it is assigned to {count} application(s)."
+  },
+
+  "poller": {
+    "startFailed":              "Failed to start health poller: {message}",
+    "stopFailed":               "Failed to stop health poller: {message}",
+    "pollFailed":               "Health poll failed: {message}",
+    "statusFailed":             "Failed to get poller status: {message}",
+    "noActiveApps":             "No active applications to poll."
+  },
+
+  "reports": {
+    "uptimeFailed":             "Failed to generate uptime report: {message}",
+    "dashboardFailed":          "Failed to load dashboard data: {message}",
+    "downtimeFailed":           "Failed to load downtime data: {message}",
+    "pollHistoryFailed":        "Failed to load poll history: {message}",
+    "invalidMonth":             "Invalid month format. Expected YYYY-MM."
+  },
+
+  "sla": {
+    "targetInvalid":            "SLA target must be between 0 and 100.",
+    "saveFailed":               "Failed to save SLA target: {message}",
+    "fetchFailed":              "Failed to fetch SLA targets: {message}"
+  },
+
+  "plannedDowntime": {
+    "fetchFailed":              "Failed to fetch planned downtime: {message}",
+    "syncFailed":               "Failed to sync planned downtime from ServiceNow: {message}",
+    "createFailed":             "Failed to create planned downtime entry: {message}",
+    "deleteFailed":             "Failed to delete planned downtime entry: {message}",
+    "startTimeRequired":        "Start time is required.",
+    "endTimeRequired":          "End time is required.",
+    "endBeforeStart":           "End time must be after start time."
+  },
+
+  "data": {
+    "schemaInfoFailed":         "Failed to load schema info: {message}",
+    "loadDefaultsFailed":       "Failed to load default data: {message}",
+    "resetFailed":              "Failed to reset module data: {message}"
+  }
+}

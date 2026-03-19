@@ -1,0 +1,43 @@
+{
+  "_description": "HealthCheck module — all backend API success and informational messages. All message strings must originate from this file.",
+
+  "config": {
+    "pollerConfigSaved":        "Poller configuration saved successfully.",
+    "generalSettingsSaved":     "General settings saved successfully.",
+    "downtimeSourceSaved":      "Planned downtime source configuration saved successfully."
+  },
+
+  "applications": {
+    "created":                  "Application created successfully.",
+    "updated":                  "Application updated successfully.",
+    "deleted":                  "Application deleted successfully."
+  },
+
+  "categories": {
+    "created":                  "Category created successfully.",
+    "updated":                  "Category updated successfully.",
+    "deleted":                  "Category deleted successfully."
+  },
+
+  "poller": {
+    "started":                  "Health poller started. Polling {count} application(s) every {interval} seconds.",
+    "stopped":                  "Health poller stopped.",
+    "pollComplete":             "Poll cycle complete. {up} UP, {down} DOWN out of {total} application(s).",
+    "manualPollComplete":       "Manual poll complete. {up} UP, {down} DOWN out of {total} application(s)."
+  },
+
+  "sla": {
+    "saved":                    "SLA target saved successfully."
+  },
+
+  "plannedDowntime": {
+    "created":                  "Planned downtime entry created.",
+    "deleted":                  "Planned downtime entry deleted.",
+    "synced":                   "Planned downtime synced from ServiceNow. {count} entries imported."
+  },
+
+  "data": {
+    "loaded":                   "Default data loaded successfully. Seeded {tables} table(s), inserted {rows} row(s).",
+    "reset":                    "Module data deleted. Dropped {dropped} table(s) ({rows} row(s)), {skipped} not found, {errors} error(s)."
+  }
+}

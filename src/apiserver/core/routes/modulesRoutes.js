@@ -736,12 +736,14 @@ router.post('/:id/schema', authenticate, async (req, res) => {
         const columns = tableDef.columns || [];
         const compositePK = tableDef.primaryKey;
 
-        // Build column definitions
+        // Build column definitions — schema-qualify all REFERENCES to module tables
         const colDefs = columns.map(col => {
           let colType = col.type;
           if (colType.includes('pulseops.')) {
             colType = colType.replace(/pulseops\./g, `${schema}.`);
           }
+          // Schema-qualify bare REFERENCES table_name(col) so FK constraints resolve
+          colType = colType.replace(/REFERENCES\s+(?![\w]+\.)([\w]+)\(/gi, `REFERENCES ${schema}.$1(`);
           return `${col.name} ${colType}`;
         });
 

@@ -1,0 +1,128 @@
+{
+  "_meta": {
+    "moduleId": "healthcheck",
+    "version": "1.0.0",
+    "description": "Default seed data for the HealthCheck module. Loaded via Data Management → Load Default Data. Uses ON CONFLICT DO NOTHING so safe to run multiple times."
+  },
+  "hc_module_config": [
+    {
+      "config_key": "poller_config",
+      "config_value": {
+        "enabled": false,
+        "intervalSeconds": 60,
+        "timeoutMs": 10000,
+        "retryOnFailure": false,
+        "maxRetries": 1
+      },
+      "description": "Health poller configuration — interval, timeout, and retry settings."
+    },
+    {
+      "config_key": "general_settings",
+      "config_value": {
+        "defaultSlaTargetPercent": 99.00,
+        "defaultExpectedStatusCode": 200,
+        "defaultTimeoutMs": 10000
+      },
+      "description": "General module settings — default values for new applications."
+    },
+    {
+      "config_key": "planned_downtime_source",
+      "config_value": {
+        "enabled": false,
+        "sourceModule": "servicenow",
+        "apiUrl": "",
+        "autoSync": false,
+        "syncIntervalMinutes": 60
+      },
+      "description": "Planned downtime source configuration — where to fetch planned maintenance windows."
+    }
+  ],
+  "hc_categories": [
+    {
+      "name": "Production",
+      "description": "Production environment applications and services.",
+      "color": "#10b981",
+      "sort_order": 1
+    },
+    {
+      "name": "Staging",
+      "description": "Staging and pre-production environment applications.",
+      "color": "#f59e0b",
+      "sort_order": 2
+    },
+    {
+      "name": "Infrastructure",
+      "description": "Core infrastructure services — DNS, load balancers, databases.",
+      "color": "#6366f1",
+      "sort_order": 3
+    },
+    {
+      "name": "External",
+      "description": "Third-party external services and APIs.",
+      "color": "#8b5cf6",
+      "sort_order": 4
+    }
+  ],
+  "hc_applications": [
+    {
+      "name": "Google Homepage",
+      "url": "https://www.google.com",
+      "category_id": 4,
+      "expected_status_code": 200,
+      "expected_text": "Google",
+      "timeout_ms": 10000,
+      "is_active": true,
+      "sla_target_percent": 99.95,
+      "description": "Google homepage — page text monitoring. Checks for 'Google' in the HTML response body.",
+      "sort_order": 1
+    },
+    {
+      "name": "GitHub API Status",
+      "url": "https://www.githubstatus.com/api/v2/status.json",
+      "category_id": 4,
+      "expected_status_code": 200,
+      "expected_text": null,
+      "timeout_ms": 10000,
+      "is_active": true,
+      "sla_target_percent": 99.90,
+      "description": "GitHub Status API — JSON endpoint that returns current platform status. Monitors API response code 200.",
+      "sort_order": 2
+    },
+    {
+      "name": "JSONPlaceholder REST API",
+      "url": "https://jsonplaceholder.typicode.com/posts/1",
+      "category_id": 4,
+      "expected_status_code": 200,
+      "expected_text": "sunt aut facere",
+      "timeout_ms": 8000,
+      "is_active": true,
+      "sla_target_percent": 99.00,
+      "description": "JSONPlaceholder fake REST API — fetches post #1 and checks for expected title text in JSON response.",
+      "sort_order": 3
+    },
+    {
+      "name": "httpbin HTTP Status Check",
+      "url": "https://httpbin.org/status/200",
+      "category_id": 3,
+      "expected_status_code": 200,
+      "expected_text": null,
+      "timeout_ms": 15000,
+      "is_active": true,
+      "sla_target_percent": 98.00,
+      "description": "httpbin status endpoint — returns HTTP 200. Used to test basic connectivity and response code monitoring.",
+      "sort_order": 4
+    },
+    {
+      "name": "Microsoft Azure Status Page",
+      "url": "https://status.azure.com/en-us/status",
+      "category_id": 4,
+      "expected_status_code": 200,
+      "expected_text": "Azure",
+      "timeout_ms": 15000,
+      "is_active": true,
+      "sla_target_percent": 99.90,
+      "description": "Microsoft Azure status page — page text monitoring. Verifies 'Azure' appears in the response HTML.",
+      "sort_order": 5
+    }
+  ]
+}

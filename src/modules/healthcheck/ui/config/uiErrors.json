@@ -1,0 +1,37 @@
+{
+  "_description": "HealthCheck module — all frontend UI error messages.",
+  "common": {
+    "fetchError": "Failed to load data. Please try again.",
+    "saveError": "Failed to save. Please try again.",
+    "networkError": "Network error. Check your connection.",
+    "unexpectedError": "An unexpected error occurred."
+  },
+  "applications": {
+    "nameRequired": "Application name is required.",
+    "urlRequired": "Application URL is required.",
+    "urlInvalid": "URL must start with http:// or https://",
+    "createFailed": "Failed to create application.",
+    "updateFailed": "Failed to update application.",
+    "deleteFailed": "Failed to delete application."
+  },
+  "categories": {
+    "nameRequired": "Category name is required.",
+    "createFailed": "Failed to create category.",
+    "updateFailed": "Failed to update category.",
+    "deleteFailed": "Failed to delete category."
+  },
+  "poller": {
+    "startFailed": "Failed to start poller.",
+    "stopFailed": "Failed to stop poller.",
+    "pollFailed": "Manual poll failed."
+  },
+  "reports": {
+    "loadFailed": "Failed to load report.",
+    "invalidMonth": "Invalid month format. Use YYYY-MM."
+  },
+  "plannedDowntime": {
+    "syncFailed": "Failed to sync planned downtime.",
+    "createFailed": "Failed to create downtime entry.",
+    "deleteFailed": "Failed to delete downtime entry."
+  }
+}

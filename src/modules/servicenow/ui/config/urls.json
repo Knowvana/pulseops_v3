@@ -26,6 +26,17 @@
     "reports":           "/api/servicenow/reports",
     "reportIncidents":   "/api/servicenow/reports/incidents",
     "reportRitms":       "/api/servicenow/reports/ritms",
-    "reportSla":         "/api/servicenow/reports/sla"
+    "reportSla":         "/api/servicenow/reports/sla",
+
+    "configChange":              "/api/servicenow/config/change",
+    "configChangeColumns":       "/api/servicenow/config/change/columns",
+    "configChangeDowntimeMapping": "/api/servicenow/config/change/downtime-mapping",
+    "schemaChangeColumns":       "/api/servicenow/schema/change-columns",
+    "plannedDowntime":           "/api/servicenow/planned-downtime",
+    "plannedDowntimeSync":       "/api/servicenow/planned-downtime/sync",
+
+    "changes":                   "/api/servicenow/changes",
+    "changesOpen":               "/api/servicenow/changes/open",
+    "changeClose":               "/api/servicenow/changes/{sysId}/close"
   }
 }

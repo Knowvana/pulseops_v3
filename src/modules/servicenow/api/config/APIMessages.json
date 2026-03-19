@@ -57,5 +57,14 @@
   "data": {
     "loaded":                   "Default data loaded successfully. Seeded {tables} table(s), inserted {rows} row(s).",
     "reset":                    "Module data deleted. Dropped {dropped} table(s) ({rows} row(s)), {skipped} not found, {errors} error(s)."
+  },
+
+  "change": {
+    "configSaved":              "Change configuration saved successfully."
+  },
+
+  "plannedDowntime": {
+    "fetched":                  "Fetched {count} planned downtime entries.",
+    "synced":                   "Synced {count} planned downtime entries from ServiceNow."
   }
 }

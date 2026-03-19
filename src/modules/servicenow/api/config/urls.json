@@ -66,6 +66,19 @@
     "autoAckTest":                   "/auto-acknowledge/test",
     "autoAckLog":                    "/auto-acknowledge/log",
     "autoAckLogHistory":             "/auto-acknowledge/log/history",
-    "searchAssignmentGroups":        "/search/assignment-groups"
+    "searchAssignmentGroups":        "/search/assignment-groups",
+
+    "configChange":                  "/config/change",
+    "configChangeColumns":           "/config/change/columns",
+    "configChangeDowntimeMapping":   "/config/change/downtime-mapping",
+    "schemaChangeColumns":           "/schema/change-columns",
+    "schemaChangeColumnValues":      "/schema/change-columns/:columnName/values",
+    "plannedDowntime":               "/planned-downtime",
+    "plannedDowntimeSync":           "/planned-downtime/sync",
+
+    "changes":                       "/changes",
+    "changesOpen":                   "/changes/open",
+    "changeById":                    "/changes/:sysId",
+    "changeClose":                   "/changes/:sysId/close"
   }
 }

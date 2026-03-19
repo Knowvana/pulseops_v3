@@ -1,0 +1,40 @@
+{
+  "_description": "HealthCheck module — all internal API route paths. Zero hardcoding in route files.",
+
+  "routes": {
+    "config":                     "/config",
+    "configPoller":               "/config/poller",
+    "configGeneral":              "/config/general",
+    "configDowntimeSource":       "/config/downtime-source",
+
+    "applications":               "/applications",
+    "applicationById":            "/applications/:id",
+    "applicationToggle":          "/applications/:id/toggle",
+
+    "categories":                 "/categories",
+    "categoryById":               "/categories/:id",
+
+    "pollerStatus":               "/poller/status",
+    "pollerStart":                "/poller/start",
+    "pollerStop":                 "/poller/stop",
+    "pollerPollNow":              "/poller/poll-now",
+
+    "dashboard":                  "/dashboard",
+    "dashboardLive":              "/dashboard/live",
+
+    "reportUptime":               "/reports/uptime",
+    "reportDowntime":             "/reports/downtime",
+    "reportPollVerification":     "/reports/poll-verification",
+
+    "slaTargets":                 "/sla",
+    "slaTargetById":              "/sla/:id",
+
+    "plannedDowntime":            "/planned-downtime",
+    "plannedDowntimeById":        "/planned-downtime/:id",
+    "plannedDowntimeSync":        "/planned-downtime/sync",
+
+    "schemaInfo":                 "/schema/info",
+    "dataDefaults":               "/data/defaults",
+    "dataReset":                  "/data/reset"
+  }
+}

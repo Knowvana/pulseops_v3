@@ -30,7 +30,7 @@
 // ============================================================================
 
 import React from 'react';
-import { Headset, LayoutDashboard, BarChart3, Sliders, Wifi, Clock, RefreshCw, ListFilter, ClipboardList, CalendarClock, Settings, Database, Columns, ShieldCheck, FileText, ListChecks, TrendingUp, Users, MessageSquare, Globe } from 'lucide-react';
+import { Headset, LayoutDashboard, BarChart3, Sliders, Wifi, Clock, RefreshCw, ListFilter, ClipboardList, CalendarClock, Settings, Database, Columns, ShieldCheck, FileText, ListChecks, TrendingUp, Users, MessageSquare, Globe, CalendarRange } from 'lucide-react';
 import moduleConstants from './config/constants.json';
 import uiText from './config/uiText.json';
 
@@ -42,6 +42,7 @@ import IncidentSlaReportView            from './views/IncidentSlaReportView';
 import IncidentResponseSlaReportView    from './views/IncidentResponseSlaReportView';
 import IncidentAnalyticsView             from './views/IncidentAnalyticsView';
 import RitmReportsView                   from './views/RitmReportsView';
+import PlannedDowntimeView               from './views/PlannedDowntimeView';
 
 // ── Config Tab Components (lazy-mounted via render functions) ─────────────────
 import ServiceNowConnectionTab         from './components/settings/ServiceNowConnectionTab';
@@ -55,6 +56,7 @@ import ServiceNowConfigSettingsTab  from './components/settings/ServiceNowConfig
 import ServiceNowDataManagementTab  from './components/settings/ServiceNowDataManagementTab';
 import ServiceNowAutoAcknowledgeTab  from './components/settings/ServiceNowAutoAcknowledgeTab';
 import ServiceNowTimezoneTab         from './components/settings/ServiceNowTimezoneTab';
+import ServiceNowChangeConfigTab     from './components/settings/ServiceNowChangeConfigTab';
 
 const navText = uiText.navItems;
 const cfgText = uiText.config;
@@ -80,6 +82,8 @@ const servicenowManifest = {
     { id: 'incidentAnalytics',          label: 'Incident Analytics',              icon: TrendingUp,    indent: true },
     { id: 'ritmReports',        label: 'RITMs',                icon: ListChecks,    indent: true },
     { type: 'separator' },
+    { id: 'plannedDowntime',  label: 'Planned Downtime',      icon: CalendarRange     },
+    { type: 'separator' },
     { id: 'config',           label: navText.config,          icon: Sliders          },
   ],
 
@@ -98,6 +102,7 @@ const servicenowManifest = {
     incidentResponseSlaReport:  IncidentResponseSlaReportView,
     incidentAnalytics:          IncidentAnalyticsView,
     ritmReports:        RitmReportsView,
+    plannedDowntime:    PlannedDowntimeView,
   }),
 
   /**
@@ -167,10 +172,25 @@ const servicenowManifest = {
       ],
     },
     {
+      type: 'section',
+      id: 'change_configuration_section',
+      label: 'Change Configuration',
+      icon: CalendarRange,
+      defaultExpanded: true,
+      separator: true,
+      children: [
+        {
+          id:      'changeConfig',
+          label:   'Change Configuration',
+          icon:    CalendarRange,
+          content: () => <ServiceNowChangeConfigTab />,
+        },
+      ],
+    },
+    {
       id:      cfgText.tabs.sync.id,
       label:   cfgText.tabs.sync.label,
       icon:    RefreshCw,
-      separator: true,
       content: () => <ServiceNowSyncTab />,
     },
     {

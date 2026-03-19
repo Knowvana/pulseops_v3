@@ -4,7 +4,8 @@
   "config": {
     "pollerConfigSaved":        "Poller configuration saved successfully.",
     "generalSettingsSaved":     "General settings saved successfully.",
-    "downtimeSourceSaved":      "Planned downtime source configuration saved successfully."
+    "downtimeSourceSaved":      "Planned downtime source configuration saved successfully.",
+    "globalSlaSaved":           "Global SLA configuration saved successfully."
   },
 
   "applications": {

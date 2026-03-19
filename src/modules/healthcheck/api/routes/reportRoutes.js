@@ -21,10 +21,8 @@ import { Router } from 'express';
 import { hcUrls, apiErrors, apiMessages } from '#modules/healthcheck/api/config/index.js';
 import { dbSchema, DatabaseService, loadDowntimeSourceConfig } from '#modules/healthcheck/api/routes/helpers.js';
 import { getLatestStatus } from '#modules/healthcheck/api/services/PollerService.js';
-import {
-  getMonthlyUptimeReport, getPollVerification,
-  getUnplannedDowntime, getDashboardSummary,
-} from '#modules/healthcheck/api/services/UptimeReportService.js';
+import { getMonthlyUptimeReport, getPollVerification, getUnplannedDowntime, getDashboardSummary } from '#modules/healthcheck/api/services/UptimeReportService.js';
+import { subscribeToEvents } from '#modules/healthcheck/api/services/PollerService.js';
 import { createHcLogger } from '#modules/healthcheck/api/lib/moduleLogger.js';
 
 const log = createHcLogger('reportRoutes.js');
@@ -260,6 +258,33 @@ router.post(routes.plannedDowntimeSync, async (req, res) => {
     log.error('POST planned downtime sync failed', { message: err.message });
     res.status(500).json({ success: false, error: { message: apiErrors.plannedDowntime.syncFailed.replace('{message}', err.message) } });
   }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SERVER-SENT EVENTS (SSE) — Real-time Poll Completion Events
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ── GET /events/poll ─────────────────────────────────────────────────────────
+// SSE endpoint for real-time poll completion events
+router.get(routes.pollEvents, (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  log.info('SSE client connected for poll events');
+
+  // Subscribe to poll events
+  const unsubscribe = subscribeToEvents(res);
+
+  // Handle client disconnect
+  req.on('close', () => {
+    unsubscribe();
+    res.end();
+  });
+
+  // Send initial connection confirmation
+  res.write(`data: ${JSON.stringify({ type: 'connected', timestamp: new Date().toISOString() })}\n\n`);
 });
 
 export default router;

@@ -1,50 +1,44 @@
 // ============================================================================
-// SLATargetsTab — HealthCheck Module Config
+// SLATargetsTab → Global SLA Configuration Tab
 //
-// PURPOSE: View and override monthly SLA targets per application. Apps without
-// an override use their configured default SLA target %.
+// PURPOSE: Single global monthly SLA target % applied to all categories
+//          marked for Uptime SLA calculation. Replaces per-app SLA targets.
 //
 // USED BY: manifest.jsx → getConfigTabs()
 // ============================================================================
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  Loader2, CheckCircle2, AlertCircle, Save, Target,
-} from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle, Save, X, Target, Shield } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
 import uiText from '../../config/uiText.json';
 import urls from '../../config/urls.json';
 
 const log = createLogger('SLATargetsTab.jsx');
-const t = uiText.slaTargets;
+const t = uiText.globalSla;
 const api = urls.api;
 
-function currentMonth() {
-  const now = new Date();
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
-}
-
 export default function SLATargetsTab() {
-  const [targets, setTargets] = useState([]);
-  const [month, setMonth] = useState(currentMonth());
+  const [config, setConfig] = useState({ slaTargetPercent: 99, measurementPeriod: 'monthly' });
   const [loading, setLoading] = useState(true);
-  const [savingId, setSavingId] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-  const [editValues, setEditValues] = useState({});
+  const [inputValue, setInputValue] = useState('99');
   const initRan = useRef(false);
 
-  const loadData = useCallback(async (m) => {
-    setLoading(true);
+  const loadData = useCallback(async () => {
     try {
-      const res = await ApiClient.get(`${api.slaTargets}?month=${m || month}`);
-      if (res?.success) setTargets(res.data || []);
+      const res = await ApiClient.get(api.configGlobalSla);
+      if (res?.success && res.data) {
+        setConfig(res.data);
+        setInputValue(String(res.data.slaTargetPercent ?? 99));
+      }
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [month]);
+  }, []);
 
   useEffect(() => {
     if (initRan.current) return;
@@ -52,112 +46,101 @@ export default function SLATargetsTab() {
     loadData();
   }, [loadData]);
 
-  const handleMonthChange = (val) => {
-    setMonth(val);
-    loadData(val);
-  };
-
-  const handleSave = useCallback(async (appId) => {
-    const val = editValues[appId];
-    if (val === undefined || val === null) return;
-    setSavingId(appId);
+  const handleSave = useCallback(async () => {
+    const val = parseFloat(inputValue);
+    if (isNaN(val) || val < 0 || val > 100) {
+      setError('SLA target must be between 0 and 100.');
+      return;
+    }
+    setSaving(true);
     setError(null);
     try {
-      const res = await ApiClient.put(api.slaTargetById.replace('{id}', appId), {
-        month,
-        sla_target_percent: parseFloat(val),
-      });
+      const payload = { slaTargetPercent: val, measurementPeriod: 'monthly' };
+      const res = await ApiClient.put(api.configGlobalSla, payload);
       if (res?.success) {
-        setSuccess(res.message);
-        setTimeout(() => setSuccess(null), 3000);
-        await loadData();
-        setEditValues(p => { const n = { ...p }; delete n[appId]; return n; });
+        setConfig(res.data || payload);
+        setSuccess(t.savedMessage);
       } else {
         setError(res?.error?.message || 'Save failed');
       }
     } catch (err) {
       setError(err.message);
     } finally {
-      setSavingId(null);
+      setSaving(false);
     }
-  }, [editValues, month, loadData]);
+  }, [inputValue]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="animate-spin text-brand-500" size={24} />
+        <span className="ml-2 text-surface-500">{uiText.common.loading}</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-bold text-surface-800">{t.title}</h3>
-          <p className="text-xs text-surface-500">{t.subtitle}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-surface-600">{t.monthLabel}</label>
-          <input type="month" value={month} onChange={e => handleMonthChange(e.target.value)}
-            className="px-3 py-1.5 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none" />
-        </div>
+      <div>
+        <h3 className="text-sm font-bold text-surface-800">{t.title}</h3>
+        <p className="text-xs text-surface-500">{t.subtitle}</p>
       </div>
 
       {error && (
         <div className="flex items-center gap-2 px-3 py-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg">
           <AlertCircle size={14} /> {error}
+          <button onClick={() => setError(null)} className="ml-auto"><X size={12} /></button>
         </div>
       )}
       {success && (
         <div className="flex items-center gap-2 px-3 py-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg">
           <CheckCircle2 size={14} /> {success}
+          <button onClick={() => setSuccess(null)} className="ml-auto"><X size={12} /></button>
         </div>
       )}
 
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="animate-spin text-brand-500" size={24} />
+      {/* Current SLA Display */}
+      <div className="bg-gradient-to-r from-brand-50 to-indigo-50 border border-brand-200 rounded-xl p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-brand-100">
+            <Shield size={20} className="text-brand-600" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-surface-800">{t.currentLabel}</h4>
+            <p className="text-xs text-surface-500">{t.measurementLabel}: {t.measurementValue}</p>
+          </div>
+          <div className="ml-auto">
+            <span className="text-3xl font-black text-brand-700">{config.slaTargetPercent}%</span>
+          </div>
         </div>
-      ) : targets.length === 0 ? (
-        <div className="text-center py-12 text-sm text-surface-400">{t.noTargets}</div>
-      ) : (
-        <div className="overflow-x-auto border border-surface-200 rounded-xl">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="bg-surface-50 border-b border-surface-200">
-                <th className="px-3 py-2.5 text-left font-semibold text-surface-600">{t.grid.application}</th>
-                <th className="px-3 py-2.5 text-left font-semibold text-surface-600">{t.grid.url}</th>
-                <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.grid.defaultTarget}</th>
-                <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.grid.monthTarget}</th>
-                <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.grid.isOverride}</th>
-                <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.grid.actions}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {targets.map(row => (
-                <tr key={row.applicationId} className="border-b border-surface-100 hover:bg-surface-50/50">
-                  <td className="px-3 py-2.5 font-medium text-surface-800">{row.appName}</td>
-                  <td className="px-3 py-2.5 text-surface-500 max-w-[200px] truncate">{row.appUrl}</td>
-                  <td className="px-3 py-2.5 text-center">{row.slaTargetPercent}%</td>
-                  <td className="px-3 py-2.5 text-center">
-                    <input type="number" step="0.01" min="0" max="100"
-                      value={editValues[row.applicationId] !== undefined ? editValues[row.applicationId] : row.slaTargetPercent}
-                      onChange={e => setEditValues(p => ({ ...p, [row.applicationId]: e.target.value }))}
-                      className="w-20 px-2 py-1 text-xs text-center border border-surface-200 rounded focus:ring-1 focus:ring-brand-200 outline-none" />
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
-                    {row.isOverride
-                      ? <span className="text-amber-600 font-medium">Yes</span>
-                      : <span className="text-surface-300">No</span>}
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
-                    <button onClick={() => handleSave(row.applicationId)}
-                      disabled={savingId === row.applicationId || editValues[row.applicationId] === undefined}
-                      className="px-2 py-1 text-xs font-medium text-brand-600 bg-brand-50 border border-brand-200 rounded hover:bg-brand-100 disabled:opacity-40">
-                      {savingId === row.applicationId
-                        ? <Loader2 size={12} className="animate-spin inline" />
-                        : <><Save size={10} className="inline mr-0.5" /> {t.saveButton}</>}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      </div>
+
+      {/* Edit SLA */}
+      <div className="bg-surface-50 border border-surface-200 rounded-xl p-5 space-y-4">
+        <div>
+          <label className="block text-xs font-medium text-surface-600 mb-1">{t.slaInputLabel}</label>
+          <div className="flex items-center gap-3">
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              value={inputValue}
+              onChange={e => setInputValue(e.target.value)}
+              className="w-32 px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
+              placeholder={t.slaInputPlaceholder}
+            />
+            <span className="text-sm font-medium text-surface-500">%</span>
+          </div>
+          <p className="text-xs text-surface-400 mt-2">{t.slaInputDesc}</p>
         </div>
-      )}
+        <div className="flex items-center gap-2 pt-1">
+          <button onClick={handleSave} disabled={saving}
+            className="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 disabled:opacity-50 flex items-center gap-1.5">
+            {saving ? <><Loader2 size={14} className="animate-spin" /> {t.savingButton}</> : <><Save size={14} /> {t.saveButton}</>}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

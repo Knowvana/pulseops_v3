@@ -4,6 +4,13 @@
 // PURPOSE: Server-side calculation engine for all uptime/SLA reports.
 //   All calculations are done here — frontend receives ready-to-display JSON.
 //
+// ARCHITECTURE:
+//   - Global SLA % (single value, measured monthly) from hc_module_config
+//   - Only apps in categories with used_for_sla=true are included in reports
+//   - Planned downtime fetched LIVE from ServiceNow API (no local table)
+//   - Expected polls calculated from poller start time saved in config
+//   - Unplanned downtime = Total downtime - Planned downtime
+//
 // FUNCTIONS:
 //   - getMonthlyUptimeReport(month)    → Full SLA report per app with verdicts
 //   - getPollVerification(month)       → Expected vs actual polls per app
@@ -12,7 +19,7 @@
 //
 // MONTH FORMAT: 'YYYY-MM' (e.g. '2026-03')
 // ============================================================================
-import { dbSchema, DatabaseService, loadPollerConfig, loadDowntimeSourceConfig } from '#modules/healthcheck/api/routes/helpers.js';
+import { dbSchema, DatabaseService, loadPollerConfig, loadDowntimeSourceConfig, loadGlobalSlaConfig } from '#modules/healthcheck/api/routes/helpers.js';
 import { createHcLogger } from '#modules/healthcheck/api/lib/moduleLogger.js';
 import { getStatus as getPollerStatus, getLatestStatus } from '#modules/healthcheck/api/services/PollerService.js';
 
@@ -35,17 +42,17 @@ function minutesBetween(a, b) {
 }
 
 /**
- * Calculate total planned downtime minutes for an app in a month.
+ * Calculate total planned downtime minutes from SNOW downtime entries.
  * Overlapping windows are merged before summing.
  */
-function calcPlannedDowntimeMinutes(downtimeRows, monthStart, monthEnd) {
-  if (!downtimeRows || downtimeRows.length === 0) return 0;
+function calcPlannedDowntimeMinutes(downtimeEntries, monthStart, monthEnd) {
+  if (!downtimeEntries || downtimeEntries.length === 0) return 0;
 
   // Clip windows to month boundaries and sort
-  const windows = downtimeRows
+  const windows = downtimeEntries
     .map(r => ({
-      start: new Date(Math.max(new Date(r.start_time).getTime(), monthStart.getTime())),
-      end:   new Date(Math.min(new Date(r.end_time).getTime(),   monthEnd.getTime())),
+      start: new Date(Math.max(new Date(r.start_time || r.startTime).getTime(), monthStart.getTime())),
+      end:   new Date(Math.min(new Date(r.end_time || r.endTime).getTime(),   monthEnd.getTime())),
     }))
     .filter(w => w.end > w.start)
     .sort((a, b) => a.start - b.start);
@@ -66,6 +73,34 @@ function calcPlannedDowntimeMinutes(downtimeRows, monthStart, monthEnd) {
   return merged.reduce((sum, w) => sum + minutesBetween(w.start, w.end), 0);
 }
 
+/**
+ * Fetch planned downtime entries from ServiceNow API (live, no local DB).
+ * Returns array of { start_time, end_time, change_number, ... } or empty array.
+ */
+async function fetchPlannedDowntimeFromSnow(monthStart, monthEnd) {
+  try {
+    const dtConfig = await loadDowntimeSourceConfig();
+    if (!dtConfig.enabled || !dtConfig.apiUrl) {
+      log.debug('Planned downtime integration disabled or no API URL configured');
+      return [];
+    }
+
+    const url = `${dtConfig.apiUrl}?start=${monthStart.toISOString()}&end=${monthEnd.toISOString()}`;
+    log.info('Fetching planned downtime from SNOW API', { url });
+
+    const response = await fetch(`http://localhost:${process.env.PORT || 1001}${url}`);
+    if (!response.ok) {
+      log.warn('SNOW planned downtime API returned non-OK', { status: response.status });
+      return [];
+    }
+    const json = await response.json();
+    return json.data || json.entries || json || [];
+  } catch (err) {
+    log.warn('Failed to fetch planned downtime from SNOW', { message: err.message });
+    return [];
+  }
+}
+
 // ── Monthly Uptime Report ────────────────────────────────────────────────────
 
 export async function getMonthlyUptimeReport(monthStr) {
@@ -75,27 +110,40 @@ export async function getMonthlyUptimeReport(monthStr) {
 
   log.info('Generating monthly uptime report', { month: monthStr });
 
+  // Load global SLA config
+  const globalSla = await loadGlobalSlaConfig();
+  const slaTarget = globalSla.slaTargetPercent || 99;
+
   // Calculate how far into the month we are (for current month partial calc)
   const now = new Date();
+  const isCurrentMonth = now >= monthStart && now < monthEnd;
   const effectiveEnd = now < monthEnd ? now : monthEnd;
   const totalMinutesInMonth = minutesBetween(monthStart, monthEnd);
   const elapsedMinutes = minutesBetween(monthStart, effectiveEnd);
 
-  // Load all active apps
-  const appsResult = await DatabaseService.query(
-    `SELECT a.*, c.name as category_name, c.color as category_color
-     FROM ${dbSchema}.hc_applications a
-     LEFT JOIN ${dbSchema}.hc_categories c ON a.category_id = c.id
-     WHERE a.is_active = true
-     ORDER BY a.sort_order, a.name`
-  );
-  const apps = appsResult.rows || [];
-
   // Load poller config for expected poll count calculation
   const pollerConfig = await loadPollerConfig();
   const intervalSeconds = pollerConfig.intervalSeconds || 60;
+  const pollerStartTime = pollerConfig.pollerStartTime ? new Date(pollerConfig.pollerStartTime) : null;
+
+  // Calculate expected polls based on poller start time
+  const effectivePollerStart = pollerStartTime && pollerStartTime > monthStart ? pollerStartTime : monthStart;
+  const pollingMinutes = minutesBetween(effectivePollerStart, effectiveEnd);
   const expectedPollsTotal = Math.floor(totalMinutesInMonth / (intervalSeconds / 60));
-  const expectedPollsElapsed = Math.floor(elapsedMinutes / (intervalSeconds / 60));
+  const expectedPollsElapsed = Math.floor(pollingMinutes / (intervalSeconds / 60));
+
+  // Load only active apps in categories with used_for_sla = true
+  const appsResult = await DatabaseService.query(
+    `SELECT a.*, c.name as category_name, c.color as category_color, c.used_for_sla
+     FROM ${dbSchema}.hc_applications a
+     LEFT JOIN ${dbSchema}.hc_categories c ON a.category_id = c.id
+     WHERE a.is_active = true AND c.used_for_sla = true
+     ORDER BY c.sort_order, a.sort_order, a.name`
+  );
+  const apps = appsResult.rows || [];
+
+  // Fetch planned downtime from SNOW API (live — no local DB table)
+  const plannedDowntimeEntries = await fetchPlannedDowntimeFromSnow(monthStart, monthEnd);
 
   const report = [];
 
@@ -114,33 +162,17 @@ export async function getMonthlyUptimeReport(monthStr) {
     );
     const { total_polls, up_polls, down_polls } = pollCountResult.rows[0] || { total_polls: 0, up_polls: 0, down_polls: 0 };
 
-    // Load planned downtime for this app
-    const downtimeResult = await DatabaseService.query(
-      `SELECT start_time, end_time, change_number, change_type, short_description, source
-       FROM ${dbSchema}.hc_planned_downtime
-       WHERE (application_id = $1 OR application_id IS NULL)
-         AND start_time < $3
-         AND end_time > $2
-       ORDER BY start_time`,
-      [app.id, monthStart.toISOString(), monthEnd.toISOString()]
+    // Filter planned downtime entries relevant to this app (or global entries with no app)
+    const appDowntimeEntries = plannedDowntimeEntries.filter(e =>
+      !e.application_id || e.application_id === app.id
     );
-    const plannedDowntimeMinutes = calcPlannedDowntimeMinutes(downtimeResult.rows, monthStart, monthEnd);
-
-    // Load SLA target (app-level override or global default)
-    let slaTarget = parseFloat(app.sla_target_percent) || 99.00;
-    const slaOverride = await DatabaseService.query(
-      `SELECT sla_target_percent FROM ${dbSchema}.hc_uptime_sla
-       WHERE application_id = $1 AND month = $2`,
-      [app.id, monthStr]
-    );
-    if (slaOverride.rows.length > 0) {
-      slaTarget = parseFloat(slaOverride.rows[0].sla_target_percent);
-    }
+    const plannedDowntimeMinutes = calcPlannedDowntimeMinutes(appDowntimeEntries, monthStart, monthEnd);
 
     // Calculate uptime
     // Actual downtime minutes from poll results (DOWN polls × interval)
     const actualDownMinutes = down_polls * (intervalSeconds / 60);
-    // Effective downtime = actual downtime - planned downtime (cannot go below 0)
+    // STRICTLY remove planned downtime from total downtime
+    // Unplanned downtime = actual downtime - planned downtime (cannot go below 0)
     const unplannedDownMinutes = Math.max(0, actualDownMinutes - plannedDowntimeMinutes);
     // Effective operating minutes = elapsed - planned downtime
     const effectiveOperatingMinutes = Math.max(1, elapsedMinutes - plannedDowntimeMinutes);
@@ -153,8 +185,9 @@ export async function getMonthlyUptimeReport(monthStr) {
       ? (uptimePercent >= slaTarget ? 'MET' : 'NOT_MET')
       : 'NO_DATA';
 
-    // Poll verification
-    const pollVerificationStatus = total_polls >= expectedPollsElapsed ? 'ACCURATE' : 'INCOMPLETE';
+    // Poll verification — expected vs actual
+    const pollsMatch = total_polls >= expectedPollsElapsed;
+    const pollVerificationStatus = pollsMatch ? 'ACCURATE' : 'INCOMPLETE';
 
     report.push({
       applicationId: app.id,
@@ -162,7 +195,7 @@ export async function getMonthlyUptimeReport(monthStr) {
       url: app.url,
       categoryName: app.category_name || 'Uncategorized',
       categoryColor: app.category_color || '#6366f1',
-      // SLA
+      // SLA (global)
       slaTargetPercent: slaTarget,
       actualUptimePercent: uptimePercent !== null ? parseFloat(uptimePercent.toFixed(4)) : null,
       slaVerdict,
@@ -172,12 +205,12 @@ export async function getMonthlyUptimeReport(monthStr) {
       downPolls: down_polls,
       expectedPollsTotal,
       expectedPollsElapsed,
+      pollsMatch,
       pollVerificationStatus,
       // Downtime
       actualDowntimeMinutes: parseFloat(actualDownMinutes.toFixed(2)),
       plannedDowntimeMinutes: parseFloat(plannedDowntimeMinutes.toFixed(2)),
       unplannedDowntimeMinutes: parseFloat(unplannedDownMinutes.toFixed(2)),
-      plannedDowntimeEntries: downtimeResult.rows.length,
       // Meta
       month: monthStr,
       totalMinutesInMonth: parseFloat(totalMinutesInMonth.toFixed(2)),
@@ -191,9 +224,12 @@ export async function getMonthlyUptimeReport(monthStr) {
   return {
     month: monthStr,
     generatedAt: new Date().toISOString(),
+    isCurrentMonth,
+    slaTargetPercent: slaTarget,
     totalMinutesInMonth,
     elapsedMinutes: parseFloat(elapsedMinutes.toFixed(2)),
     intervalSeconds,
+    pollerStartTime: pollerStartTime ? pollerStartTime.toISOString() : null,
     expectedPollsTotal,
     expectedPollsElapsed,
     applications: report,
@@ -208,56 +244,71 @@ export async function getPollVerification(monthStr) {
   const { start: monthStart, end: monthEnd } = parsed;
 
   const now = new Date();
+  const isCurrentMonth = now >= monthStart && now < monthEnd;
   const effectiveEnd = now < monthEnd ? now : monthEnd;
-  const elapsedMinutes = minutesBetween(monthStart, effectiveEnd);
 
   const pollerConfig = await loadPollerConfig();
   const intervalSeconds = pollerConfig.intervalSeconds || 60;
-  const expectedPollsElapsed = Math.floor(elapsedMinutes / (intervalSeconds / 60));
+  const pollerStartTime = pollerConfig.pollerStartTime ? new Date(pollerConfig.pollerStartTime) : null;
+
+  const effectivePollerStart = pollerStartTime && pollerStartTime > monthStart ? pollerStartTime : monthStart;
+  const pollingMinutes = minutesBetween(effectivePollerStart, effectiveEnd);
+  const expectedPollsElapsed = Math.floor(pollingMinutes / (intervalSeconds / 60));
   const expectedPollsTotal = Math.floor(minutesBetween(monthStart, monthEnd) / (intervalSeconds / 60));
 
+  // Only apps in SLA-enabled categories
   const result = await DatabaseService.query(
-    `SELECT a.id, a.name, a.url,
+    `SELECT a.id, a.name, a.url, c.name as category_name, c.color as category_color,
             COUNT(pr.id)::int AS actual_polls,
             COUNT(pr.id) FILTER (WHERE pr.status = 'UP')::int AS up_polls,
             COUNT(pr.id) FILTER (WHERE pr.status = 'DOWN')::int AS down_polls,
             MIN(pr.polled_at) AS first_poll,
             MAX(pr.polled_at) AS last_poll
      FROM ${dbSchema}.hc_applications a
+     LEFT JOIN ${dbSchema}.hc_categories c ON a.category_id = c.id
      LEFT JOIN ${dbSchema}.hc_poll_results pr
        ON pr.application_id = a.id
        AND pr.polled_at >= $1
        AND pr.polled_at < $2
-     WHERE a.is_active = true
-     GROUP BY a.id, a.name, a.url
+     WHERE a.is_active = true AND c.used_for_sla = true
+     GROUP BY a.id, a.name, a.url, c.name, c.color
      ORDER BY a.sort_order, a.name`,
     [monthStart.toISOString(), monthEnd.toISOString()]
   );
 
-  const apps = (result.rows || []).map(row => ({
-    applicationId: row.id,
-    name: row.name,
-    url: row.url,
-    actualPolls: row.actual_polls,
-    expectedPollsElapsed,
-    expectedPollsTotal,
-    upPolls: row.up_polls,
-    downPolls: row.down_polls,
-    firstPoll: row.first_poll,
-    lastPoll: row.last_poll,
-    coveragePercent: expectedPollsElapsed > 0
-      ? parseFloat(((row.actual_polls / expectedPollsElapsed) * 100).toFixed(2))
-      : 0,
-    status: row.actual_polls >= expectedPollsElapsed ? 'ACCURATE' : 'INCOMPLETE',
-  }));
+  const apps = (result.rows || []).map(row => {
+    const pollsMatch = row.actual_polls >= expectedPollsElapsed;
+    return {
+      applicationId: row.id,
+      name: row.name,
+      url: row.url,
+      categoryName: row.category_name,
+      categoryColor: row.category_color,
+      actualPolls: row.actual_polls,
+      expectedPollsElapsed,
+      expectedPollsTotal,
+      upPolls: row.up_polls,
+      downPolls: row.down_polls,
+      firstPoll: row.first_poll,
+      lastPoll: row.last_poll,
+      coveragePercent: expectedPollsElapsed > 0
+        ? parseFloat(((row.actual_polls / expectedPollsElapsed) * 100).toFixed(2))
+        : 0,
+      pollsMatch,
+      // If current month and polls don't match, show "In Progress" not "INCOMPLETE"
+      status: pollsMatch ? 'ACCURATE' : (isCurrentMonth ? 'IN_PROGRESS' : 'INCOMPLETE'),
+    };
+  });
 
   return {
     month: monthStr,
     generatedAt: new Date().toISOString(),
+    isCurrentMonth,
     intervalSeconds,
+    pollerStartTime: pollerStartTime ? pollerStartTime.toISOString() : null,
     expectedPollsElapsed,
     expectedPollsTotal,
-    elapsedMinutes: parseFloat(elapsedMinutes.toFixed(2)),
+    elapsedMinutes: parseFloat(minutesBetween(monthStart, effectiveEnd).toFixed(2)),
     applications: apps,
   };
 }
@@ -341,26 +392,17 @@ export async function getUnplannedDowntime(monthStr, appId) {
     };
   });
 
-  // Load planned downtime to mark which windows overlap planned maintenance
-  const pdResult = await DatabaseService.query(
-    `SELECT application_id, start_time, end_time, change_number, change_type, short_description
-     FROM ${dbSchema}.hc_planned_downtime
-     WHERE start_time < $2 AND end_time > $1
-     ${appId ? 'AND (application_id = $3 OR application_id IS NULL)' : ''}
-     ORDER BY start_time`,
-    appId ? [monthStart.toISOString(), monthEnd.toISOString(), appId]
-          : [monthStart.toISOString(), monthEnd.toISOString()]
-  );
-  const plannedWindows = pdResult.rows || [];
+  // Fetch planned downtime from SNOW API to tag windows
+  const plannedDowntimeEntries = await fetchPlannedDowntimeFromSnow(monthStart, monthEnd);
 
   // Tag each downtime window as planned/unplanned
   const taggedWindows = windows.map(w => {
     const wStart = new Date(w.startTime).getTime();
     const wEnd = new Date(w.endTime).getTime();
-    const isPlanned = plannedWindows.some(pw => {
-      const pwStart = new Date(pw.start_time).getTime();
-      const pwEnd = new Date(pw.end_time).getTime();
-      return (pw.application_id === w.applicationId || pw.application_id === null) &&
+    const isPlanned = plannedDowntimeEntries.some(pw => {
+      const pwStart = new Date(pw.start_time || pw.startTime).getTime();
+      const pwEnd = new Date(pw.end_time || pw.endTime).getTime();
+      return (!pw.application_id || pw.application_id === w.applicationId) &&
              pwStart <= wEnd && pwEnd >= wStart;
     });
     return { ...w, type: isPlanned ? 'planned' : 'unplanned' };

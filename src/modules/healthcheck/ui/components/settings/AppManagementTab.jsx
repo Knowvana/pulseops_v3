@@ -2,7 +2,9 @@
 // AppManagementTab — HealthCheck Module Config
 //
 // PURPOSE: CRUD for monitored applications — add, edit, delete, toggle active.
-// Shows DataGrid with all apps and an inline form for create/edit.
+//          Modal popup form for Add/Edit with confirmation before save.
+//          Persistent success messages. ConfirmDialog for delete.
+//          Per-app SLA removed — global SLA is used instead.
 //
 // USED BY: manifest.jsx → getConfigTabs()
 // ============================================================================
@@ -21,21 +23,22 @@ const log = createLogger('AppManagementTab.jsx');
 const t = uiText.applications;
 const api = urls.api;
 
+const EMPTY_FORM = {
+  name: '', url: '', category_id: '', expected_status_code: 200,
+  expected_text: '', timeout_ms: 10000, description: '', sort_order: 99,
+};
+
 export default function AppManagementTab() {
   const [apps, setApps] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-  const [showForm, setShowForm] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [form, setForm] = useState({
-    name: '', url: '', category_id: '', expected_status_code: 200,
-    expected_text: '', timeout_ms: 10000, sla_target_percent: 99.00,
-    description: '', sort_order: 99,
-  });
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [saveConfirm, setSaveConfirm] = useState(false);
+  const [form, setForm] = useState({ ...EMPTY_FORM });
   const initRan = useRef(false);
 
   const loadData = useCallback(async () => {
@@ -60,27 +63,35 @@ export default function AppManagementTab() {
   }, [loadData]);
 
   const resetForm = () => {
-    setForm({ name: '', url: '', category_id: '', expected_status_code: 200, expected_text: '', timeout_ms: 10000, sla_target_percent: 99.00, description: '', sort_order: 99 });
+    setForm({ ...EMPTY_FORM });
     setEditId(null);
-    setShowForm(false);
+    setShowModal(false);
+    setSaveConfirm(false);
+  };
+
+  const handleAdd = () => {
+    resetForm();
+    setShowModal(true);
   };
 
   const handleEdit = (app) => {
     setForm({
       name: app.name, url: app.url, category_id: app.category_id || '',
       expected_status_code: app.expected_status_code, expected_text: app.expected_text || '',
-      timeout_ms: app.timeout_ms, sla_target_percent: parseFloat(app.sla_target_percent),
-      description: app.description || '', sort_order: app.sort_order,
+      timeout_ms: app.timeout_ms, description: app.description || '', sort_order: app.sort_order,
     });
     setEditId(app.id);
-    setShowForm(true);
+    setShowModal(true);
   };
 
-  const handleSave = useCallback(async () => {
+  const handleSaveClick = () => {
     if (!form.name.trim()) { setError(uiText.common.name + ' is required'); return; }
     if (!form.url.trim()) { setError('URL is required'); return; }
-    setSaving(true);
     setError(null);
+    setSaveConfirm(true);
+  };
+
+  const executeSave = useCallback(async () => {
     try {
       const payload = { ...form, category_id: form.category_id || null };
       let res;
@@ -91,34 +102,34 @@ export default function AppManagementTab() {
       }
       if (res?.success) {
         setSuccess(res.message);
-        setTimeout(() => setSuccess(null), 3000);
         resetForm();
         await loadData();
       } else {
         setError(res?.error?.message || 'Save failed');
       }
+      return res;
     } catch (err) {
       setError(err.message);
-    } finally {
-      setSaving(false);
+      throw err;
     }
   }, [form, editId, loadData]);
 
-  const handleDelete = useCallback(async (id) => {
+  const executeDelete = useCallback(async () => {
+    if (!deleteTarget) return;
     try {
-      const res = await ApiClient.delete(api.applicationById.replace('{id}', id));
+      const res = await ApiClient.delete(api.applicationById.replace('{id}', deleteTarget.id));
       if (res?.success) {
         setSuccess(res.message);
-        setTimeout(() => setSuccess(null), 3000);
         await loadData();
       } else {
         setError(res?.error?.message || 'Delete failed');
       }
+      return res;
     } catch (err) {
       setError(err.message);
+      throw err;
     }
-    setDeleteConfirm(null);
-  }, [loadData]);
+  }, [deleteTarget, loadData]);
 
   const handleToggle = useCallback(async (id) => {
     try {
@@ -138,6 +149,11 @@ export default function AppManagementTab() {
     );
   }
 
+  const getCategoryName = (catId) => {
+    const cat = categories.find(c => c.id === catId);
+    return cat ? cat.name : '—';
+  };
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -146,7 +162,7 @@ export default function AppManagementTab() {
           <h3 className="text-sm font-bold text-surface-800">{t.title}</h3>
           <p className="text-xs text-surface-500">{t.subtitle}</p>
         </div>
-        <button onClick={() => { resetForm(); setShowForm(true); }}
+        <button onClick={handleAdd}
           className="px-3 py-1.5 text-xs font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 transition-colors flex items-center gap-1">
           <Plus size={14} /> {t.addButton}
         </button>
@@ -162,81 +178,7 @@ export default function AppManagementTab() {
       {success && (
         <div className="flex items-center gap-2 px-3 py-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg">
           <CheckCircle2 size={14} /> {success}
-        </div>
-      )}
-
-      {/* Inline Form */}
-      {showForm && (
-        <div className="bg-surface-50 border border-surface-200 rounded-xl p-5 space-y-4">
-          <h4 className="text-sm font-bold text-surface-800">{editId ? t.form.editTitle : t.form.title}</h4>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-surface-600 mb-1">{t.form.nameLabel}</label>
-              <input type="text" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-                className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
-                placeholder={t.form.namePlaceholder} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-surface-600 mb-1">{t.form.urlLabel}</label>
-              <input type="text" value={form.url} onChange={e => setForm(p => ({ ...p, url: e.target.value }))}
-                className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
-                placeholder={t.form.urlPlaceholder} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-surface-600 mb-1">{t.form.categoryLabel}</label>
-              <select value={form.category_id} onChange={e => setForm(p => ({ ...p, category_id: e.target.value }))}
-                className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none bg-white">
-                <option value="">{t.form.noneOption}</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-surface-600 mb-1">{t.form.expectedStatusLabel}</label>
-              <input type="number" value={form.expected_status_code} onChange={e => setForm(p => ({ ...p, expected_status_code: parseInt(e.target.value) || 200 }))}
-                className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
-                placeholder={t.form.expectedStatusPlaceholder} />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-surface-600 mb-1">{t.form.expectedTextLabel}</label>
-              <input type="text" value={form.expected_text} onChange={e => setForm(p => ({ ...p, expected_text: e.target.value }))}
-                className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
-                placeholder={t.form.expectedTextPlaceholder} />
-              <p className="text-xs text-surface-400 mt-1">{t.form.expectedTextDesc}</p>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-surface-600 mb-1">{t.form.timeoutLabel}</label>
-              <input type="number" value={form.timeout_ms} onChange={e => setForm(p => ({ ...p, timeout_ms: parseInt(e.target.value) || 10000 }))}
-                className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
-                placeholder={t.form.timeoutPlaceholder} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-surface-600 mb-1">{t.form.slaTargetLabel}</label>
-              <input type="number" step="0.01" value={form.sla_target_percent} onChange={e => setForm(p => ({ ...p, sla_target_percent: parseFloat(e.target.value) || 99.00 }))}
-                className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
-                placeholder={t.form.slaTargetPlaceholder} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-surface-600 mb-1">{t.form.descriptionLabel}</label>
-              <input type="text" value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
-                className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
-                placeholder={t.form.descriptionPlaceholder} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-surface-600 mb-1">{t.form.sortOrderLabel}</label>
-              <input type="number" value={form.sort_order} onChange={e => setForm(p => ({ ...p, sort_order: parseInt(e.target.value) || 99 }))}
-                className="w-40 px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
-                placeholder={t.form.sortOrderPlaceholder} />
-            </div>
-          </div>
-          <div className="flex items-center gap-2 pt-2">
-            <button onClick={handleSave} disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 disabled:opacity-50">
-              {saving ? <><Loader2 size={14} className="animate-spin inline mr-1" /> {t.form.savingButton}</> : <><Save size={14} className="inline mr-1" /> {t.form.saveButton}</>}
-            </button>
-            <button onClick={resetForm} className="px-4 py-2 text-sm font-medium text-surface-600 bg-white border border-surface-200 rounded-lg hover:bg-surface-50">
-              {uiText.common.cancel}
-            </button>
-          </div>
+          <button onClick={() => setSuccess(null)} className="ml-auto"><X size={12} /></button>
         </div>
       )}
 
@@ -252,7 +194,7 @@ export default function AppManagementTab() {
                 <th className="px-3 py-2.5 text-left font-semibold text-surface-600">{t.grid.url}</th>
                 <th className="px-3 py-2.5 text-left font-semibold text-surface-600">{t.grid.category}</th>
                 <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.grid.expectedStatus}</th>
-                <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.grid.slaTarget}</th>
+                <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.grid.timeout}</th>
                 <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.grid.active}</th>
                 <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.grid.actions}</th>
               </tr>
@@ -275,7 +217,7 @@ export default function AppManagementTab() {
                     ) : <span className="text-surface-300">—</span>}
                   </td>
                   <td className="px-3 py-2.5 text-center">{app.expected_status_code}</td>
-                  <td className="px-3 py-2.5 text-center">{parseFloat(app.sla_target_percent)}%</td>
+                  <td className="px-3 py-2.5 text-center">{app.timeout_ms}ms</td>
                   <td className="px-3 py-2.5 text-center">
                     <button onClick={() => handleToggle(app.id)} className="inline-flex">
                       {app.is_active
@@ -288,7 +230,7 @@ export default function AppManagementTab() {
                       <button onClick={() => handleEdit(app)} className="p-1 text-surface-400 hover:text-brand-600 rounded">
                         <Edit3 size={13} />
                       </button>
-                      <button onClick={() => setDeleteConfirm(app)} className="p-1 text-surface-400 hover:text-red-600 rounded">
+                      <button onClick={() => setDeleteTarget(app)} className="p-1 text-surface-400 hover:text-red-600 rounded">
                         <Trash2 size={13} />
                       </button>
                     </div>
@@ -300,16 +242,117 @@ export default function AppManagementTab() {
         </div>
       )}
 
-      {/* Delete Confirmation */}
-      {deleteConfirm && (
+      {/* ── Modal Form for Add/Edit Application ── */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => resetForm()}>
+          <div className="bg-white rounded-2xl shadow-2xl border border-surface-200 w-full max-w-2xl mx-4 overflow-hidden max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-surface-100 bg-brand-50">
+              <h3 className="text-base font-bold text-brand-700">{editId ? t.form.editTitle : t.form.title}</h3>
+              <button onClick={resetForm} className="p-1 rounded-lg hover:bg-surface-100"><X size={16} className="text-surface-400" /></button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-surface-600 mb-1">{t.form.nameLabel}</label>
+                  <input type="text" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
+                    placeholder={t.form.namePlaceholder} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-surface-600 mb-1">{t.form.urlLabel}</label>
+                  <input type="text" value={form.url} onChange={e => setForm(p => ({ ...p, url: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
+                    placeholder={t.form.urlPlaceholder} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-surface-600 mb-1">{t.form.categoryLabel}</label>
+                  <select value={form.category_id} onChange={e => setForm(p => ({ ...p, category_id: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none bg-white">
+                    <option value="">{t.form.noneOption}</option>
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-surface-600 mb-1">{t.form.expectedStatusLabel}</label>
+                  <input type="number" value={form.expected_status_code} onChange={e => setForm(p => ({ ...p, expected_status_code: parseInt(e.target.value) || 200 }))}
+                    className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
+                    placeholder={t.form.expectedStatusPlaceholder} />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-surface-600 mb-1">{t.form.expectedTextLabel}</label>
+                  <input type="text" value={form.expected_text} onChange={e => setForm(p => ({ ...p, expected_text: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
+                    placeholder={t.form.expectedTextPlaceholder} />
+                  <p className="text-xs text-surface-400 mt-1">{t.form.expectedTextDesc}</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-surface-600 mb-1">{t.form.timeoutLabel}</label>
+                  <input type="number" value={form.timeout_ms} onChange={e => setForm(p => ({ ...p, timeout_ms: parseInt(e.target.value) || 10000 }))}
+                    className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
+                    placeholder={t.form.timeoutPlaceholder} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-surface-600 mb-1">{t.form.descriptionLabel}</label>
+                  <input type="text" value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
+                    placeholder={t.form.descriptionPlaceholder} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-surface-600 mb-1">{t.form.sortOrderLabel}</label>
+                  <input type="number" value={form.sort_order} onChange={e => setForm(p => ({ ...p, sort_order: parseInt(e.target.value) || 99 }))}
+                    className="w-40 px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
+                    placeholder={t.form.sortOrderPlaceholder} />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-surface-100 bg-surface-50">
+              <button onClick={resetForm} className="px-4 py-2 text-sm font-medium text-surface-600 bg-white border border-surface-200 rounded-lg hover:bg-surface-50">
+                {uiText.common.cancel}
+              </button>
+              <button onClick={handleSaveClick}
+                className="px-4 py-2 text-sm font-semibold text-white bg-brand-600 rounded-lg hover:bg-brand-700">
+                <Save size={14} className="inline mr-1" /> {t.form.saveButton}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Save Confirmation ── */}
+      {saveConfirm && (
         <ConfirmDialog
           isOpen={true}
+          onClose={() => setSaveConfirm(false)}
+          title={editId ? t.form.editTitle : t.form.title}
+          actionDescription={editId ? 'update this application' : 'create a new monitored application'}
+          actionTarget={form.name}
+          actionDetails={[
+            { label: t.form.nameLabel, value: form.name },
+            { label: t.form.urlLabel, value: form.url },
+            { label: t.form.categoryLabel, value: form.category_id ? getCategoryName(parseInt(form.category_id)) : 'None' },
+            { label: t.form.expectedStatusLabel, value: String(form.expected_status_code) },
+          ]}
+          confirmLabel={t.form.saveButton}
+          action={executeSave}
+          variant="info"
+        />
+      )}
+
+      {/* ── Delete Confirmation ── */}
+      {deleteTarget && (
+        <ConfirmDialog
+          isOpen={true}
+          onClose={() => setDeleteTarget(null)}
           title={t.deleteConfirm.title}
-          description={t.deleteConfirm.message}
+          actionDescription="permanently delete this application and all its poll history"
+          actionTarget={deleteTarget.name}
+          actionDetails={[
+            { label: t.grid.name, value: deleteTarget.name },
+            { label: t.grid.url, value: deleteTarget.url },
+          ]}
           confirmLabel={t.deleteConfirm.confirmButton}
-          onConfirm={() => handleDelete(deleteConfirm.id)}
-          onCancel={() => setDeleteConfirm(null)}
-          variant="danger"
+          action={executeDelete}
+          variant="error"
         />
       )}
     </div>

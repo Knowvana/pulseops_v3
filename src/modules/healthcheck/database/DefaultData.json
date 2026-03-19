@@ -12,18 +12,26 @@
         "intervalSeconds": 60,
         "timeoutMs": 10000,
         "retryOnFailure": false,
-        "maxRetries": 1
+        "maxRetries": 1,
+        "pollerStartTime": null
       },
-      "description": "Health poller configuration — interval, timeout, and retry settings."
+      "description": "Health poller configuration — interval, timeout, retry settings, and poller start timestamp."
     },
     {
       "config_key": "general_settings",
       "config_value": {
-        "defaultSlaTargetPercent": 99.00,
         "defaultExpectedStatusCode": 200,
         "defaultTimeoutMs": 10000
       },
       "description": "General module settings — default values for new applications."
+    },
+    {
+      "config_key": "global_sla_config",
+      "config_value": {
+        "slaTargetPercent": 99,
+        "measurementPeriod": "monthly"
+      },
+      "description": "Global SLA configuration — single SLA target % applied to all categories marked for SLA calculation. Measured monthly."
     },
     {
       "config_key": "planned_downtime_source",
@@ -39,88 +47,94 @@
   ],
   "hc_categories": [
     {
-      "name": "Production",
-      "description": "Production environment applications and services.",
-      "color": "#10b981",
-      "sort_order": 1
+      "name": "Source Interfaces",
+      "description": "Source interface applications and inbound data feeds.",
+      "color": "#3b82f6",
+      "sort_order": 1,
+      "used_for_sla": true
     },
     {
-      "name": "Staging",
-      "description": "Staging and pre-production environment applications.",
+      "name": "Core System",
+      "description": "Core platform systems and services.",
+      "color": "#10b981",
+      "sort_order": 2,
+      "used_for_sla": true
+    },
+    {
+      "name": "Production",
+      "description": "Production environment applications and services.",
       "color": "#f59e0b",
-      "sort_order": 2
+      "sort_order": 3,
+      "used_for_sla": false
     },
     {
       "name": "Infrastructure",
       "description": "Core infrastructure services — DNS, load balancers, databases.",
       "color": "#6366f1",
-      "sort_order": 3
+      "sort_order": 4,
+      "used_for_sla": false
     },
     {
       "name": "External",
       "description": "Third-party external services and APIs.",
       "color": "#8b5cf6",
-      "sort_order": 4
+      "sort_order": 5,
+      "used_for_sla": false
     }
   ],
   "hc_applications": [
     {
       "name": "Google Homepage",
       "url": "https://www.google.com",
-      "category_id": 4,
+      "category_id": 5,
       "expected_status_code": 200,
       "expected_text": "Google",
       "timeout_ms": 10000,
       "is_active": true,
-      "sla_target_percent": 99.95,
       "description": "Google homepage — page text monitoring. Checks for 'Google' in the HTML response body.",
       "sort_order": 1
     },
     {
       "name": "GitHub API Status",
       "url": "https://www.githubstatus.com/api/v2/status.json",
-      "category_id": 4,
+      "category_id": 5,
       "expected_status_code": 200,
       "expected_text": null,
       "timeout_ms": 10000,
       "is_active": true,
-      "sla_target_percent": 99.90,
       "description": "GitHub Status API — JSON endpoint that returns current platform status. Monitors API response code 200.",
       "sort_order": 2
     },
     {
       "name": "JSONPlaceholder REST API",
       "url": "https://jsonplaceholder.typicode.com/posts/1",
-      "category_id": 4,
+      "category_id": 5,
       "expected_status_code": 200,
       "expected_text": "sunt aut facere",
       "timeout_ms": 8000,
       "is_active": true,
-      "sla_target_percent": 99.00,
       "description": "JSONPlaceholder fake REST API — fetches post #1 and checks for expected title text in JSON response.",
       "sort_order": 3
     },
     {
       "name": "httpbin HTTP Status Check",
       "url": "https://httpbin.org/status/200",
-      "category_id": 3,
+      "category_id": 4,
       "expected_status_code": 200,
       "expected_text": null,
       "timeout_ms": 15000,
       "is_active": true,
-      "sla_target_percent": 98.00,
       "description": "httpbin status endpoint — returns HTTP 200. Used to test basic connectivity and response code monitoring.",
       "sort_order": 4
     },
     {
       "name": "Microsoft Azure Status Page",
       "url": "https://status.azure.com/en-us/status",
-      "category_id": 4,
+      "category_id": 5,
       "expected_status_code": 200,
       "expected_text": "Azure",
       "timeout_ms": 15000,
       "is_active": true,
-      "sla_target_percent": 99.90,
       "description": "Microsoft Azure status page — page text monitoring. Verifies 'Azure' appears in the response HTML.",
       "sort_order": 5
     }

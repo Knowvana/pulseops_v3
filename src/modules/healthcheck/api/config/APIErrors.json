@@ -9,7 +9,9 @@
     "generalSettingsLoadFailed":"Failed to load general settings: {message}",
     "generalSettingsSaveFailed":"Failed to save general settings: {message}",
     "downtimeSourceLoadFailed": "Failed to load planned downtime source config: {message}",
-    "downtimeSourceSaveFailed": "Failed to save planned downtime source config: {message}"
+    "downtimeSourceSaveFailed": "Failed to save planned downtime source config: {message}",
+    "globalSlaLoadFailed":      "Failed to load global SLA config: {message}",
+    "globalSlaSaveFailed":      "Failed to save global SLA config: {message}"
   },
 
   "applications": {

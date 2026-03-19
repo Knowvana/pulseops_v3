@@ -108,3 +108,14 @@ export async function loadDowntimeSourceConfig() {
   const stored = await loadModuleConfig('planned_downtime_source');
   return { ...DOWNTIME_SOURCE_DEFAULTS, ...(stored || {}) };
 }
+
+// ── Global SLA config defaults ──────────────────────────────────────────────
+const GLOBAL_SLA_DEFAULTS = {
+  slaTargetPercent: 99,
+  measurementPeriod: 'monthly',
+};
+
+export async function loadGlobalSlaConfig() {
+  const stored = await loadModuleConfig('global_sla_config');
+  return { ...GLOBAL_SLA_DEFAULTS, ...(stored || {}) };
+}

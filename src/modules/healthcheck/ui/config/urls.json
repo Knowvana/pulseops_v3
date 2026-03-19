@@ -6,6 +6,7 @@
     "configPoller":        "/api/healthcheck/config/poller",
     "configGeneral":       "/api/healthcheck/config/general",
     "configDowntimeSource":"/api/healthcheck/config/downtime-source",
+    "configGlobalSla":     "/api/healthcheck/config/global-sla",
 
     "applications":        "/api/healthcheck/applications",
     "applicationById":     "/api/healthcheck/applications/{id}",
@@ -32,6 +33,8 @@
     "plannedDowntime":     "/api/healthcheck/planned-downtime",
     "plannedDowntimeById": "/api/healthcheck/planned-downtime/{id}",
     "plannedDowntimeSync": "/api/healthcheck/planned-downtime/sync",
+
+    "pollEvents":          "/api/healthcheck/events/poll",
 
     "schemaInfo":          "/api/healthcheck/schema/info",
     "loadDefaults":        "/api/healthcheck/data/defaults",

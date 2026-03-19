@@ -2,7 +2,7 @@
   "_meta": {
     "moduleId": "healthcheck",
     "version": "1.0.0",
-    "description": "System HealthCheck Module — database schema. Tables are provisioned when the module is enabled via Module Manager. Stores monitored applications, custom categories, poll results, uptime SLA targets, and module configuration. Planned downtime is fetched live from ServiceNow API — no local table required."
+    "description": "System HealthCheck Module — database schema. Tables are provisioned when the module is enabled via Module Manager. Stores monitored applications, custom categories, poll results, and module configuration. Global SLA % is stored in hc_module_config. Planned downtime is fetched live from ServiceNow API — no local table required."
   },
   "tables": [
     {
@@ -29,6 +29,7 @@
         { "name": "description",  "type": "TEXT" },
         { "name": "color",        "type": "VARCHAR(20) DEFAULT '#6366f1'" },
         { "name": "sort_order",   "type": "INTEGER NOT NULL DEFAULT 99" },
+        { "name": "used_for_sla", "type": "BOOLEAN NOT NULL DEFAULT FALSE" },
         { "name": "created_at",   "type": "TIMESTAMPTZ DEFAULT NOW()" },
         { "name": "updated_at",   "type": "TIMESTAMPTZ DEFAULT NOW()" }
       ],
@@ -48,7 +49,6 @@
         { "name": "expected_text",        "type": "TEXT" },
         { "name": "timeout_ms",           "type": "INTEGER NOT NULL DEFAULT 10000" },
         { "name": "is_active",            "type": "BOOLEAN NOT NULL DEFAULT TRUE" },
-        { "name": "sla_target_percent",   "type": "NUMERIC(5,2) NOT NULL DEFAULT 99.00" },
         { "name": "description",          "type": "TEXT" },
         { "name": "sort_order",           "type": "INTEGER NOT NULL DEFAULT 99" },
         { "name": "created_at",           "type": "TIMESTAMPTZ DEFAULT NOW()" },
@@ -78,21 +78,6 @@
         { "name": "idx_hc_poll_results_status",      "columns": ["status"],         "unique": false },
         { "name": "idx_hc_poll_results_polled_at",   "columns": ["polled_at"],      "unique": false },
         { "name": "idx_hc_poll_results_app_polled",  "columns": ["application_id", "polled_at"], "unique": false }
-      ]
-    },
-    {
-      "name": "hc_uptime_sla",
-      "description": "Monthly uptime SLA targets per application. One row per app per month. Stores the target percentage and is used for report generation.",
-      "columns": [
-        { "name": "id",                  "type": "SERIAL PRIMARY KEY" },
-        { "name": "application_id",      "type": "INTEGER NOT NULL REFERENCES hc_applications(id) ON DELETE CASCADE" },
-        { "name": "month",               "type": "VARCHAR(7) NOT NULL" },
-        { "name": "sla_target_percent",  "type": "NUMERIC(5,2) NOT NULL DEFAULT 99.00" },
-        { "name": "created_at",          "type": "TIMESTAMPTZ DEFAULT NOW()" },
-        { "name": "updated_at",          "type": "TIMESTAMPTZ DEFAULT NOW()" }
-      ],
-      "indexes": [
-        { "name": "idx_hc_uptime_sla_app_month", "columns": ["application_id", "month"], "unique": true }
       ]
     }
   ]

@@ -11,11 +11,13 @@
 //   PUT  /config/general          → Save general settings
 //   GET  /config/downtime-source  → Load planned downtime source config
 //   PUT  /config/downtime-source  → Save planned downtime source config
+//   GET  /config/global-sla       → Load global SLA config
+//   PUT  /config/global-sla       → Save global SLA config
 // ============================================================================
 import { Router } from 'express';
 import { hcUrls, apiErrors, apiMessages } from '#modules/healthcheck/api/config/index.js';
 import {
-  loadPollerConfig, loadGeneralSettings, loadDowntimeSourceConfig,
+  loadPollerConfig, loadGeneralSettings, loadDowntimeSourceConfig, loadGlobalSlaConfig,
   saveModuleConfig,
 } from '#modules/healthcheck/api/routes/helpers.js';
 import { createHcLogger } from '#modules/healthcheck/api/lib/moduleLogger.js';
@@ -93,6 +95,36 @@ router.put(routes.configDowntimeSource, async (req, res) => {
   } catch (err) {
     log.error('PUT downtime source config failed', { message: err.message });
     res.status(500).json({ success: false, error: { message: apiErrors.config.downtimeSourceSaveFailed.replace('{message}', err.message) } });
+  }
+});
+
+// ── GET /config/global-sla ────────────────────────────────────────────────────
+router.get(routes.configGlobalSla, async (req, res) => {
+  try {
+    const config = await loadGlobalSlaConfig();
+    res.json({ success: true, data: config });
+  } catch (err) {
+    log.error('GET global SLA config failed', { message: err.message });
+    res.status(500).json({ success: false, error: { message: apiErrors.config.globalSlaLoadFailed.replace('{message}', err.message) } });
+  }
+});
+
+// ── PUT /config/global-sla ────────────────────────────────────────────────────
+router.put(routes.configGlobalSla, async (req, res) => {
+  try {
+    const config = req.body;
+    const sla = parseFloat(config.slaTargetPercent);
+    if (isNaN(sla) || sla < 0 || sla > 100) {
+      return res.status(400).json({ success: false, error: { message: apiErrors.sla.targetInvalid } });
+    }
+    config.slaTargetPercent = sla;
+    config.measurementPeriod = 'monthly';
+    log.info('Saving global SLA config', config);
+    await saveModuleConfig('global_sla_config', config, 'Global SLA configuration');
+    res.json({ success: true, data: config, message: apiMessages.config.globalSlaSaved });
+  } catch (err) {
+    log.error('PUT global SLA config failed', { message: err.message });
+    res.status(500).json({ success: false, error: { message: apiErrors.config.globalSlaSaveFailed.replace('{message}', err.message) } });
   }
 });
 

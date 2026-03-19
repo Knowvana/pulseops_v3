@@ -21,7 +21,7 @@
 import http from 'http';
 import https from 'https';
 import { URL } from 'url';
-import { dbSchema, DatabaseService, loadPollerConfig } from '#modules/healthcheck/api/routes/helpers.js';
+import { dbSchema, DatabaseService, loadPollerConfig, saveModuleConfig } from '#modules/healthcheck/api/routes/helpers.js';
 import { createHcLogger } from '#modules/healthcheck/api/lib/moduleLogger.js';
 
 const log = createHcLogger('PollerService.js');
@@ -35,6 +35,7 @@ let _lastPollResults = { up: 0, down: 0, total: 0, errors: 0 };
 let _currentConfig = null;
 let _latestStatus = {}; // { [appId]: { status, httpCode, responseMs, polledAt, error } }
 let _pollCount = 0;     // total polls since start
+let _eventListeners = []; // SSE clients listening for poll events
 
 // ── HTTP probe ───────────────────────────────────────────────────────────────
 function probeUrl(url, timeoutMs, expectedStatus, expectedText) {
@@ -200,6 +201,15 @@ async function executePollCycle() {
     _pollCount++;
 
     log.info(`Poll cycle complete in ${duration}ms — ${up} UP, ${down} DOWN, ${errors} error(s)`);
+    
+    // Broadcast poll completion event to all SSE listeners
+    broadcastPollEvent({
+      type: 'poll_complete',
+      timestamp: _lastPollTime,
+      results: summary,
+      latestStatus: Object.values(_latestStatus),
+    });
+    
     return summary;
   } catch (err) {
     log.error('Poll cycle failed', { message: err.message });
@@ -220,6 +230,17 @@ export async function start(config) {
   const intervalMs = (_currentConfig.intervalSeconds || 60) * 1000;
 
   log.info(`Starting health poller — interval ${_currentConfig.intervalSeconds}s`);
+
+  // Save poller start time if not already set
+  if (!_currentConfig.pollerStartTime) {
+    _currentConfig.pollerStartTime = new Date().toISOString();
+    try {
+      await saveModuleConfig('poller_config', _currentConfig, 'Health poller configuration — interval, timeout, retry settings, and poller start timestamp.');
+      log.info('Poller start time saved', { pollerStartTime: _currentConfig.pollerStartTime });
+    } catch (err) {
+      log.warn('Failed to save poller start time', { message: err.message });
+    }
+  }
 
   // Execute first poll immediately
   await executePollCycle();
@@ -277,4 +298,34 @@ export function getLatestStatus() {
 
 export function getLatestStatusMap() {
   return { ..._latestStatus };
+}
+
+export function subscribeToEvents(res) {
+  _eventListeners.push(res);
+  log.debug('SSE client subscribed to poll events', { totalListeners: _eventListeners.length });
+  return () => {
+    _eventListeners = _eventListeners.filter(listener => listener !== res);
+    log.debug('SSE client unsubscribed', { totalListeners: _eventListeners.length });
+  };
+}
+
+function broadcastPollEvent(event) {
+  const data = JSON.stringify(event);
+  let activeListeners = 0;
+  
+  for (let i = _eventListeners.length - 1; i >= 0; i--) {
+    const res = _eventListeners[i];
+    try {
+      res.write(`data: ${data}\n\n`);
+      activeListeners++;
+    } catch (err) {
+      // Client disconnected, remove from listeners
+      _eventListeners.splice(i, 1);
+      log.debug('SSE client disconnected', { error: err.message });
+    }
+  }
+  
+  if (activeListeners > 0) {
+    log.debug('Poll event broadcasted', { event: event.type, listeners: activeListeners });
+  }
 }

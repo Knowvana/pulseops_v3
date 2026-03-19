@@ -47,7 +47,7 @@ router.get(routes.applications, async (req, res) => {
 // ── POST /applications ───────────────────────────────────────────────────────
 router.post(routes.applications, async (req, res) => {
   try {
-    const { name, url, category_id, expected_status_code, expected_text, timeout_ms, sla_target_percent, description, sort_order } = req.body;
+    const { name, url, category_id, expected_status_code, expected_text, timeout_ms, description, sort_order } = req.body;
     if (!name?.trim()) return res.status(400).json({ success: false, error: { message: apiErrors.applications.nameRequired } });
     if (!url?.trim()) return res.status(400).json({ success: false, error: { message: apiErrors.applications.urlRequired } });
 
@@ -58,8 +58,8 @@ router.post(routes.applications, async (req, res) => {
 
     const result = await DatabaseService.query(
       `INSERT INTO ${dbSchema}.hc_applications
-       (name, url, category_id, expected_status_code, expected_text, timeout_ms, sla_target_percent, description, sort_order)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       (name, url, category_id, expected_status_code, expected_text, timeout_ms, description, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [
         name.trim(),
@@ -68,7 +68,6 @@ router.post(routes.applications, async (req, res) => {
         expected_status_code || 200,
         expected_text || null,
         timeout_ms || 10000,
-        sla_target_percent || 99.00,
         description || null,
         sort_order || 99,
       ]
@@ -85,21 +84,21 @@ router.post(routes.applications, async (req, res) => {
 router.put(routes.applicationById, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, url, category_id, expected_status_code, expected_text, timeout_ms, sla_target_percent, description, sort_order, is_active } = req.body;
+    const { name, url, category_id, expected_status_code, expected_text, timeout_ms, description, sort_order, is_active } = req.body;
     if (!name?.trim()) return res.status(400).json({ success: false, error: { message: apiErrors.applications.nameRequired } });
     if (!url?.trim()) return res.status(400).json({ success: false, error: { message: apiErrors.applications.urlRequired } });
 
     const result = await DatabaseService.query(
       `UPDATE ${dbSchema}.hc_applications
        SET name = $1, url = $2, category_id = $3, expected_status_code = $4,
-           expected_text = $5, timeout_ms = $6, sla_target_percent = $7,
-           description = $8, sort_order = $9, is_active = $10, updated_at = NOW()
-       WHERE id = $11
+           expected_text = $5, timeout_ms = $6,
+           description = $7, sort_order = $8, is_active = $9, updated_at = NOW()
+       WHERE id = $10
        RETURNING *`,
       [
         name.trim(), url.trim(), category_id || null,
         expected_status_code || 200, expected_text || null, timeout_ms || 10000,
-        sla_target_percent || 99.00, description || null, sort_order || 99,
+        description || null, sort_order || 99,
         is_active !== false, id,
       ]
     );
@@ -174,14 +173,14 @@ router.get(routes.categories, async (req, res) => {
 // ── POST /categories ─────────────────────────────────────────────────────────
 router.post(routes.categories, async (req, res) => {
   try {
-    const { name, description, color, sort_order } = req.body;
+    const { name, description, color, sort_order, used_for_sla } = req.body;
     if (!name?.trim()) return res.status(400).json({ success: false, error: { message: apiErrors.categories.nameRequired } });
 
     const result = await DatabaseService.query(
-      `INSERT INTO ${dbSchema}.hc_categories (name, description, color, sort_order)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO ${dbSchema}.hc_categories (name, description, color, sort_order, used_for_sla)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [name.trim(), description || null, color || '#6366f1', sort_order || 99]
+      [name.trim(), description || null, color || '#6366f1', sort_order || 99, used_for_sla === true]
     );
     log.info('Category created', { id: result.rows[0].id, name: name.trim() });
     res.status(201).json({ success: true, data: result.rows[0], message: apiMessages.categories.created });
@@ -195,15 +194,15 @@ router.post(routes.categories, async (req, res) => {
 router.put(routes.categoryById, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, color, sort_order } = req.body;
+    const { name, description, color, sort_order, used_for_sla } = req.body;
     if (!name?.trim()) return res.status(400).json({ success: false, error: { message: apiErrors.categories.nameRequired } });
 
     const result = await DatabaseService.query(
       `UPDATE ${dbSchema}.hc_categories
-       SET name = $1, description = $2, color = $3, sort_order = $4, updated_at = NOW()
-       WHERE id = $5
+       SET name = $1, description = $2, color = $3, sort_order = $4, used_for_sla = $5, updated_at = NOW()
+       WHERE id = $6
        RETURNING *`,
-      [name.trim(), description || null, color || '#6366f1', sort_order || 99, id]
+      [name.trim(), description || null, color || '#6366f1', sort_order || 99, used_for_sla === true, id]
     );
     if (result.rows.length === 0) return res.status(404).json({ success: false, error: { message: apiErrors.categories.notFound } });
     log.info('Category updated', { id, name: name.trim() });

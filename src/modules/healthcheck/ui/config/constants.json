@@ -1,7 +1,7 @@
 {
   "id": "healthcheck",
   "name": "HealthCheck",
-  "shortName": "HC",
+  "shortName": "HealthCheck",
   "version": "1.0.0",
   "description": "System HealthCheck — URL monitoring, uptime SLA tracking, health probes, and monthly uptime reports with planned downtime integration.",
   "roles": ["super_admin", "admin", "user"],

@@ -97,11 +97,15 @@
       "title": "Report Summary",
       "month": "Month",
       "totalApps": "Applications",
+      "globalSla": "Global SLA Target",
       "intervalSeconds": "Poll Interval",
+      "pollerStartTime": "Poller Start Time",
       "expectedPollsTotal": "Expected Polls (Month)",
       "expectedPollsElapsed": "Expected Polls (Elapsed)",
       "elapsedMinutes": "Elapsed Minutes",
-      "totalMinutes": "Total Minutes in Month"
+      "totalMinutes": "Total Minutes in Month",
+      "currentMonth": "Current Month (In Progress)",
+      "completedMonth": "Completed Month"
     },
     "grid": {
       "application": "Application",
@@ -127,7 +131,8 @@
     },
     "pollStatus": {
       "ACCURATE": "Accurate",
-      "INCOMPLETE": "Incomplete"
+      "INCOMPLETE": "Incomplete",
+      "IN_PROGRESS": "In Progress"
     },
     "pollVerification": {
       "title": "Poll Verification",
@@ -206,7 +211,7 @@
       "pollerConfig": { "id": "hc_poller_config", "label": "Poller Configuration" },
       "applications": { "id": "hc_applications", "label": "Applications" },
       "categories": { "id": "hc_categories", "label": "Categories" },
-      "slaTargets": { "id": "hc_sla_targets", "label": "SLA Targets" },
+      "slaTargets": { "id": "hc_sla_targets", "label": "Global SLA" },
       "downtimeSource": { "id": "hc_downtime_source", "label": "Planned Downtime" },
       "generalSettings": { "id": "hc_general_settings", "label": "General Settings" },
       "dataManagement": { "id": "hc_data_management", "label": "Data Management" }
@@ -301,6 +306,7 @@
       "name": "Name",
       "description": "Description",
       "color": "Color",
+      "usedForSla": "Uptime SLA",
       "appCount": "Applications",
       "sortOrder": "Order",
       "actions": "Actions"
@@ -315,6 +321,8 @@
       "colorLabel": "Color",
       "sortOrderLabel": "Sort Order",
       "sortOrderPlaceholder": "99",
+      "usedForSlaLabel": "Used for Uptime SLA Calculation",
+      "usedForSlaDesc": "When enabled, applications in this category are included in the monthly Uptime SLA report.",
       "saveButton": "Save Category",
       "savingButton": "Saving..."
     },
@@ -325,23 +333,18 @@
       "confirmButton": "Delete"
     }
   },
-  "slaTargets": {
-    "title": "SLA Targets",
-    "subtitle": "Override the default SLA target per application for a specific month. Applications without an override use their default target.",
-    "monthLabel": "Month",
-    "noTargets": "No SLA target overrides. Each application uses its configured default.",
-    "grid": {
-      "application": "Application",
-      "url": "URL",
-      "defaultTarget": "Default Target %",
-      "monthTarget": "Month Override %",
-      "isOverride": "Has Override",
-      "actions": "Actions"
-    },
-    "editLabel": "SLA Target %",
-    "editPlaceholder": "99.00",
-    "saveButton": "Save",
-    "savingButton": "Saving..."
+  "globalSla": {
+    "title": "Global SLA Configuration",
+    "subtitle": "Single monthly SLA target percentage applied to all categories marked for Uptime SLA calculation.",
+    "currentLabel": "Current SLA Target",
+    "slaInputLabel": "Monthly SLA Target %",
+    "slaInputPlaceholder": "99",
+    "slaInputDesc": "Enter a value between 0 and 100. This percentage is used to determine SLA compliance for all monitored applications in SLA-enabled categories.",
+    "measurementLabel": "Measurement Period",
+    "measurementValue": "Monthly",
+    "saveButton": "Save SLA Configuration",
+    "savingButton": "Saving...",
+    "savedMessage": "Global SLA configuration saved successfully."
   },
   "downtimeSource": {
     "title": "Planned Downtime Source",

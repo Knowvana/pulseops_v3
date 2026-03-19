@@ -1,33 +1,49 @@
 // ============================================================================
-// moduleLogger.js — HealthCheck Module Scoped Logger
+// moduleLogger.js — Generic Module Scoped Logger
 //
 // PURPOSE: Lightweight wrapper around the central Winston logger that:
-//   1. Passes moduleName, fileName, functionName as Winston metadata
-//   2. Checks isModuleLoggingEnabled('HealthCheck') — if disabled, suppresses
-//   3. Persists log entries to DB via LogService.writeModuleLog()
+//   1. Passes moduleName, fileName, functionName as Winston metadata — the
+//      central logger printf format renders them as:
+//      [API][Date][Level][ModuleName][FileName][FunctionName] Message
+//   2. Checks isModuleLoggingEnabled(moduleName) — if the module is disabled
+//      in Settings → Log Configuration → Module Logs, ALL log calls are suppressed.
+//   3. Log level threshold is governed ONLY by the global defaultLevel setting.
+//      Winston itself handles the level gate; this wrapper only gates on/off.
+//   4. Persists log entries to DB via LogService.writeModuleLog() so they
+//      appear in the Logs Viewer (not just terminal).
 //
 // USAGE:
-//   import { createHcLogger } from '#modules/healthcheck/api/lib/moduleLogger.js';
+//   import { createModuleLogger, createHcLogger } from '#modules/healthcheck/api/lib/moduleLogger.js';
 //   const log = createHcLogger('PollerService.js');
-//   log.info('Poll cycle starting', { appCount: 5 });
+//   log.debug('Poll cycle starting', { freq: 5 });
+//   log.info('Poll cycle complete');
+//   log.error('Poll cycle failed', { status: 500 });
+//
+// ARCHITECTURE: Does NOT change the central logger. Only gates on module enabled/disabled.
 // ============================================================================
 import { logger } from '#shared/logger.js';
 import { isModuleLoggingEnabled } from '#core/services/logService.js';
 import { getRequestContext } from '#shared/requestContext.js';
 
-const MODULE_NAME = 'HealthCheck';
-
+// Pre-compiled regex for stack frame parsing (matches Node.js V8 stack frames)
 const FRAME_RE = /at (?:(?:async )?(\S+?)\.?(\S+?) )?\(?(?:.*[\\/])?([\w.-]+\.(?:js|mjs|ts)):(\d+)/;
 const SKIP_FRAMES = ['moduleLogger.js', 'node_modules'];
 
+/**
+ * Extract the caller's function name from the Error stack trace.
+ * Skips internal frames (this file, node_modules).
+ * @returns {string} function name or 'anonymous'
+ */
 function _extractCaller() {
   try {
     const lines = (new Error().stack || '').split('\n');
+    // Skip: [0] Error, [1] _extractCaller, [2] _log, [3] debug/info/warn/error wrapper
     for (let i = 4; i < Math.min(lines.length, 12); i++) {
       const line = lines[i];
       if (!line || SKIP_FRAMES.some(f => line.includes(f))) continue;
       const m = line.match(FRAME_RE);
       if (m) {
+        // m[1] = class/object, m[2] = method, m[3] = file, m[4] = line
         const func = m[2] || m[1] || 'anonymous';
         return func.replace(/^Object\./, '').replace(/^Module\./, '');
       }
@@ -36,20 +52,28 @@ function _extractCaller() {
   return 'anonymous';
 }
 
-function _persistToDb(level, fileName, functionName, msg, meta) {
+/**
+ * Fire-and-forget DB persistence for module log entries.
+ * Uses dynamic import to avoid circular dependency issues at load time.
+ * Reads transactionId / sessionId / correlationId / userEmail from
+ * AsyncLocalStorage so module logs are tagged with the originating request.
+ */
+function _persistToDb(level, moduleName, fileName, functionName, msg, meta) {
   const ctx = getRequestContext();
-  const sessionId     = ctx.sessionId     || `bg-healthcheck-${process.pid}`;
+  // For background processes (no HTTP context), generate synthetic tracking IDs
+  // so no log entry has blank sessionId/transactionId/correlationId/user fields.
+  const sessionId     = ctx.sessionId     || `bg-${moduleName.toLowerCase()}-${process.pid}`;
   const transactionId = ctx.transactionId || `bg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  const correlationId = ctx.correlationId || `${MODULE_NAME}:${fileName}:${functionName}`;
+  const correlationId = ctx.correlationId || `${moduleName}:${fileName}:${functionName}`;
   const user          = ctx.userEmail     || 'system';
 
   import('#core/services/logService.js').then(mod => {
     mod.default.writeModuleLog({
       level,
       source: 'Module',
-      event: `[${MODULE_NAME}][${fileName}]`,
+      event: `[${moduleName}][${fileName}]`,
       message: msg,
-      module: MODULE_NAME,
+      module: moduleName,
       fileName: `${fileName}:${functionName}`,
       data: meta && typeof meta === 'object' ? meta : (meta != null ? { detail: meta } : null),
       transactionId,
@@ -62,16 +86,17 @@ function _persistToDb(level, fileName, functionName, msg, meta) {
 }
 
 /**
- * Create a scoped logger for the HealthCheck module.
- * @param {string} fileName - e.g. 'PollerService.js', 'Config', 'Reports'
+ * Create a scoped logger for any module.
+ * @param {string} moduleName - e.g. 'HealthCheck', 'ServiceNow', 'Roster'
+ * @param {string} fileName   - e.g. 'PollerService.js', 'Reports'
  * @returns {{ debug, info, warn, error }}
  */
-export function createHcLogger(fileName) {
+export function createModuleLogger(moduleName, fileName) {
   const _log = (level, msg, meta) => {
-    if (!isModuleLoggingEnabled(MODULE_NAME)) return;
+    if (!isModuleLoggingEnabled(moduleName)) return;
     const functionName = _extractCaller();
-    logger[level](msg, { ...meta, moduleName: MODULE_NAME, fileName, functionName });
-    _persistToDb(level, fileName, functionName, msg, meta);
+    logger[level](msg, { ...meta, moduleName, fileName, functionName });
+    _persistToDb(level, moduleName, fileName, functionName, msg, meta);
   };
   return {
     debug: (msg, meta) => _log('debug', msg, meta),
@@ -79,4 +104,13 @@ export function createHcLogger(fileName) {
     warn:  (msg, meta) => _log('warn',  msg, meta),
     error: (msg, meta) => _log('error', msg, meta),
   };
+}
+
+/**
+ * Backward-compatible wrapper: creates a logger scoped to the HealthCheck module.
+ * @param {string} component - e.g. 'PollerService.js', 'Reports', 'Config'
+ * @returns {{ debug, info, warn, error }}
+ */
+export function createHcLogger(component) {
+  return createModuleLogger('HealthCheck', component);
 }

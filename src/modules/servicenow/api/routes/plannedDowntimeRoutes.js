@@ -318,6 +318,8 @@ router.get(routes.plannedDowntime, async (req, res) => {
       success: true,
       data: entries,
       count: entries.length,
+      timezone: tz,
+      timezoneLabel: tz === 'Asia/Kolkata' ? 'IST' : tz,
       message: apiMessages.plannedDowntime.fetched.replace('{count}', String(entries.length)),
     });
   } catch (err) {
@@ -351,6 +353,8 @@ router.post(routes.plannedDowntimeSync, async (req, res) => {
       success: true,
       data: entries,
       count: entries.length,
+      timezone: tz,
+      timezoneLabel: tz === 'Asia/Kolkata' ? 'IST' : tz,
       message: apiMessages.plannedDowntime.synced.replace('{count}', String(entries.length)),
     });
   } catch (err) {

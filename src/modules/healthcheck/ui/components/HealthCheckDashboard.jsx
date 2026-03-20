@@ -19,7 +19,7 @@ import {
   TrendingDown, Eye, Gauge, Layers, Filter, Search, Download,
   ChevronDown, ChevronUp, Info, Target,
 } from 'lucide-react';
-import { createLogger } from '@shared';
+import { createLogger, TimezoneService } from '@shared';
 import ApiClient from '@shared/services/apiClient';
 import uiText from '../config/uiText.json';
 import urls from '../config/urls.json';
@@ -379,10 +379,10 @@ export default function HealthCheckDashboard({ onNavigate }) {
           <div className="flex flex-col lg:flex-row lg:items-center gap-4">
             {/* Current Time */}
             <div className="flex items-center gap-2 text-sm min-w-[240px]">
-              <span className="text-surface-500">Current Time:</span>
+              <span className="text-surface-500">Current Time ({TimezoneService.getTimezoneLabel()}):</span>
               <Clock size={14} className="text-surface-600" />
               <span className="font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                {currentTime.toLocaleTimeString()}
+                {TimezoneService.formatTime(currentTime.toISOString())}
               </span>
             </div>
 
@@ -391,9 +391,9 @@ export default function HealthCheckDashboard({ onNavigate }) {
 
             {/* Last Poll */}
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-surface-500">{t.poller.lastPoll}:</span>
+              <span className="text-surface-500">{t.poller.lastPoll} ({poller.timezoneLabel || 'IST'}):</span>
               <span className="font-medium text-surface-800">
-                {poller.lastPollTime ? new Date(poller.lastPollTime).toLocaleString() : t.poller.notStarted}
+                {poller.lastPollTimeDisplay || t.poller.notStarted}
               </span>
             </div>
 
@@ -587,7 +587,7 @@ export default function HealthCheckDashboard({ onNavigate }) {
                             ) : <span className="text-surface-300">—</span>}
                           </td>
                           <td className="px-5 py-3 text-sm text-surface-500">
-                            {app.lastPolledAt ? new Date(app.lastPolledAt).toLocaleString() : '—'}
+                            {app.lastPolledAt ? TimezoneService.formatTime(app.lastPolledAt) : '—'}
                           </td>
                           <td className="px-5 py-3 text-sm text-red-600 max-w-xs truncate" title={app.latestError || ''}>
                             {app.latestError || '—'}

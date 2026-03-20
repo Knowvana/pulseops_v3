@@ -22,7 +22,7 @@ const routes = hcUrls.routes;
 // ── GET /poller/status ───────────────────────────────────────────────────────
 router.get(routes.pollerStatus, async (req, res) => {
   try {
-    const status = getStatus();
+    const status = await getStatus();
     const latestStatus = getLatestStatus();
     const config = await loadPollerConfig();
     res.json({
@@ -48,7 +48,7 @@ router.post(routes.pollerStart, async (req, res) => {
     await saveModuleConfig('poller_config', config, 'Health poller configuration');
 
     await start(config);
-    const status = getStatus();
+    const status = await getStatus();
     log.info('Poller started via API');
     res.json({
       success: true,
@@ -73,7 +73,8 @@ router.post(routes.pollerStop, async (req, res) => {
     await saveModuleConfig('poller_config', config, 'Health poller configuration');
 
     log.info('Poller stopped via API');
-    res.json({ success: true, data: getStatus(), message: apiMessages.poller.stopped });
+    const status = await getStatus();
+    res.json({ success: true, data: status, message: apiMessages.poller.stopped });
   } catch (err) {
     log.error('POST poller stop failed', { message: err.message });
     res.status(500).json({ success: false, error: { message: apiErrors.poller.stopFailed.replace('{message}', err.message) } });

@@ -23,6 +23,7 @@
     "dashboard":           "/api/healthcheck/dashboard",
     "dashboardLive":       "/api/healthcheck/dashboard/live",
 
+    "reports":             "/api/healthcheck/reports",
     "reportUptime":        "/api/healthcheck/reports/uptime",
     "reportDowntime":      "/api/healthcheck/reports/downtime",
     "reportPollVerification": "/api/healthcheck/reports/poll-verification",

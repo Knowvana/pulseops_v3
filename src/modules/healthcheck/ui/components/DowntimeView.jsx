@@ -14,7 +14,7 @@ import {
   X, Download, Settings,
   Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Lock, GripVertical,
 } from 'lucide-react';
-import { createLogger } from '@shared';
+import { createLogger, TimezoneService } from '@shared';
 import ApiClient from '@shared/services/apiClient';
 import uiText from '../config/uiText.json';
 import urls from '../config/urls.json';
@@ -383,8 +383,8 @@ export default function DowntimeView() {
                           </td>
                         );
                       })}
-                      <td className="px-4 py-2.5 text-surface-600 whitespace-nowrap">{pd._start_time || '—'}</td>
-                      <td className="px-4 py-2.5 text-surface-600 whitespace-nowrap">{pd._end_time || '—'}</td>
+                      <td className="px-4 py-2.5 text-surface-600 whitespace-nowrap">{pd._start_time ? TimezoneService.formatTime(pd._start_time) : '—'}</td>
+                      <td className="px-4 py-2.5 text-surface-600 whitespace-nowrap">{pd._end_time ? TimezoneService.formatTime(pd._end_time) : '—'}</td>
                       <td className="px-4 py-2.5 text-center">
                         <span className={`font-semibold ${pd._durMs > 0 ? 'text-amber-700' : 'text-surface-400'}`}>
                           {formatDuration(pd._durMs)}

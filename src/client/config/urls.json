@@ -74,6 +74,11 @@
     "get": "/api/settings",
     "save": "/api/settings"
   },
+  "timezone": {
+    "get": "/api/timezone",
+    "save": "/api/timezone",
+    "list": "/api/timezone/list"
+  },
   "UIRoutes": {
     "platformAdmin": {
       "dashboard": "/platform_admin",

@@ -92,20 +92,59 @@
     "monthLabel": "Report Month",
     "generateButton": "Generate Report",
     "generating": "Generating...",
+    "loading": "Loading Report...",
+    "loadingSubtitle": "Fetching uptime data, planned downtime, and SLA calculations.",
     "exportButton": "Export",
     "summary": {
       "title": "Report Summary",
       "month": "Month",
       "totalApps": "Applications",
       "globalSla": "Global SLA Target",
+      "slaComplianceTarget": "SLA Compliance Target - Monthly",
       "intervalSeconds": "Poll Interval",
       "pollerStartTime": "Poller Start Time",
       "expectedPollsTotal": "Expected Polls (Month)",
       "expectedPollsElapsed": "Expected Polls (Elapsed)",
+      "pollsExpectedActuals": "Polls (Expected & Actuals)",
       "elapsedMinutes": "Elapsed Minutes",
       "totalMinutes": "Total Minutes in Month",
+      "totalHours": "Total Hours (Month)",
+      "elapsedHours": "Elapsed Hours",
       "currentMonth": "Current Month (In Progress)",
-      "completedMonth": "Completed Month"
+      "completedMonth": "Completed Month",
+      "expectedUptimeHours": "Expected Uptime Hours",
+      "expectedDowntimeHours": "Max Allowed Downtime Hours",
+      "daysInMonth": "Days in Month",
+      "timezone": "Timezone",
+      "generatedAt": "Generated At",
+      "generatedOn": "Generated on",
+      "plannedDowntime": "Planned Downtime",
+      "plannedDowntimeEntries": "Planned Downtime Entries",
+      "proratedNote": "* Prorated from",
+      "proratedReason": "for current month as poller started on"
+    },
+    "slaCompliance": {
+      "title": "SLA Compliance (Monthly)",
+      "totalHours": "Total Hours (Current Month)",
+      "expectedUptimeHours": "Expected Uptime Hours (Current Month)",
+      "actualUptimeHours": "Actual Uptime Hours (Current Month)",
+      "expectedDowntimeHours": "Expected Downtime Hours (Current Month)",
+      "actualDowntimeHours": "Actual Downtime Hours (Current Month)",
+      "slaCompliant": "Monthly Application Uptime SLA Compliant"
+    },
+    "uptimeStats": {
+      "title": "Uptime Stats (Monthly)",
+      "expectedUptime": "Expected Uptime",
+      "actualUptime": "Actual Uptime",
+      "expectedDowntime": "Expected Downtime",
+      "actualDowntime": "Actual Downtime"
+    },
+    "verificationStats": {
+      "title": "Uptime Stats - Verification (Monthly)",
+      "expectedPollsMonthly": "Expected Polls (Monthly)",
+      "actualPollsTillNow": "Actual Polls-Till Now (Monthly)",
+      "actualMatchesExpected": "Actual Polls matches Expected Polls",
+      "note": "NOTE: Expected Polls for current month are calculated as:"
     },
     "grid": {
       "application": "Application",
@@ -113,10 +152,11 @@
       "slaTarget": "SLA Target %",
       "actualUptime": "Actual Uptime %",
       "verdict": "SLA Verdict",
-      "totalPolls": "Total Polls",
+      "totalPolls": "Actual Polls",
       "upPolls": "UP Polls",
       "downPolls": "DOWN Polls",
       "expectedPolls": "Expected Polls",
+      "coveragePercent": "Coverage %",
       "pollStatus": "Poll Status",
       "actualDowntime": "Actual Downtime (min)",
       "plannedDowntime": "Planned Downtime (min)",
@@ -144,6 +184,28 @@
       "status": "Status",
       "firstPoll": "First Poll",
       "lastPoll": "Last Poll"
+    },
+    "missedPolls": {
+      "title": "Missed Polls",
+      "subtitle": "Shows every minute where a poll was expected but not recorded.",
+      "noMissedPolls": "No missed polls detected. All expected polls are accounted for.",
+      "minuteHeader": "Missed Minute",
+      "application": "Application",
+      "expectedTime": "Expected Poll Time",
+      "totalMissed": "Total Missed"
+    },
+    "plannedDowntimeSection": {
+      "title": "Planned Downtime (from ServiceNow)",
+      "subtitle": "Maintenance windows fetched live from ServiceNow, excluded from SLA calculations.",
+      "noEntries": "No planned downtime entries found for this month.",
+      "changeRequest": "Change Request",
+      "taskNumber": "Task Number",
+      "description": "Short Description",
+      "state": "State",
+      "startTime": "Start Time",
+      "endTime": "End Time",
+      "duration": "Duration (min)",
+      "totalMinutes": "Total Planned Downtime"
     }
   },
   "downtime": {

@@ -231,15 +231,13 @@ export async function start(config) {
 
   log.info(`Starting health poller — interval ${_currentConfig.intervalSeconds}s`);
 
-  // Save poller start time if not already set
-  if (!_currentConfig.pollerStartTime) {
-    _currentConfig.pollerStartTime = new Date().toISOString();
-    try {
-      await saveModuleConfig('poller_config', _currentConfig, 'Health poller configuration — interval, timeout, retry settings, and poller start timestamp.');
-      log.info('Poller start time saved', { pollerStartTime: _currentConfig.pollerStartTime });
-    } catch (err) {
-      log.warn('Failed to save poller start time', { message: err.message });
-    }
+  // Always update poller start time when poller starts
+  _currentConfig.pollerStartTime = new Date().toISOString();
+  try {
+    await saveModuleConfig('poller_config', _currentConfig, 'Health poller configuration — interval, timeout, retry settings, and poller start timestamp.');
+    log.info('Poller start time updated', { pollerStartTime: _currentConfig.pollerStartTime });
+  } catch (err) {
+    log.warn('Failed to save poller start time', { message: err.message });
   }
 
   // Execute first poll immediately
@@ -281,11 +279,46 @@ export async function startIfEnabled() {
   }
 }
 
-export function getStatus() {
+export async function getStatus() {
+  // Load timezone from global admin /api/timezone endpoint (unprotected)
+  let displayTimezone = 'Asia/Kolkata'; // default IST
+  let timezoneLabel = 'IST';
+  try {
+    const PORT = process.env.PORT || 4001;
+    const response = await fetch(`http://localhost:${PORT}/api/timezone`);
+    if (response.ok) {
+      const json = await response.json();
+      if (json.success && json.data?.timezone) {
+        displayTimezone = json.data.timezone;
+        timezoneLabel = json.data.timezoneLabel || 'IST';
+      }
+    }
+  } catch (err) {
+    log.debug('Could not load global timezone config', { message: err.message });
+  }
+
+  // Format lastPollTime in the display timezone
+  let lastPollTimeDisplay = null;
+  if (_lastPollTime) {
+    try {
+      const dateObj = _lastPollTime instanceof Date ? _lastPollTime : new Date(_lastPollTime);
+      lastPollTimeDisplay = new Intl.DateTimeFormat('en-IN', {
+        timeZone: displayTimezone, year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
+      }).format(dateObj);
+    } catch (err) {
+      log.debug('Failed to format lastPollTime', { message: err.message });
+      lastPollTimeDisplay = _lastPollTime instanceof Date ? _lastPollTime.toISOString() : String(_lastPollTime);
+    }
+  }
+
   return {
     isRunning: _isRunning,
     isPollInProgress: _isPollInProgress,
     lastPollTime: _lastPollTime,
+    lastPollTimeDisplay,
+    timezone: displayTimezone,
+    timezoneLabel,
     lastPollResults: _lastPollResults,
     pollCount: _pollCount,
     intervalSeconds: _currentConfig?.intervalSeconds || null,

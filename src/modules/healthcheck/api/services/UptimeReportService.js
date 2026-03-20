@@ -7,8 +7,12 @@
 // ARCHITECTURE:
 //   - Global SLA % (single value, measured monthly) from hc_module_config
 //   - Only apps in categories with used_for_sla=true are included in reports
-//   - Planned downtime fetched LIVE from ServiceNow API (no local table)
-//   - Expected polls calculated from poller start time saved in config
+//   - Planned downtime entries are pre-fetched by the route handler (which has
+//     auth cookies) and passed into getMonthlyUptimeReport() as a parameter
+//   - Expected polls: Days in Month × 24 × 60 (1 poll per minute)
+//   - Elapsed polls: from pollerStartTime (or month start) until now
+//   - Coverage % capped at 100%
+//   - All times converted to configured display timezone (IST)
 //   - Unplanned downtime = Total downtime - Planned downtime
 //
 // FUNCTIONS:
@@ -19,11 +23,14 @@
 //
 // MONTH FORMAT: 'YYYY-MM' (e.g. '2026-03')
 // ============================================================================
-import { dbSchema, DatabaseService, loadPollerConfig, loadDowntimeSourceConfig, loadGlobalSlaConfig } from '#modules/healthcheck/api/routes/helpers.js';
+import { dbSchema, DatabaseService, loadPollerConfig, loadGlobalSlaConfig } from '#modules/healthcheck/api/routes/helpers.js';
 import { createHcLogger } from '#modules/healthcheck/api/lib/moduleLogger.js';
 import { getStatus as getPollerStatus, getLatestStatus } from '#modules/healthcheck/api/services/PollerService.js';
 
 const log = createHcLogger('UptimeReportService.js');
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -34,11 +41,45 @@ function parseMonth(monthStr) {
   const month = parseInt(match[2], 10);
   const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0));
   const end = new Date(Date.UTC(year, month, 1, 0, 0, 0)); // first ms of next month
-  return { year, month, start, end };
+  return { year, month, start, end, monthName: MONTH_NAMES[month - 1] };
 }
 
 function minutesBetween(a, b) {
   return Math.max(0, (b.getTime() - a.getTime()) / 60000);
+}
+
+/**
+ * Format a Date to a display string in the given IANA timezone.
+ */
+function formatInTz(date, tz) {
+  if (!date || !tz) return date ? date.toISOString() : null;
+  try {
+    return new Intl.DateTimeFormat('en-IN', {
+      timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
+    }).format(date);
+  } catch { return date.toISOString(); }
+}
+
+/**
+ * Load the global display timezone from the admin /api/timezone endpoint (unprotected).
+ * Falls back to 'Asia/Kolkata' (IST) if not configured or API unavailable.
+ * Returns { timezone, timezoneLabel }.
+ */
+async function loadDisplayTimezone() {
+  try {
+    const PORT = process.env.PORT || 1001;
+    const response = await fetch(`http://localhost:${PORT}/api/timezone`);
+    if (response.ok) {
+      const json = await response.json();
+      if (json.success && json.data?.timezone) {
+        return { timezone: json.data.timezone, timezoneLabel: json.data.timezoneLabel || 'IST' };
+      }
+    }
+  } catch (err) {
+    log.debug('Could not load global timezone config', { message: err.message });
+  }
+  return { timezone: 'Asia/Kolkata', timezoneLabel: 'IST' };
 }
 
 /**
@@ -50,11 +91,20 @@ function calcPlannedDowntimeMinutes(downtimeEntries, monthStart, monthEnd) {
 
   // Clip windows to month boundaries and sort
   const windows = downtimeEntries
-    .map(r => ({
-      start: new Date(Math.max(new Date(r.start_time || r.startTime).getTime(), monthStart.getTime())),
-      end:   new Date(Math.min(new Date(r.end_time || r.endTime).getTime(),   monthEnd.getTime())),
-    }))
-    .filter(w => w.end > w.start)
+    .map(r => {
+      const sRaw = r._start_time || r.start_time || r.startTime || r.work_start;
+      const eRaw = r._end_time || r.end_time || r.endTime || r.work_end;
+      if (!sRaw || !eRaw) return null;
+      // Parse: the times may be in display TZ format "YYYY-MM-DDTHH:MM:SS" or ISO
+      const sDate = new Date(sRaw);
+      const eDate = new Date(eRaw);
+      if (isNaN(sDate.getTime()) || isNaN(eDate.getTime())) return null;
+      return {
+        start: new Date(Math.max(sDate.getTime(), monthStart.getTime())),
+        end:   new Date(Math.min(eDate.getTime(), monthEnd.getTime())),
+      };
+    })
+    .filter(w => w && w.end > w.start)
     .sort((a, b) => a.start - b.start);
 
   if (windows.length === 0) return 0;
@@ -73,42 +123,24 @@ function calcPlannedDowntimeMinutes(downtimeEntries, monthStart, monthEnd) {
   return merged.reduce((sum, w) => sum + minutesBetween(w.start, w.end), 0);
 }
 
-/**
- * Fetch planned downtime entries from ServiceNow API (live, no local DB).
- * Returns array of { start_time, end_time, change_number, ... } or empty array.
- */
-async function fetchPlannedDowntimeFromSnow(monthStart, monthEnd) {
-  try {
-    const dtConfig = await loadDowntimeSourceConfig();
-    if (!dtConfig.enabled || !dtConfig.apiUrl) {
-      log.debug('Planned downtime integration disabled or no API URL configured');
-      return [];
-    }
-
-    const url = `${dtConfig.apiUrl}?start=${monthStart.toISOString()}&end=${monthEnd.toISOString()}`;
-    log.info('Fetching planned downtime from SNOW API', { url });
-
-    const response = await fetch(`http://localhost:${process.env.PORT || 1001}${url}`);
-    if (!response.ok) {
-      log.warn('SNOW planned downtime API returned non-OK', { status: response.status });
-      return [];
-    }
-    const json = await response.json();
-    return json.data || json.entries || json || [];
-  } catch (err) {
-    log.warn('Failed to fetch planned downtime from SNOW', { message: err.message });
-    return [];
-  }
-}
-
 // ── Monthly Uptime Report ────────────────────────────────────────────────────
 
-export async function getMonthlyUptimeReport(monthStr) {
+/**
+ * Generate the monthly uptime SLA report.
+ * @param {string} monthStr - Month in 'YYYY-MM' format
+ * @param {Array} [plannedDowntimeEntries=[]] - Pre-fetched planned downtime entries from SNOW.
+ *   The route handler fetches these (with auth cookies) and passes them in.
+ *   Falls back to empty array if not provided.
+ */
+export async function getMonthlyUptimeReport(monthStr, plannedDowntimeEntries = []) {
   const parsed = parseMonth(monthStr);
   if (!parsed) throw new Error(`Invalid month format: ${monthStr}`);
-  const { start: monthStart, end: monthEnd } = parsed;
+  const { year, month, start: monthStart, end: monthEnd, monthName } = parsed;
 
   log.info('Generating monthly uptime report', { month: monthStr });
+
+  // Load timezone from global admin API
+  const { timezone: displayTimezone, timezoneLabel } = await loadDisplayTimezone();
 
   // Load global SLA config
   const globalSla = await loadGlobalSlaConfig();
@@ -120,17 +152,45 @@ export async function getMonthlyUptimeReport(monthStr) {
   const effectiveEnd = now < monthEnd ? now : monthEnd;
   const totalMinutesInMonth = minutesBetween(monthStart, monthEnd);
   const elapsedMinutes = minutesBetween(monthStart, effectiveEnd);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const totalHoursInMonth = daysInMonth * 24;
 
-  // Load poller config for expected poll count calculation
+  // Load poller config for interval
   const pollerConfig = await loadPollerConfig();
   const intervalSeconds = pollerConfig.intervalSeconds || 60;
   const pollerStartTime = pollerConfig.pollerStartTime ? new Date(pollerConfig.pollerStartTime) : null;
 
-  // Calculate expected polls based on poller start time
-  const effectivePollerStart = pollerStartTime && pollerStartTime > monthStart ? pollerStartTime : monthStart;
+  // Query actual first poll time from DB for this month (stable, not affected by poller restarts)
+  const firstPollResult = await DatabaseService.query(
+    `SELECT MIN(polled_at) AS first_poll FROM ${dbSchema}.hc_poll_results
+     WHERE polled_at >= $1 AND polled_at < $2`,
+    [monthStart.toISOString(), monthEnd.toISOString()]
+  );
+  const actualFirstPoll = firstPollResult.rows[0]?.first_poll
+    ? new Date(firstPollResult.rows[0].first_poll)
+    : null;
+
+  // Expected Polls (Month) = Days in Month × 24 hours × 60 minutes (1 poll per minute)
+  const expectedPollsTotal = daysInMonth * 24 * 60;
+
+  // Expected Polls (Elapsed) = minutes from the actual first poll (or month start) until now
+  // Use the actual first poll from DB as the stable reference (not volatile pollerStartTime
+  // which resets on every poller restart/hot-reload)
+  const effectivePollerStart = actualFirstPoll && actualFirstPoll > monthStart
+    ? actualFirstPoll
+    : monthStart;
   const pollingMinutes = minutesBetween(effectivePollerStart, effectiveEnd);
-  const expectedPollsTotal = Math.floor(totalMinutesInMonth / (intervalSeconds / 60));
-  const expectedPollsElapsed = Math.floor(pollingMinutes / (intervalSeconds / 60));
+  const expectedPollsElapsed = Math.floor(pollingMinutes) + 1;
+
+  // Build calculation breakdowns for auditing
+  const expectedPollsMonthFormula = `${daysInMonth} Days × 24 Hours × 60 Minutes = ${expectedPollsTotal} Polls`;
+  const elapsedStartDisplay = formatInTz(effectivePollerStart, displayTimezone);
+  const elapsedEndDisplay = formatInTz(effectiveEnd, displayTimezone);
+  const elapsedMinutesRounded = Math.floor(pollingMinutes);
+  const expectedPollsElapsedFormula = `${elapsedStartDisplay} → ${elapsedEndDisplay} = ${elapsedMinutesRounded} Minutes = ${expectedPollsElapsed} Polls [System performs 1 Poll Each Minute]`;
+
+  // Elapsed hours for SLA display
+  const elapsedHours = parseFloat((elapsedMinutes / 60).toFixed(2));
 
   // Load only active apps in categories with used_for_sla = true
   const appsResult = await DatabaseService.query(
@@ -142,8 +202,8 @@ export async function getMonthlyUptimeReport(monthStr) {
   );
   const apps = appsResult.rows || [];
 
-  // Fetch planned downtime from SNOW API (live — no local DB table)
-  const plannedDowntimeEntries = await fetchPlannedDowntimeFromSnow(monthStart, monthEnd);
+  // plannedDowntimeEntries are passed in by the route handler (which has auth cookies)
+  log.info('Using planned downtime entries for report', { count: plannedDowntimeEntries.length });
 
   const report = [];
 
@@ -168,26 +228,36 @@ export async function getMonthlyUptimeReport(monthStr) {
     );
     const plannedDowntimeMinutes = calcPlannedDowntimeMinutes(appDowntimeEntries, monthStart, monthEnd);
 
-    // Calculate uptime
+    // Calculate uptime using poll-based ratio (most accurate per-app metric)
     // Actual downtime minutes from poll results (DOWN polls × interval)
     const actualDownMinutes = down_polls * (intervalSeconds / 60);
-    // STRICTLY remove planned downtime from total downtime
-    // Unplanned downtime = actual downtime - planned downtime (cannot go below 0)
-    const unplannedDownMinutes = Math.max(0, actualDownMinutes - plannedDowntimeMinutes);
+    // Planned downtime polls = planned downtime minutes / interval minutes
+    const plannedDowntimePolls = Math.floor(plannedDowntimeMinutes / (intervalSeconds / 60));
+    // Unplanned DOWN polls = total DOWN polls - planned downtime polls (cannot go below 0)
+    const unplannedDownPolls = Math.max(0, down_polls - plannedDowntimePolls);
+    // Effective total polls = total polls - planned downtime polls (exclude planned downtime window)
+    const effectiveTotalPolls = Math.max(1, total_polls - plannedDowntimePolls);
+    // Unplanned downtime minutes = unplanned DOWN polls × interval
+    const unplannedDownMinutes = unplannedDownPolls * (intervalSeconds / 60);
     // Effective operating minutes = elapsed - planned downtime
     const effectiveOperatingMinutes = Math.max(1, elapsedMinutes - plannedDowntimeMinutes);
-    // Uptime % = (effectiveOperating - unplannedDown) / effectiveOperating × 100
+    // Uptime % = (effectiveTotalPolls - unplannedDownPolls) / effectiveTotalPolls × 100
     const uptimePercent = total_polls > 0
-      ? Math.min(100, ((effectiveOperatingMinutes - unplannedDownMinutes) / effectiveOperatingMinutes) * 100)
+      ? Math.min(100, ((effectiveTotalPolls - unplannedDownPolls) / effectiveTotalPolls) * 100)
       : null;
 
     const slaVerdict = uptimePercent !== null
       ? (uptimePercent >= slaTarget ? 'MET' : 'NOT_MET')
       : 'NO_DATA';
 
-    // Poll verification — expected vs actual
+    // Poll verification — expected vs actual (cap coverage at 100%)
+    const coveragePercent = expectedPollsElapsed > 0
+      ? Math.min(100, parseFloat(((total_polls / expectedPollsElapsed) * 100).toFixed(2)))
+      : 0;
     const pollsMatch = total_polls >= expectedPollsElapsed;
-    const pollVerificationStatus = pollsMatch ? 'ACCURATE' : 'INCOMPLETE';
+    const pollVerificationStatus = isCurrentMonth
+      ? (pollsMatch ? 'ACCURATE' : 'IN_PROGRESS')
+      : (pollsMatch ? 'ACCURATE' : 'INCOMPLETE');
 
     report.push({
       applicationId: app.id,
@@ -205,12 +275,14 @@ export async function getMonthlyUptimeReport(monthStr) {
       downPolls: down_polls,
       expectedPollsTotal,
       expectedPollsElapsed,
+      coveragePercent,
       pollsMatch,
       pollVerificationStatus,
       // Downtime
       actualDowntimeMinutes: parseFloat(actualDownMinutes.toFixed(2)),
       plannedDowntimeMinutes: parseFloat(plannedDowntimeMinutes.toFixed(2)),
       unplannedDowntimeMinutes: parseFloat(unplannedDownMinutes.toFixed(2)),
+      plannedDowntimeEntries: appDowntimeEntries.length,
       // Meta
       month: monthStr,
       totalMinutesInMonth: parseFloat(totalMinutesInMonth.toFixed(2)),
@@ -220,18 +292,37 @@ export async function getMonthlyUptimeReport(monthStr) {
     });
   }
 
-  log.info('Monthly uptime report generated', { month: monthStr, apps: report.length });
+  log.info('Monthly uptime report generated', { month: monthStr, apps: report.length, plannedDowntime: plannedDowntimeEntries.length });
   return {
     month: monthStr,
-    generatedAt: new Date().toISOString(),
+    monthDisplay: `${monthStr} (${monthName})`,
+    generatedAt: now.toISOString(),
+    generatedAtDisplay: formatInTz(now, displayTimezone),
     isCurrentMonth,
+    displayTimezone,
+    timezoneLabel,
     slaTargetPercent: slaTarget,
-    totalMinutesInMonth,
-    elapsedMinutes: parseFloat(elapsedMinutes.toFixed(2)),
+    // Time dimensions
+    daysInMonth,
+    totalHoursInMonth,
+    totalMinutesInMonth: parseFloat(totalMinutesInMonth.toFixed(0)),
+    elapsedMinutes: parseFloat(elapsedMinutes.toFixed(0)),
+    elapsedHours,
     intervalSeconds,
+    // Poller
     pollerStartTime: pollerStartTime ? pollerStartTime.toISOString() : null,
+    pollerStartTimeDisplay: pollerStartTime ? formatInTz(pollerStartTime, displayTimezone) : null,
+    // Expected polls with formulas
     expectedPollsTotal,
     expectedPollsElapsed,
+    expectedPollsMonthFormula,
+    expectedPollsElapsedFormula,
+    // SLA summary (hours-based for reference graphs)
+    expectedUptimeHours: parseFloat((totalHoursInMonth * (slaTarget / 100)).toFixed(2)),
+    expectedDowntimeHours: parseFloat((totalHoursInMonth * ((100 - slaTarget) / 100)).toFixed(2)),
+    // Planned downtime
+    plannedDowntimeEntries,
+    totalPlannedDowntimeMinutes: parseFloat(calcPlannedDowntimeMinutes(plannedDowntimeEntries, monthStart, monthEnd).toFixed(2)),
     applications: report,
   };
 }
@@ -241,20 +332,36 @@ export async function getMonthlyUptimeReport(monthStr) {
 export async function getPollVerification(monthStr) {
   const parsed = parseMonth(monthStr);
   if (!parsed) throw new Error(`Invalid month format: ${monthStr}`);
-  const { start: monthStart, end: monthEnd } = parsed;
+  const { year, month, start: monthStart, end: monthEnd, monthName } = parsed;
 
   const now = new Date();
   const isCurrentMonth = now >= monthStart && now < monthEnd;
   const effectiveEnd = now < monthEnd ? now : monthEnd;
+  const daysInMonth = new Date(year, month, 0).getDate();
 
+  const { timezone: displayTimezone, timezoneLabel } = await loadDisplayTimezone();
   const pollerConfig = await loadPollerConfig();
   const intervalSeconds = pollerConfig.intervalSeconds || 60;
   const pollerStartTime = pollerConfig.pollerStartTime ? new Date(pollerConfig.pollerStartTime) : null;
 
-  const effectivePollerStart = pollerStartTime && pollerStartTime > monthStart ? pollerStartTime : monthStart;
+  // Query actual first poll time from DB for this month (stable, not affected by poller restarts)
+  const firstPollResult = await DatabaseService.query(
+    `SELECT MIN(polled_at) AS first_poll FROM ${dbSchema}.hc_poll_results
+     WHERE polled_at >= $1 AND polled_at < $2`,
+    [monthStart.toISOString(), monthEnd.toISOString()]
+  );
+  const actualFirstPoll = firstPollResult.rows[0]?.first_poll
+    ? new Date(firstPollResult.rows[0].first_poll)
+    : null;
+
+  // Use actual first poll from DB as stable reference (not volatile pollerStartTime
+  // which resets on every poller restart/hot-reload)
+  const effectivePollerStart = actualFirstPoll && actualFirstPoll > monthStart
+    ? actualFirstPoll
+    : monthStart;
   const pollingMinutes = minutesBetween(effectivePollerStart, effectiveEnd);
-  const expectedPollsElapsed = Math.floor(pollingMinutes / (intervalSeconds / 60));
-  const expectedPollsTotal = Math.floor(minutesBetween(monthStart, monthEnd) / (intervalSeconds / 60));
+  const expectedPollsElapsed = Math.floor(pollingMinutes) + 1;
+  const expectedPollsTotal = daysInMonth * 24 * 60;
 
   // Only apps in SLA-enabled categories
   const result = await DatabaseService.query(
@@ -292,30 +399,41 @@ export async function getPollVerification(monthStr) {
       firstPoll: row.first_poll,
       lastPoll: row.last_poll,
       coveragePercent: expectedPollsElapsed > 0
-        ? parseFloat(((row.actual_polls / expectedPollsElapsed) * 100).toFixed(2))
+        ? Math.min(100, parseFloat(((row.actual_polls / expectedPollsElapsed) * 100).toFixed(2)))
         : 0,
       pollsMatch,
-      // If current month and polls don't match, show "In Progress" not "INCOMPLETE"
       status: pollsMatch ? 'ACCURATE' : (isCurrentMonth ? 'IN_PROGRESS' : 'INCOMPLETE'),
     };
   });
 
   return {
     month: monthStr,
+    monthDisplay: `${monthStr} (${monthName})`,
     generatedAt: new Date().toISOString(),
     isCurrentMonth,
+    displayTimezone,
+    timezoneLabel,
     intervalSeconds,
     pollerStartTime: pollerStartTime ? pollerStartTime.toISOString() : null,
+    pollerStartTimeDisplay: pollerStartTime ? formatInTz(pollerStartTime, displayTimezone) : null,
     expectedPollsElapsed,
     expectedPollsTotal,
-    elapsedMinutes: parseFloat(minutesBetween(monthStart, effectiveEnd).toFixed(2)),
+    elapsedMinutes: parseFloat(minutesBetween(monthStart, effectiveEnd).toFixed(0)),
     applications: apps,
   };
 }
 
 // ── Unplanned Downtime ───────────────────────────────────────────────────────
 
-export async function getUnplannedDowntime(monthStr, appId) {
+/**
+ * Get unplanned downtime windows for a month.
+ * @param {string} monthStr - Month in 'YYYY-MM' format
+ * @param {string} [appId] - Optional app ID to filter by
+ * @param {Array} [plannedDowntimeEntries=[]] - Pre-fetched planned downtime entries from SNOW.
+ *   The route handler fetches these (with auth cookies) and passes them in.
+ *   Falls back to empty array if not provided.
+ */
+export async function getUnplannedDowntime(monthStr, appId, plannedDowntimeEntries = []) {
   const parsed = parseMonth(monthStr);
   if (!parsed) throw new Error(`Invalid month format: ${monthStr}`);
   const { start: monthStart, end: monthEnd } = parsed;
@@ -392,10 +510,8 @@ export async function getUnplannedDowntime(monthStr, appId) {
     };
   });
 
-  // Fetch planned downtime from SNOW API to tag windows
-  const plannedDowntimeEntries = await fetchPlannedDowntimeFromSnow(monthStart, monthEnd);
-
   // Tag each downtime window as planned/unplanned
+  // plannedDowntimeEntries are passed in by the route handler (which has auth cookies)
   const taggedWindows = windows.map(w => {
     const wStart = new Date(w.startTime).getTime();
     const wEnd = new Date(w.endTime).getTime();
@@ -474,8 +590,8 @@ export async function getDashboardSummary() {
   );
   const monthStats = monthStatsResult.rows[0] || { total_polls_month: 0, up_month: 0, down_month: 0 };
 
-  // Poller status
-  const pollerStatus = getPollerStatus();
+  // Poller status (async — fetches timezone from global API)
+  const pollerStatus = await getPollerStatus();
 
   // Build per-app summary
   const appSummaries = apps.map(app => {

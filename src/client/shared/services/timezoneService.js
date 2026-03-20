@@ -1,42 +1,47 @@
 // ============================================================================
-// TimezoneService — PulseOps V2 Shared Service
+// TimezoneService — PulseOps V3 Shared Service
 //
 // PURPOSE: Centralized timezone management for the entire platform. Fetches
-// the user-configured timezone from General Settings and provides formatting
-// utilities that respect the selected timezone.
+// the user-configured timezone from the UNPROTECTED /api/timezone endpoint
+// and provides formatting utilities that respect the selected timezone.
 //
 // USAGE:
 //   import TimezoneService from '@shared/services/timezoneService';
 //   TimezoneService.init();  // Call once at app start
 //   TimezoneService.formatTime(isoString); // Format with configured timezone
 //   TimezoneService.getTimezone(); // Get current timezone string
+//   TimezoneService.getTimezoneLabel(); // Get short label (e.g. 'IST')
 //   TimezoneService.setTimezone('Asia/Kolkata'); // Update timezone immediately
 //
-// ARCHITECTURE: Singleton service. Fetches from /api/settings on init.
+// ARCHITECTURE: Singleton service. Fetches from /api/timezone (unprotected).
+// All dates stored as UTC in database. UI converts to display timezone.
 // Components subscribe to timezone changes via subscribe/unsubscribe pattern.
 // ============================================================================
 import urls from '@config/urls.json';
 
 const DEFAULT_TIMEZONE = 'Asia/Kolkata';
+const DEFAULT_LABEL = 'IST';
 
 class TimezoneServiceClass {
   constructor() {
     this._timezone = DEFAULT_TIMEZONE;
+    this._timezoneLabel = DEFAULT_LABEL;
     this._listeners = new Set();
     this._initialized = false;
   }
 
   /**
-   * Initialize the service by fetching timezone from general settings API
+   * Initialize the service by fetching timezone from the global /api/timezone endpoint (unprotected)
    */
   async init() {
     if (this._initialized) return;
     this._initialized = true;
     try {
-      const res = await fetch(urls.settings.get, { credentials: 'include' });
+      const res = await fetch(urls.timezone.get);
       const json = await res.json();
       if (json.success && json.data?.timezone) {
         this._timezone = json.data.timezone;
+        this._timezoneLabel = json.data.timezoneLabel || DEFAULT_LABEL;
         this._notify();
       }
     } catch {
@@ -45,18 +50,34 @@ class TimezoneServiceClass {
   }
 
   /**
-   * Get the current configured timezone
+   * Re-fetch timezone from API (call after saving new timezone)
+   */
+  async refresh() {
+    this._initialized = false;
+    await this.init();
+  }
+
+  /**
+   * Get the current configured timezone (IANA string)
    */
   getTimezone() {
     return this._timezone;
   }
 
   /**
+   * Get the short timezone label (e.g. 'IST', 'UTC', 'EST')
+   */
+  getTimezoneLabel() {
+    return this._timezoneLabel;
+  }
+
+  /**
    * Set the timezone immediately (called after saving settings)
    */
-  setTimezone(tz) {
+  setTimezone(tz, label) {
     if (tz && tz !== this._timezone) {
       this._timezone = tz;
+      this._timezoneLabel = label || tz;
       this._notify();
     }
   }
@@ -72,7 +93,8 @@ class TimezoneServiceClass {
   }
 
   /**
-   * Format an ISO timestamp string using the configured timezone
+   * Format an ISO timestamp string using the configured timezone.
+   * Returns format: DD/MM/YYYY, hh:mm:ss AM/PM
    * @param {string} isoString - ISO date string to format
    * @returns {string} Formatted date/time string
    */
@@ -81,17 +103,25 @@ class TimezoneServiceClass {
     try {
       const date = new Date(isoString);
       if (isNaN(date.getTime())) return isoString;
-      const tz = this._timezone;
-      const day   = date.toLocaleString('en-GB', { timeZone: tz, day: '2-digit' });
-      const month = date.toLocaleString('en-GB', { timeZone: tz, month: 'long' });
-      const year  = date.toLocaleString('en-GB', { timeZone: tz, year: 'numeric' });
-      const time  = date.toLocaleString('en-US', {
-        timeZone: tz, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
-      });
-      return `${day}.${month}.${year},${time}`;
+      return new Intl.DateTimeFormat('en-IN', {
+        timeZone: this._timezone,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
+      }).format(date);
     } catch {
       return isoString;
     }
+  }
+
+  /**
+   * Format with timezone label appended, e.g. "19/03/2026, 08:44:10 pm (IST)"
+   * @param {string} isoString - ISO date string
+   * @returns {string} Formatted date/time with timezone label
+   */
+  formatTimeWithLabel(isoString) {
+    const formatted = this.formatTime(isoString);
+    if (formatted === '—' || formatted === isoString) return formatted;
+    return `${formatted} (${this._timezoneLabel})`;
   }
 
   /**
@@ -108,7 +138,6 @@ class TimezoneServiceClass {
    */
   toTimezoneISO() {
     const now = new Date();
-    // Use Intl to get the offset for the configured timezone
     try {
       const formatter = new Intl.DateTimeFormat('en-US', {
         timeZone: this._timezone,
@@ -117,7 +146,6 @@ class TimezoneServiceClass {
       const parts = formatter.formatToParts(now);
       const offsetPart = parts.find(p => p.type === 'timeZoneName');
       const offset = offsetPart ? offsetPart.value.replace('GMT', '') : '+00:00';
-      // Format: local time in that zone as ISO
       const localStr = now.toLocaleString('sv-SE', { timeZone: this._timezone });
       return localStr.replace(' ', 'T') + (offset || '+00:00');
     } catch {

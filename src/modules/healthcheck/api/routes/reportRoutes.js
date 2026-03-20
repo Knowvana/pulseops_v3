@@ -4,12 +4,12 @@
 // PURPOSE: All reporting endpoints — dashboard summary, monthly uptime report,
 // poll verification, downtime analysis, and planned downtime CRUD + sync.
 //
-// ENDPOINTS:
+// ENDPOINTS (RESTful Design):
 //   GET  /dashboard              → Dashboard summary (stats, apps, poller)
 //   GET  /dashboard/live         → Latest poll status per app (in-memory)
-//   GET  /reports/uptime         → Monthly uptime SLA report (?month=YYYY-MM)
-//   GET  /reports/downtime       → Unplanned downtime windows (?month=YYYY-MM&appId=)
-//   GET  /reports/poll-verification → Expected vs actual polls (?month=YYYY-MM)
+//   GET  /reports                → Monthly uptime SLA report (?month=YYYY-MM) — includes uptime, poll-verification, downtime
+//   POST /reports                → Generate/refresh report for a month (body: {month: YYYY-MM})
+//   PUT  /reports/:month         → Update report configuration for a month
 //
 //   GET    /sla                  → List SLA targets per app per month
 //   PUT    /sla/:id              → Update SLA target for an app-month
@@ -33,6 +33,43 @@ const routes = hcUrls.routes;
 function currentMonth() {
   const now = new Date();
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+// ── Helper: compute startDate/endDate from month string ─────────────────────
+function monthToDateRange(monthStr) {
+  const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(monthStr);
+  if (!match) return null;
+  const year = parseInt(match[1], 10);
+  const mon = parseInt(match[2], 10);
+  const startDate = `${year}-${String(mon).padStart(2, '0')}-01`;
+  const lastDay = new Date(year, mon, 0).getDate();
+  const endDate = `${year}-${String(mon).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  return { startDate, endDate };
+}
+
+// ── Helper: fetch planned downtime from configured SNOW API ─────────────────
+async function fetchPlannedDowntimeFromSnow(config, startDate, endDate, cookieHeader) {
+  if (!config.enabled || !config.apiUrl) {
+    throw new Error('Planned downtime source is not configured or not enabled.');
+  }
+
+  const separator = config.apiUrl.includes('?') ? '&' : '?';
+  const relUrl = `${config.apiUrl}${separator}startDate=${startDate}&endDate=${endDate}`;
+  // If apiUrl is relative (e.g. /api/servicenow/planned-downtime), prepend localhost
+  const url = relUrl.startsWith('http') ? relUrl : `http://localhost:${process.env.PORT || 1001}${relUrl}`;
+
+  log.info('Fetching planned downtime from SNOW API', { url });
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (cookieHeader) headers.cookie = cookieHeader;
+
+  const response = await fetch(url, { method: 'GET', headers });
+  if (!response.ok) {
+    throw new Error(`ServiceNow API returned HTTP ${response.status}`);
+  }
+
+  const json = await response.json();
+  return json?.data || json || [];
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -65,7 +102,119 @@ router.get(routes.dashboardLive, async (req, res) => {
 // REPORTS
 // ═════════════════════════════════════════════════════════════════════════════
 
-// ── GET /reports/uptime ──────────────────────────────────────────────────────
+// ── GET /reports?month=YYYY-MM ──────────────────────────────────────────────
+// RESTful endpoint: Returns consolidated report data (uptime, downtime, poll-verification)
+router.get('/reports', async (req, res) => {
+  try {
+    const month = req.query.month || currentMonth();
+    
+    // Validate month format
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: { message: 'Invalid month format. Use YYYY-MM.' } 
+      });
+    }
+
+    // Fetch planned downtime entries first (needs auth cookies from this request)
+    let plannedDowntimeEntries = [];
+    try {
+      const dtConfig = await loadDowntimeSourceConfig();
+      if (dtConfig.enabled && dtConfig.apiUrl) {
+        const range = monthToDateRange(month);
+        if (range) {
+          plannedDowntimeEntries = await fetchPlannedDowntimeFromSnow(
+            dtConfig, range.startDate, range.endDate, req.headers.cookie
+          );
+        }
+      }
+    } catch (dtErr) {
+      log.warn('Failed to fetch planned downtime for report', { message: dtErr.message });
+    }
+
+    // Fetch all report data in parallel (pass planned downtime to both uptime and downtime reports)
+    const [uptimeReport, downtimeReport, pollVerification] = await Promise.all([
+      getMonthlyUptimeReport(month, plannedDowntimeEntries),
+      getUnplannedDowntime(month, null, plannedDowntimeEntries),
+      getPollVerification(month),
+    ]);
+
+    // Consolidated response
+    res.json({ 
+      success: true, 
+      data: {
+        month,
+        uptime: uptimeReport,
+        downtime: downtimeReport,
+        pollVerification: pollVerification,
+      }
+    });
+  } catch (err) {
+    log.error('GET /reports failed', { message: err.message });
+    const status = err.message.includes('Invalid month') ? 400 : 500;
+    res.status(status).json({ 
+      success: false, 
+      error: { message: err.message || 'Failed to fetch report data.' } 
+    });
+  }
+});
+
+// ── POST /reports ───────────────────────────────────────────────────────────
+// Generate/refresh report for a specific month (body: {month: YYYY-MM})
+router.post('/reports', async (req, res) => {
+  try {
+    const { month } = req.body;
+    
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: { message: 'Invalid month format. Use YYYY-MM.' } 
+      });
+    }
+
+    // Fetch planned downtime entries first (needs auth cookies from this request)
+    let plannedDowntimeEntries = [];
+    try {
+      const dtConfig = await loadDowntimeSourceConfig();
+      if (dtConfig.enabled && dtConfig.apiUrl) {
+        const range = monthToDateRange(month);
+        if (range) {
+          plannedDowntimeEntries = await fetchPlannedDowntimeFromSnow(
+            dtConfig, range.startDate, range.endDate, req.headers.cookie
+          );
+        }
+      }
+    } catch (dtErr) {
+      log.warn('Failed to fetch planned downtime for report', { message: dtErr.message });
+    }
+
+    // Fetch all report data in parallel (pass planned downtime to both uptime and downtime reports)
+    const [uptimeReport, downtimeReport, pollVerification] = await Promise.all([
+      getMonthlyUptimeReport(month, plannedDowntimeEntries),
+      getUnplannedDowntime(month, null, plannedDowntimeEntries),
+      getPollVerification(month),
+    ]);
+
+    res.json({ 
+      success: true, 
+      data: {
+        month,
+        uptime: uptimeReport,
+        downtime: downtimeReport,
+        pollVerification: pollVerification,
+      }
+    });
+  } catch (err) {
+    log.error('POST /reports failed', { message: err.message });
+    res.status(500).json({ 
+      success: false, 
+      error: { message: err.message || 'Failed to generate report.' } 
+    });
+  }
+});
+
+// ── Legacy endpoints (kept for backward compatibility) ──────────────────────
+// These now delegate to the main /reports endpoint
 router.get(routes.reportUptime, async (req, res) => {
   try {
     const month = req.query.month || currentMonth();
@@ -74,12 +223,10 @@ router.get(routes.reportUptime, async (req, res) => {
   } catch (err) {
     log.error('GET uptime report failed', { message: err.message });
     const status = err.message.includes('Invalid month') ? 400 : 500;
-    const errKey = status === 400 ? apiErrors.reports.invalidMonth : apiErrors.reports.uptimeFailed.replace('{message}', err.message);
-    res.status(status).json({ success: false, error: { message: errKey } });
+    res.status(status).json({ success: false, error: { message: err.message } });
   }
 });
 
-// ── GET /reports/downtime ────────────────────────────────────────────────────
 router.get(routes.reportDowntime, async (req, res) => {
   try {
     const month = req.query.month || currentMonth();
@@ -88,11 +235,10 @@ router.get(routes.reportDowntime, async (req, res) => {
     res.json({ success: true, data: report });
   } catch (err) {
     log.error('GET downtime report failed', { message: err.message });
-    res.status(500).json({ success: false, error: { message: apiErrors.reports.downtimeFailed.replace('{message}', err.message) } });
+    res.status(500).json({ success: false, error: { message: err.message } });
   }
 });
 
-// ── GET /reports/poll-verification ───────────────────────────────────────────
 router.get(routes.reportPollVerification, async (req, res) => {
   try {
     const month = req.query.month || currentMonth();
@@ -100,7 +246,7 @@ router.get(routes.reportPollVerification, async (req, res) => {
     res.json({ success: true, data: report });
   } catch (err) {
     log.error('GET poll verification failed', { message: err.message });
-    res.status(500).json({ success: false, error: { message: apiErrors.reports.pollHistoryFailed.replace('{message}', err.message) } });
+    res.status(500).json({ success: false, error: { message: err.message } });
   }
 });
 
@@ -179,41 +325,6 @@ router.put(routes.slaTargetById, async (req, res) => {
 // API using the configured URL with startDate/endDate query params.
 // ═════════════════════════════════════════════════════════════════════════════
 
-// ── Helper: compute startDate/endDate from month string ─────────────────────
-function monthToDateRange(monthStr) {
-  const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(monthStr);
-  if (!match) return null;
-  const year = parseInt(match[1], 10);
-  const mon = parseInt(match[2], 10);
-  const startDate = `${year}-${String(mon).padStart(2, '0')}-01`;
-  const lastDay = new Date(year, mon, 0).getDate();
-  const endDate = `${year}-${String(mon).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-  return { startDate, endDate };
-}
-
-// ── Helper: fetch planned downtime from configured SNOW API ─────────────────
-async function fetchPlannedDowntimeFromSnow(config, startDate, endDate, cookieHeader) {
-  if (!config.enabled || !config.apiUrl) {
-    throw new Error('Planned downtime source is not configured or not enabled.');
-  }
-
-  const separator = config.apiUrl.includes('?') ? '&' : '?';
-  const url = `${config.apiUrl}${separator}startDate=${startDate}&endDate=${endDate}`;
-
-  log.info('Fetching planned downtime from SNOW API', { url });
-
-  const headers = { 'Content-Type': 'application/json' };
-  if (cookieHeader) headers.cookie = cookieHeader;
-
-  const response = await fetch(url, { method: 'GET', headers });
-  if (!response.ok) {
-    throw new Error(`ServiceNow API returned HTTP ${response.status}`);
-  }
-
-  const json = await response.json();
-  return json?.data || json || [];
-}
-
 // ── GET /planned-downtime ────────────────────────────────────────────────────
 router.get(routes.plannedDowntime, async (req, res) => {
   try {
@@ -286,5 +397,6 @@ router.get(routes.pollEvents, (req, res) => {
   // Send initial connection confirmation
   res.write(`data: ${JSON.stringify({ type: 'connected', timestamp: new Date().toISOString() })}\n\n`);
 });
+
 
 export default router;

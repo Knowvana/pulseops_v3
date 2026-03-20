@@ -11,7 +11,7 @@ import {
   Timer, Play, Pause, RefreshCw, Loader2, CheckCircle2,
   AlertCircle, Save, Zap, Clock, RotateCcw,
 } from 'lucide-react';
-import { createLogger } from '@shared';
+import { createLogger, TimezoneService } from '@shared';
 import ApiClient from '@shared/services/apiClient';
 import uiText from '../../config/uiText.json';
 import urls from '../../config/urls.json';
@@ -147,8 +147,8 @@ export default function PollerConfigTab() {
         {pollerStatus && (
           <div className="grid grid-cols-3 gap-4 pt-3 border-t border-surface-100">
             <div>
-              <p className="text-xs text-surface-400">{t.pollerStatus.lastPoll}</p>
-              <p className="text-sm font-medium text-surface-700">{pollerStatus.lastPollTime || t.pollerStatus.notStarted}</p>
+              <p className="text-xs text-surface-400">{t.pollerStatus.lastPoll} ({pollerStatus.timezoneLabel || 'IST'})</p>
+              <p className="text-sm font-medium text-surface-700">{pollerStatus.lastPollTimeDisplay || t.pollerStatus.notStarted}</p>
             </div>
             <div>
               <p className="text-xs text-surface-400">{t.pollerStatus.pollCount}</p>

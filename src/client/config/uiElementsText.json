@@ -89,6 +89,7 @@
     "dashboard": "Dashboard",
     "moduleManager": "Module Manager",
     "logs": "Logs",
+    "timezone": "Timezone",
     "settings": "Settings"
   },
   "coreViews": {

@@ -78,5 +78,11 @@
     "get": "/settings",
     "save": "/settings"
   },
+  "timezone": {
+    "base": "/timezone",
+    "get": "/timezone",
+    "save": "/timezone",
+    "list": "/timezone/list"
+  },
   "_note_modules": "Module-specific routes (e.g. /api/servicenow/*) are loaded dynamically at runtime via dynamicRouteLoader.js when modules are enabled. No hardcoded module sections needed here."
 }

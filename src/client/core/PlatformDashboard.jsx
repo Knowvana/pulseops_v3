@@ -33,7 +33,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  LayoutDashboard, Package, ScrollText, Settings as SettingsIcon, Shield, Eye
+  LayoutDashboard, Package, ScrollText, Settings as SettingsIcon, Shield, Eye, Globe,
 } from 'lucide-react';
 import { AppShell } from '@layouts';
 import { getAllManifests, getManifestById, loadModuleManifests, unregisterDynamicManifest } from '@modules/moduleRegistry';
@@ -48,6 +48,7 @@ const log = createLogger('PlatformDashboard.jsx');
 const AdminDashboard = React.lazy(() => import('@core/views/AdminDashboard'));
 const ModuleManager = React.lazy(() => import('@core/views/ModuleManager'));
 const LogManager = React.lazy(() => import('@core/views/LogManager'));
+const TimezoneView = React.lazy(() => import('@core/views/TimezoneView'));
 const Settings = React.lazy(() => import('@core/views/Settings'));
 const TestPage = React.lazy(() => import('@shared/components/TestPage'));
 
@@ -65,6 +66,7 @@ const CORE_ADMIN = {
     { id: 'dashboard', label: coreNav.dashboard, icon: LayoutDashboard },
     { id: 'moduleManager', label: coreNav.moduleManager, icon: Package },
     { id: 'logs', label: coreNav.logs, icon: ScrollText },
+    { id: 'timezone', label: coreNav.timezone, icon: Globe },
     { id: 'Settings', label: coreNav.settings, icon: SettingsIcon },
     { id: 'testPage', label: 'Test Page', icon: Eye },
   ],
@@ -73,6 +75,7 @@ const CORE_ADMIN = {
     testPage: TestPage,
     moduleManager: ModuleManager,
     logs: LogManager,
+    timezone: TimezoneView,
     Settings: Settings,
   },
 };

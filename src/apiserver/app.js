@@ -62,6 +62,7 @@ import databaseRoutes from '#core/routes/databaseRoutes.js';
 import configRoutes from '#core/routes/configRoutes.js';
 import logRoutes from '#core/routes/logRoutes.js';
 import generalSettingsRoutes from '#core/routes/generalSettingsRoutes.js';
+import timezoneRoutes from '#core/routes/timezoneRoutes.js';
 import modulesRoutes from '#core/routes/modulesRoutes.js';
 import { rehydrateEnabledModules } from '#core/modules/dynamicRouteLoader.js';
 import moduleGateway from '#core/modules/moduleGateway.js';
@@ -118,6 +119,8 @@ export function createApp() {
   app.use(`${prefix}${apiUrls.database.base}`, databaseRoutes);
   app.use(`${prefix}${apiUrls.logs.base}`, logRoutes);
   app.use(`${prefix}${apiUrls.settings.base}`, generalSettingsRoutes);
+  // Timezone — GET is public (modules fetch timezone without auth), POST is protected
+  app.use(`${prefix}/timezone`, timezoneRoutes);
   // Modules route — public list endpoint + protected enable/disable
   app.use(`${prefix}${apiUrls.modules.base}`, modulesRoutes);
   // ── Dynamic Module Gateway ─────────────────────────────────────────────

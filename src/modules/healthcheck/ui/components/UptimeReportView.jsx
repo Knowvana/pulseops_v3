@@ -157,6 +157,7 @@ export default function UptimeReportView() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showNoDataModal, setShowNoDataModal] = useState(false);
+  const [expandedMissedApps, setExpandedMissedApps] = useState({});
   const initialLoadDone = useRef(false);
 
   const loadReport = useCallback(async (targetMonth) => {
@@ -364,38 +365,66 @@ export default function UptimeReportView() {
                 </span>
               </div>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <SummaryCard label={t.summary.slaComplianceTarget} value={`${report.slaTargetPercent}%`} icon={Shield} color="emerald" />
-              <SummaryCard label={t.summary.totalApps} value={report.applications?.length || 0} icon={Target} color="blue" />
-              <SummaryCard label={t.summary.intervalSeconds} value={`${report.intervalSeconds}s`} icon={Clock} color="amber" />
-              <SummaryCard label={`${t.summary.pollerStartTime} (${tzLabel})`} value={report.pollerStartTimeDisplay || '—'} icon={Clock} color="brand" />
-              {/* Polls (Expected & Actuals) — color coded green if match, red if mismatch */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              {/* LEFT COLUMN: SLA Compliance - Monthly (Target/Actual) */}
               {(() => {
-                // Expected: 1 poll per minute from pollerStartTime to now
-                const expected = report.expectedPollsElapsed || 0;
-                // Actual: distinct poll minutes from database (count of unique minutes when polls occurred)
-                const actual = report.actualPollsElapsed || 0;
-                const match = actual >= expected;
+                const target = report.slaTargetPercent || 0;
+                const actual = report.actualSlaCompliance || 0;
+                const isMet = actual >= target;
                 return (
-                  <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-surface-100">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${match ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50'}`}>
-                      <TrendingUp size={14} />
+                  <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-surface-100 shadow-sm">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${isMet ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50'}`}>
+                      <Shield size={20} />
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-xs text-surface-400 truncate">{t.summary.pollsExpectedActuals}</p>
-                      <p className={`text-sm font-bold ${match ? 'text-emerald-700' : 'text-red-700'}`}>
-                        {expected.toLocaleString()}/{actual.toLocaleString()}
-                      </p>
-                      <p className="text-[10px] text-surface-400 leading-tight mt-0.5">{report.expectedPollsElapsedFormula}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-surface-400">SLA Compliance - Monthly</p>
+                      <div className="flex items-center gap-3">
+                        <div>
+                          <p className="text-xs text-surface-500">Target</p>
+                          <p className="text-sm font-bold text-surface-800">{target}%</p>
+                        </div>
+                        <span className="text-surface-300">/</span>
+                        <div>
+                          <p className="text-xs text-surface-500">Actual</p>
+                          <p className={`text-sm font-bold ${isMet ? 'text-emerald-600' : 'text-red-600'}`}>{actual}%</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="inline-flex items-center gap-1 px-2 py-1 rounded-full flex-shrink-0 text-xs" style={{ backgroundColor: isMet ? '#ecfdf5' : '#fef2f2' }}>
+                      <div className={`w-1.5 h-1.5 rounded-full ${isMet ? 'bg-emerald-600' : 'bg-red-600'}`} />
+                      <span className={`font-bold ${isMet ? 'text-emerald-700' : 'text-red-700'}`}>
+                        {isMet ? 'Met' : 'Not Met'}
+                      </span>
                     </div>
                   </div>
                 );
               })()}
-              <SummaryCard label={t.summary.expectedPollsTotal}
-                value={report.expectedPollsTotal?.toLocaleString()}
-                sublabel={report.expectedPollsMonthFormula}
-                icon={TrendingUp} color="brand" />
-              <SummaryCard label={t.summary.totalHours} value={`${report.totalHoursInMonth?.toLocaleString()} hrs (${report.daysInMonth} days)`} icon={Clock} color="amber" />
+              
+              {/* RIGHT COLUMN: Supporting tiles in single row */}
+              <div className="grid grid-cols-4 gap-3">
+                <SummaryCard label={t.summary.totalApps} value={report.applications?.length || 0} icon={Target} color="blue" />
+                <SummaryCard label={t.summary.intervalSeconds} value={`${report.intervalSeconds}s`} icon={Clock} color="amber" />
+                <SummaryCard label={`${t.summary.pollerStartTime} (${tzLabel})`} value={report.pollerStartTimeDisplay || '—'} icon={Clock} color="brand" />
+                {/* Polls (Expected & Actuals) — color coded green if match, red if mismatch */}
+                {(() => {
+                  const expected = report.expectedPollsElapsed || 0;
+                  const actual = report.actualPollsElapsed || 0;
+                  const match = actual >= expected;
+                  return (
+                    <div className="flex items-center gap-2 p-3 bg-white rounded-lg border border-surface-100">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${match ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50'}`}>
+                        <TrendingUp size={14} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs text-surface-400 truncate">{t.summary.pollsExpectedActuals}</p>
+                        <p className={`text-sm font-bold ${match ? 'text-emerald-700' : 'text-red-700'}`}>
+                          {expected.toLocaleString()}/{actual.toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
             {/* Prorated note when pollerStartTime is not month start */}
             {report.pollerStartTime && report.isCurrentMonth && (() => {
@@ -492,116 +521,112 @@ export default function UptimeReportView() {
           </div>
 
           {/* ═══════════════════════════════════════════════════════════════════
-               SECTION 4: Poll Verification (inline, not a separate tab)
-             ═══════════════════════════════════════════════════════════════════ */}
-          {report?.applications && (
-            <div className="space-y-3">
-              <SectionHeader icon={Target} title={t.pollVerification.title} subtitle={t.pollVerification.subtitle} iconColor="text-blue-600"
-                badge={report.pollerStartTimeDisplay && (
-                  <span className="text-[10px] text-surface-400 bg-surface-100 px-2 py-0.5 rounded-full">
-                    {t.summary.pollerStartTime}: {report.pollerStartTimeDisplay} ({tzLabel})
-                  </span>
-                )} />
-              <div className="overflow-x-auto border border-surface-200 rounded-xl bg-white shadow-sm">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-surface-50 border-b border-surface-200">
-                      <th className="px-3 py-2.5 text-left font-semibold text-surface-600">{t.pollVerification.application}</th>
-                      <th className="px-3 py-2.5 text-left font-semibold text-surface-600">{t.grid.category}</th>
-                      <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.pollVerification.actualPolls}</th>
-                      <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.pollVerification.expectedPolls}</th>
-                      <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.pollVerification.coverage}</th>
-                      <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.pollVerification.status}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {report.applications.map(app => (
-                      <tr key={app.applicationId} className="border-b border-surface-50 hover:bg-surface-50/50">
-                        <td className="px-3 py-2.5 font-medium text-surface-800">{app.name}</td>
-                        <td className="px-3 py-2.5">
-                          <span className="inline-flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: app.categoryColor || '#64748b' }} />
-                            <span className="text-surface-600">{app.categoryName || '—'}</span>
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5 text-center font-bold text-surface-700">{app.totalPolls?.toLocaleString()}</td>
-                        <td className="px-3 py-2.5 text-center text-surface-500">{app.expectedPollsElapsed?.toLocaleString()}</td>
-                        <td className="px-3 py-2.5 text-center">
-                          <span className={`font-bold ${app.pollCoveragePercent >= 100 ? 'text-emerald-600' : app.pollCoveragePercent >= 95 ? 'text-amber-600' : 'text-red-600'}`}>
-                            {app.pollCoveragePercent}%
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5 text-center"><PollStatusBadge status={app.pollVerificationStatus} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* ═══════════════════════════════════════════════════════════════════
-               SECTION 5: Missed Polls
+               SECTION 4: Missed Polls (with expandable rows for scalability)
              ═══════════════════════════════════════════════════════════════════ */}
           {report?.applications && (() => {
-            // Use global expected polls count for all apps
             const globalExpected = report.expectedPollsElapsed || 0;
-            
-            // Filter applications with missed polls (actual polls < global expected polls)
-            const missedApps = report.applications.filter(app => {
-              const actual = app.totalPolls || 0;
-              return actual < globalExpected;
-            });
-            
-            // Calculate total missed polls (global expected - global actual)
             const globalActual = report.actualPollsElapsed || 0;
             const totalMissed = Math.max(0, globalExpected - globalActual);
+            const missedApps = report.applications.filter(app => (app.totalPolls || 0) < globalExpected);
 
             return (
-              <div className="space-y-3">
-                <SectionHeader icon={FileWarning} title={t.missedPolls.title}
-                  subtitle={t.missedPolls.subtitle} iconColor="text-amber-600"
-                  badge={totalMissed > 0 && <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">{t.missedPolls.totalMissed}: {totalMissed.toLocaleString()}</span>} />
+              <div className="space-y-4">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-amber-100">
+                      <FileWarning size={18} className="text-amber-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-surface-800">{t.missedPolls.title}</h3>
+                      <p className="text-xs text-surface-500 mt-0.5">{t.missedPolls.subtitle}</p>
+                    </div>
+                  </div>
+                  {totalMissed > 0 && (
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-amber-600">{totalMissed}</p>
+                      <p className="text-xs text-amber-600 font-medium">{t.missedPolls.totalMissed}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Content */}
                 {totalMissed === 0 ? (
                   <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
-                    <CheckCircle2 size={20} className="text-emerald-500 mx-auto mb-1" />
+                    <CheckCircle2 size={20} className="text-emerald-500 mx-auto mb-2" />
                     <p className="text-xs text-emerald-700 font-medium">{t.missedPolls.noMissedPolls}</p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {missedApps.map(app => {
-                      const actual = app.totalPolls || 0;
-                      const missed = Math.max(0, globalExpected - actual);
-                      const cov = globalExpected > 0 ? Math.min(100, ((actual / globalExpected) * 100)).toFixed(2) : 0;
-                      const missedMinutes = app.missedPollMinutes || [];
-                      
-                      return (
-                        <div key={app.applicationId} className="border border-amber-200 rounded-xl overflow-hidden bg-white shadow-sm">
-                          <div className="bg-amber-50 px-4 py-3 border-b border-amber-200">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3 flex-1">
-                                <div>
-                                  <p className="font-medium text-surface-800">{app.name}</p>
-                                  <p className="text-xs text-surface-500 mt-0.5">Expected: {globalExpected} | Actual: {actual} | Missed: <span className="font-bold text-red-600">{missed}</span> | Coverage: <span className={`font-bold ${cov >= 95 ? 'text-emerald-600' : cov >= 80 ? 'text-amber-600' : 'text-red-600'}`}>{cov}%</span></p>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                          {missedMinutes.length > 0 && (
-                            <div className="px-4 py-3 bg-amber-50/30 max-h-48 overflow-y-auto">
-                              <p className="text-xs font-semibold text-amber-700 mb-2">Missed Poll Minutes ({missedMinutes.length}):</p>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                                {missedMinutes.map((m, idx) => (
-                                  <div key={idx} className="bg-white border border-amber-200 rounded px-2 py-1.5">
-                                    <p className="text-xs text-surface-700">{m.display}</p>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                  <div className="overflow-x-auto border border-surface-200 rounded-xl bg-white shadow-sm">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-amber-50 border-b border-amber-200">
+                          <th className="px-4 py-3 w-6"></th>
+                          <th className="px-4 py-3 text-left font-semibold text-amber-700">Application</th>
+                          <th className="px-4 py-3 text-center font-semibold text-amber-700">Expected</th>
+                          <th className="px-4 py-3 text-center font-semibold text-amber-700">Actual</th>
+                          <th className="px-4 py-3 text-center font-semibold text-amber-700">Missed</th>
+                          <th className="px-4 py-3 text-center font-semibold text-amber-700">Coverage</th>
+                          <th className="px-4 py-3 text-left font-semibold text-amber-700">Missed Times</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {missedApps.map(app => {
+                          const actual = app.totalPolls || 0;
+                          const missed = Math.max(0, globalExpected - actual);
+                          const cov = globalExpected > 0 ? ((actual / globalExpected) * 100).toFixed(1) : 0;
+                          const missedMinutes = app.missedPollMinutes || [];
+                          const isExpanded = expandedMissedApps[app.applicationId];
+                          const displayCount = isExpanded ? missedMinutes.length : 3;
+                          
+                          return (
+                            <React.Fragment key={app.applicationId}>
+                              <tr className="border-b border-surface-50 hover:bg-amber-50/30">
+                                <td className="px-4 py-3 text-center">
+                                  {missedMinutes.length > 0 && (
+                                    <button
+                                      onClick={() => setExpandedMissedApps(p => ({ ...p, [app.applicationId]: !isExpanded }))}
+                                      className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-amber-200 text-amber-600 hover:text-amber-700 font-bold text-sm"
+                                      title={isExpanded ? 'Collapse' : 'Expand'}
+                                    >
+                                      {isExpanded ? '−' : '+'}
+                                    </button>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 font-medium text-surface-800">{app.name}</td>
+                                <td className="px-4 py-3 text-center text-surface-600">{globalExpected}</td>
+                                <td className="px-4 py-3 text-center font-bold text-surface-700">{actual}</td>
+                                <td className="px-4 py-3 text-center font-bold text-red-600">{missed}</td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className={`font-bold ${cov >= 95 ? 'text-emerald-600' : cov >= 80 ? 'text-amber-600' : 'text-red-600'}`}>{cov}%</span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  {missedMinutes.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1">
+                                      {missedMinutes.slice(0, displayCount).map((m, idx) => (
+                                        <span key={idx} className="px-2 py-0.5 bg-red-50 border border-red-200 rounded text-red-700 text-xs font-medium whitespace-nowrap">
+                                          {m.display}
+                                        </span>
+                                      ))}
+                                      {!isExpanded && missedMinutes.length > 3 && (
+                                        <button
+                                          onClick={() => setExpandedMissedApps(p => ({ ...p, [app.applicationId]: true }))}
+                                          className="px-2 py-0.5 bg-amber-100 border border-amber-300 rounded text-amber-700 text-xs font-medium hover:bg-amber-200"
+                                        >
+                                          +{missedMinutes.length - 3}
+                                        </button>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-surface-400">—</span>
+                                  )}
+                                </td>
+                              </tr>
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>

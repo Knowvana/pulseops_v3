@@ -105,6 +105,16 @@ export default function PollerConfigTab() {
     };
   }, [pollerStatus?.isRunning, calculateNextPollTime]);
 
+  // Calculate expected polls since poller started
+  const calculateExpectedPollsSinceStart = useCallback(() => {
+    if (!config.pollerStartedAt) return 0;
+    const startTime = new Date(config.pollerStartedAt);
+    const now = new Date();
+    const elapsedMs = now.getTime() - startTime.getTime();
+    const elapsedMinutes = Math.ceil(elapsedMs / (60 * 1000)); // Round up to count current minute
+    return Math.max(1, elapsedMinutes); // At least 1 poll
+  }, [config.pollerStartedAt]);
+
   // Connect to SSE stream for real-time poll completion events
   useEffect(() => {
     // Close existing connection if any
@@ -287,8 +297,14 @@ export default function PollerConfigTab() {
               </div>
               <div className="relative before:absolute before:left-0 before:top-0 before:bottom-0 before:w-px before:bg-gradient-to-b before:from-transparent before:via-brand-400 before:to-transparent">
                 <div className="pl-4">
-                  <p className="text-xs text-surface-400">Polls Since Start:</p>
-                  <p className="text-sm font-medium text-surface-700">{pollerStatus.pollCount || 0}</p>
+                  <p className="text-xs text-surface-400">Polls Since Start (Expected/Actual):</p>
+                  <p className="text-sm font-medium">
+                    <span className="text-surface-500">{calculateExpectedPollsSinceStart()}</span>
+                    <span className="text-surface-400">/</span>
+                    <span className={pollerStatus.pollCount >= calculateExpectedPollsSinceStart() ? 'text-emerald-600 font-bold' : 'text-amber-600 font-bold'}>
+                      {pollerStatus.pollCount || 0}
+                    </span>
+                  </p>
                 </div>
               </div>
             </div>

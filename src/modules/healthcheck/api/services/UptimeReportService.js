@@ -301,7 +301,8 @@ export async function getMonthlyUptimeReport(monthStr, plannedDowntimeEntries = 
     const appDowntimeEntries = plannedDowntimeEntries.filter(e =>
       !e.application_id || e.application_id === app.id
     );
-    const plannedDowntimeMinutes = calcPlannedDowntimeMinutes(appDowntimeEntries, monthStart, monthEnd);
+    // Only calculate planned downtime for the period between pollerStartTime and current time
+    const plannedDowntimeMinutes = calcPlannedDowntimeMinutes(appDowntimeEntries, effectivePollerStart, effectiveEnd);
 
     // Calculate actual uptime % = (Up Polls / Expected Polls) * 100
     const actualUptimePercent = expectedPollsElapsed > 0
@@ -317,10 +318,11 @@ export async function getMonthlyUptimeReport(monthStr, plannedDowntimeEntries = 
     
     // Calculate SLA: (Actual Uptime Minutes + Planned Downtime Minutes) / Total Minutes * 100
     // Actual Uptime Minutes = (Up Polls * interval) 
-    // Total Minutes = Elapsed Minutes
+    // Total Minutes = Elapsed Minutes (from when poller started, not from month start)
     const upMinutes = up_polls * (intervalSeconds / 60);
-    const slaCompliance = elapsedMinutes > 0
-      ? Math.min(100, parseFloat((((upMinutes + plannedDowntimeMinutes) / elapsedMinutes) * 100).toFixed(2)))
+    const slaElapsedMinutes = effectivePollerStart ? minutesBetween(effectivePollerStart, effectiveEnd) : 0;
+    const slaCompliance = slaElapsedMinutes > 0
+      ? Math.min(100, parseFloat((((upMinutes + plannedDowntimeMinutes) / slaElapsedMinutes) * 100).toFixed(2)))
       : null;
 
     const slaVerdict = slaCompliance !== null
@@ -377,7 +379,13 @@ export async function getMonthlyUptimeReport(monthStr, plannedDowntimeEntries = 
     });
   }
 
-  log.info('Monthly uptime report generated', { month: monthStr, apps: report.length, plannedDowntime: plannedDowntimeEntries.length });
+  // Calculate combined/actual SLA compliance across all apps
+  const slaContributingApps = report.filter(app => app.slaCompliance !== null);
+  const actualSlaCompliance = slaContributingApps.length > 0
+    ? parseFloat((slaContributingApps.reduce((sum, app) => sum + (app.slaCompliance || 0), 0) / slaContributingApps.length).toFixed(2))
+    : null;
+
+  log.info('Monthly uptime report generated', { month: monthStr, apps: report.length, plannedDowntime: plannedDowntimeEntries.length, actualSla: actualSlaCompliance });
   return {
     month: monthStr,
     monthDisplay: `${monthStr} (${monthName})`,
@@ -387,6 +395,7 @@ export async function getMonthlyUptimeReport(monthStr, plannedDowntimeEntries = 
     displayTimezone,
     timezoneLabel,
     slaTargetPercent: slaTarget,
+    actualSlaCompliance,
     // Time dimensions
     daysInMonth,
     totalHoursInMonth,

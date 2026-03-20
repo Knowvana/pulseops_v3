@@ -123,6 +123,48 @@ function calcPlannedDowntimeMinutes(downtimeEntries, monthStart, monthEnd) {
   return merged.reduce((sum, w) => sum + minutesBetween(w.start, w.end), 0);
 }
 
+/**
+ * Fetch missed poll minutes for a specific application.
+ * Returns array of { minute: ISO string, display: formatted time } for each missed minute.
+ */
+async function getMissedPollMinutes(appId, effectivePollerStart, effectiveEnd, dbSchema) {
+  if (!effectivePollerStart) return [];
+
+  // Query all distinct minutes when polls were recorded for this app
+  const recordedMinutesResult = await DatabaseService.query(
+    `SELECT DISTINCT DATE_TRUNC('minute', polled_at) AS poll_minute
+     FROM ${dbSchema}.hc_poll_results
+     WHERE application_id = $1
+       AND polled_at >= $2
+       AND polled_at < $3
+     ORDER BY poll_minute ASC`,
+    [appId, effectivePollerStart.toISOString(), effectiveEnd.toISOString()]
+  );
+
+  const recordedMinutes = new Set(
+    recordedMinutesResult.rows.map(r => new Date(r.poll_minute).getTime())
+  );
+
+  // Generate all expected minute boundaries
+  const missedMinutes = [];
+  let currentMinute = new Date(effectivePollerStart);
+  currentMinute.setSeconds(0);
+  currentMinute.setMilliseconds(0);
+
+  while (currentMinute < effectiveEnd) {
+    const minuteTime = currentMinute.getTime();
+    if (!recordedMinutes.has(minuteTime)) {
+      missedMinutes.push({
+        minute: currentMinute.toISOString(),
+        display: formatInTz(currentMinute, 'Asia/Kolkata'), // Format as HH:MM
+      });
+    }
+    currentMinute = new Date(currentMinute.getTime() + 60000); // Add 1 minute
+  }
+
+  return missedMinutes;
+}
+
 // ── Monthly Uptime Report ────────────────────────────────────────────────────
 
 /**
@@ -173,21 +215,54 @@ export async function getMonthlyUptimeReport(monthStr, plannedDowntimeEntries = 
   // Expected Polls (Month) = Days in Month × 24 hours × 60 minutes (1 poll per minute)
   const expectedPollsTotal = daysInMonth * 24 * 60;
 
-  // Expected Polls (Elapsed) = minutes from the actual first poll (or month start) until now
-  // Use the actual first poll from DB as the stable reference (not volatile pollerStartTime
-  // which resets on every poller restart/hot-reload)
-  const effectivePollerStart = actualFirstPoll && actualFirstPoll > monthStart
-    ? actualFirstPoll
-    : monthStart;
-  const pollingMinutes = minutesBetween(effectivePollerStart, effectiveEnd);
-  const expectedPollsElapsed = Math.floor(pollingMinutes) + 1;
+  // Expected Polls (Elapsed) = minutes from pollerStartTime (from config) until end of month
+  // If pollerStartTime is null, poller never started, so expected = 0
+  let effectivePollerStart = null;
+  let expectedPollsElapsed = 0;
+  let actualPollsElapsed = 0;
+
+  if (pollerStartTime && pollerStartTime >= monthStart && pollerStartTime <= effectiveEnd) {
+    effectivePollerStart = pollerStartTime;
+    const pollingMinutes = minutesBetween(effectivePollerStart, effectiveEnd);
+    expectedPollsElapsed = Math.floor(pollingMinutes) + 1;
+
+    // Query distinct poll minutes from pollerStartTime onwards
+    const distinctPollMinutesResult = await DatabaseService.query(
+      `SELECT COUNT(DISTINCT DATE_TRUNC('minute', polled_at)) AS distinct_minutes
+       FROM ${dbSchema}.hc_poll_results
+       WHERE polled_at >= $1 AND polled_at < $2`,
+      [effectivePollerStart.toISOString(), effectiveEnd.toISOString()]
+    );
+    actualPollsElapsed = distinctPollMinutesResult.rows[0]?.distinct_minutes || 0;
+  } else if (!pollerStartTime) {
+    // Poller never started
+    effectivePollerStart = null;
+    expectedPollsElapsed = 0;
+    actualPollsElapsed = 0;
+  } else {
+    // pollerStartTime is outside the month range
+    effectivePollerStart = null;
+    expectedPollsElapsed = 0;
+    actualPollsElapsed = 0;
+  }
 
   // Build calculation breakdowns for auditing
   const expectedPollsMonthFormula = `${daysInMonth} Days × 24 Hours × 60 Minutes = ${expectedPollsTotal} Polls`;
-  const elapsedStartDisplay = formatInTz(effectivePollerStart, displayTimezone);
-  const elapsedEndDisplay = formatInTz(effectiveEnd, displayTimezone);
-  const elapsedMinutesRounded = Math.floor(pollingMinutes);
-  const expectedPollsElapsedFormula = `${elapsedStartDisplay} → ${elapsedEndDisplay} = ${elapsedMinutesRounded} Minutes = ${expectedPollsElapsed} Polls [System performs 1 Poll Each Minute]`;
+  // Format times without seconds (only HH:MM)
+  const formatTimeNoSeconds = (date) => {
+    if (!date) return '—';
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const ampm = date.getHours() >= 12 ? 'pm' : 'am';
+    const displayHours = date.getHours() % 12 || 12;
+    return `${String(displayHours).padStart(2, '0')}:${minutes} ${ampm}`;
+  };
+  const elapsedStartDisplay = formatTimeNoSeconds(effectivePollerStart);
+  const elapsedEndDisplay = formatTimeNoSeconds(effectiveEnd);
+  const elapsedMinutesRounded = effectivePollerStart ? Math.floor(minutesBetween(effectivePollerStart, effectiveEnd)) : 0;
+  const expectedPollsElapsedFormula = effectivePollerStart
+    ? `${elapsedStartDisplay} → ${elapsedEndDisplay} = ${elapsedMinutesRounded} Minutes = ${expectedPollsElapsed} Polls [System performs 1 Poll Each Minute]`
+    : 'Poller not started — no expected polls';
 
   // Elapsed hours for SLA display
   const elapsedHours = parseFloat((elapsedMinutes / 60).toFixed(2));
@@ -228,36 +303,44 @@ export async function getMonthlyUptimeReport(monthStr, plannedDowntimeEntries = 
     );
     const plannedDowntimeMinutes = calcPlannedDowntimeMinutes(appDowntimeEntries, monthStart, monthEnd);
 
-    // Calculate uptime using poll-based ratio (most accurate per-app metric)
-    // Actual downtime minutes from poll results (DOWN polls × interval)
-    const actualDownMinutes = down_polls * (intervalSeconds / 60);
-    // Planned downtime polls = planned downtime minutes / interval minutes
-    const plannedDowntimePolls = Math.floor(plannedDowntimeMinutes / (intervalSeconds / 60));
-    // Unplanned DOWN polls = total DOWN polls - planned downtime polls (cannot go below 0)
-    const unplannedDownPolls = Math.max(0, down_polls - plannedDowntimePolls);
-    // Effective total polls = total polls - planned downtime polls (exclude planned downtime window)
-    const effectiveTotalPolls = Math.max(1, total_polls - plannedDowntimePolls);
-    // Unplanned downtime minutes = unplanned DOWN polls × interval
-    const unplannedDownMinutes = unplannedDownPolls * (intervalSeconds / 60);
-    // Effective operating minutes = elapsed - planned downtime
-    const effectiveOperatingMinutes = Math.max(1, elapsedMinutes - plannedDowntimeMinutes);
-    // Uptime % = (effectiveTotalPolls - unplannedDownPolls) / effectiveTotalPolls × 100
-    const uptimePercent = total_polls > 0
-      ? Math.min(100, ((effectiveTotalPolls - unplannedDownPolls) / effectiveTotalPolls) * 100)
+    // Calculate actual uptime % = (Up Polls / Expected Polls) * 100
+    const actualUptimePercent = expectedPollsElapsed > 0
+      ? Math.min(100, parseFloat(((up_polls / expectedPollsElapsed) * 100).toFixed(2)))
       : null;
 
-    const slaVerdict = uptimePercent !== null
-      ? (uptimePercent >= slaTarget ? 'MET' : 'NOT_MET')
+    // Calculate downtime minutes from DOWN polls
+    const downMinutes = down_polls * (intervalSeconds / 60);
+    
+    // Calculate unplanned downtime: downtime that is NOT covered by planned downtime
+    // Unplanned Downtime Minutes = DOWN Poll Minutes - Planned Downtime Minutes (cannot be negative)
+    const unplannedDownMinutes = Math.max(0, downMinutes - plannedDowntimeMinutes);
+    
+    // Calculate SLA: (Actual Uptime Minutes + Planned Downtime Minutes) / Total Minutes * 100
+    // Actual Uptime Minutes = (Up Polls * interval) 
+    // Total Minutes = Elapsed Minutes
+    const upMinutes = up_polls * (intervalSeconds / 60);
+    const slaCompliance = elapsedMinutes > 0
+      ? Math.min(100, parseFloat((((upMinutes + plannedDowntimeMinutes) / elapsedMinutes) * 100).toFixed(2)))
+      : null;
+
+    const slaVerdict = slaCompliance !== null
+      ? (slaCompliance >= slaTarget ? 'MET' : 'NOT_MET')
       : 'NO_DATA';
 
-    // Poll verification — expected vs actual (cap coverage at 100%)
-    const coveragePercent = expectedPollsElapsed > 0
+    // Poll coverage: capped at 100%, shows actual polls / expected polls
+    // 100% only if Actual Polls >= Expected Polls for this app
+    const pollCoveragePercent = expectedPollsElapsed > 0
       ? Math.min(100, parseFloat(((total_polls / expectedPollsElapsed) * 100).toFixed(2)))
       : 0;
     const pollsMatch = total_polls >= expectedPollsElapsed;
     const pollVerificationStatus = isCurrentMonth
       ? (pollsMatch ? 'ACCURATE' : 'IN_PROGRESS')
       : (pollsMatch ? 'ACCURATE' : 'INCOMPLETE');
+
+    // Fetch missed poll minutes for this app (only if there are missed polls)
+    const missedPollMinutes = total_polls < expectedPollsElapsed
+      ? await getMissedPollMinutes(app.id, effectivePollerStart, effectiveEnd, dbSchema)
+      : [];
 
     report.push({
       applicationId: app.id,
@@ -267,19 +350,22 @@ export async function getMonthlyUptimeReport(monthStr, plannedDowntimeEntries = 
       categoryColor: app.category_color || '#6366f1',
       // SLA (global)
       slaTargetPercent: slaTarget,
-      actualUptimePercent: uptimePercent !== null ? parseFloat(uptimePercent.toFixed(4)) : null,
-      slaVerdict,
       // Poll counts
       totalPolls: total_polls,
       upPolls: up_polls,
       downPolls: down_polls,
       expectedPollsTotal,
       expectedPollsElapsed,
-      coveragePercent,
+      pollCoveragePercent,
       pollsMatch,
       pollVerificationStatus,
+      missedPollMinutes,
+      // Uptime & SLA
+      actualUptimePercent,
+      slaCompliance,
+      slaVerdict,
       // Downtime
-      actualDowntimeMinutes: parseFloat(actualDownMinutes.toFixed(2)),
+      actualDowntimeMinutes: parseFloat(downMinutes.toFixed(2)),
       plannedDowntimeMinutes: parseFloat(plannedDowntimeMinutes.toFixed(2)),
       unplannedDowntimeMinutes: parseFloat(unplannedDownMinutes.toFixed(2)),
       plannedDowntimeEntries: appDowntimeEntries.length,
@@ -287,7 +373,6 @@ export async function getMonthlyUptimeReport(monthStr, plannedDowntimeEntries = 
       month: monthStr,
       totalMinutesInMonth: parseFloat(totalMinutesInMonth.toFixed(2)),
       elapsedMinutes: parseFloat(elapsedMinutes.toFixed(2)),
-      effectiveOperatingMinutes: parseFloat(effectiveOperatingMinutes.toFixed(2)),
       intervalSeconds,
     });
   }
@@ -315,6 +400,7 @@ export async function getMonthlyUptimeReport(monthStr, plannedDowntimeEntries = 
     // Expected polls with formulas
     expectedPollsTotal,
     expectedPollsElapsed,
+    actualPollsElapsed,
     expectedPollsMonthFormula,
     expectedPollsElapsedFormula,
     // SLA summary (hours-based for reference graphs)

@@ -371,8 +371,10 @@ export default function UptimeReportView() {
               <SummaryCard label={`${t.summary.pollerStartTime} (${tzLabel})`} value={report.pollerStartTimeDisplay || '—'} icon={Clock} color="brand" />
               {/* Polls (Expected & Actuals) — color coded green if match, red if mismatch */}
               {(() => {
+                // Expected: 1 poll per minute from pollerStartTime to now
                 const expected = report.expectedPollsElapsed || 0;
-                const actual = aggregated?.totalPolls || 0;
+                // Actual: distinct poll minutes from database (count of unique minutes when polls occurred)
+                const actual = report.actualPollsElapsed || 0;
                 const match = actual >= expected;
                 return (
                   <div className="flex items-center gap-3 p-3 bg-white rounded-lg border border-surface-100">
@@ -410,120 +412,6 @@ export default function UptimeReportView() {
             })()}
           </div>
 
-          {/* ═══════════════════════════════════════════════════════════════════
-               SECTION 2: Reference Graphs (3-panel layout like screenshot)
-             ═══════════════════════════════════════════════════════════════════ */}
-          {aggregated && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-              {/* Panel 1: SLA Compliance Table */}
-              <div className="bg-white rounded-xl border border-surface-200 p-4 shadow-sm space-y-2">
-                <SectionHeader icon={Shield} title={t.slaCompliance.title} iconColor="text-blue-600" />
-                <table className="w-full text-xs">
-                  <tbody>
-                    <tr className="border-b border-surface-100">
-                      <td className="py-1.5 text-surface-600">{t.slaCompliance.totalHours}</td>
-                      <td className="py-1.5 text-right font-bold">{aggregated.totalHours}</td>
-                    </tr>
-                    <tr className="border-b border-surface-100">
-                      <td className="py-1.5 text-surface-600">{t.slaCompliance.expectedUptimeHours}</td>
-                      <td className="py-1.5 text-right font-bold">
-                        &gt;={aggregated.expectedUptimeHours.toFixed(1)} <span className="text-emerald-600 text-[10px]">({report.slaTargetPercent}% or more)</span>
-                      </td>
-                    </tr>
-                    <tr className="border-b border-surface-100">
-                      <td className="py-1.5 text-surface-600">{t.slaCompliance.actualUptimeHours}</td>
-                      <td className={`py-1.5 text-right font-bold ${aggregated.isCompliant ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {aggregated.actualUptimeHours.toFixed(2)} ({aggregated.actualUptimePct}%)
-                      </td>
-                    </tr>
-                    <tr className="border-b border-surface-100">
-                      <td className="py-1.5 text-surface-600">{t.slaCompliance.expectedDowntimeHours}</td>
-                      <td className="py-1.5 text-right font-bold">
-                        &lt;={aggregated.expectedDowntimeHours.toFixed(1)} <span className="text-red-500 text-[10px]">({(100 - report.slaTargetPercent).toFixed(1)}% or less)</span>
-                      </td>
-                    </tr>
-                    <tr className="border-b border-surface-100">
-                      <td className="py-1.5 text-surface-600">{t.slaCompliance.actualDowntimeHours}</td>
-                      <td className="py-1.5 text-right font-bold text-red-600">
-                        {aggregated.actualDowntimeHours.toFixed(2)} ({aggregated.actualDowntimePct}%)
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 font-bold text-surface-800">{t.slaCompliance.slaCompliant}</td>
-                      <td className="py-2 text-right">
-                        {aggregated.isCompliant
-                          ? <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">YES</span>
-                          : <span className="font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded">NO</span>}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Panel 2: Uptime / Downtime Bar Graphs */}
-              <div className="bg-white rounded-xl border border-surface-200 p-4 shadow-sm space-y-3">
-                <SectionHeader icon={BarChart3} title={t.uptimeStats.title} iconColor="text-emerald-600" />
-                <div className="space-y-2">
-                  <p className="text-[10px] font-bold text-surface-500 uppercase tracking-wider">Uptime</p>
-                  <HorizBar label={`${t.uptimeStats.expectedUptime} (>=${aggregated.expectedUptimeHours.toFixed(1)} Hours)`}
-                    value={aggregated.expectedUptimePct} maxValue={100} pct={aggregated.expectedUptimePct}
-                    color="bg-emerald-400" />
-                  <HorizBar label={`${t.uptimeStats.actualUptime} (${aggregated.actualUptimeHours.toFixed(2)} Hours)`}
-                    value={aggregated.actualUptimePct} maxValue={100} pct={aggregated.actualUptimePct}
-                    color={aggregated.actualUptimePct >= report.slaTargetPercent ? 'bg-emerald-500' : 'bg-red-500'} />
-                </div>
-                <div className="space-y-2 mt-3">
-                  <p className="text-[10px] font-bold text-surface-500 uppercase tracking-wider">Downtime</p>
-                  <HorizBar label={`${t.uptimeStats.expectedDowntime} (<=${aggregated.expectedDowntimeHours.toFixed(1)} Hours)`}
-                    value={aggregated.expectedDowntimePct} maxValue={100} pct={aggregated.expectedDowntimePct}
-                    color="bg-red-300" />
-                  <HorizBar label={`${t.uptimeStats.actualDowntime} (${aggregated.actualDowntimeHours.toFixed(2)} Hours)`}
-                    value={aggregated.actualDowntimePct} maxValue={100} pct={aggregated.actualDowntimePct}
-                    color={aggregated.actualDowntimePct <= (100 - report.slaTargetPercent) ? 'bg-red-400' : 'bg-red-600'} />
-                </div>
-              </div>
-
-              {/* Panel 3: Poll Verification Stats */}
-              <div className="bg-white rounded-xl border border-surface-200 p-4 shadow-sm space-y-2">
-                <SectionHeader icon={Target} title={t.verificationStats.title} iconColor="text-blue-600" />
-                <table className="w-full text-xs">
-                  <tbody>
-                    <tr className="border-b border-surface-100">
-                      <td className="py-1.5 text-surface-600">{t.verificationStats.expectedPollsMonthly}</td>
-                      <td className="py-1.5 text-right font-bold">{report.expectedPollsTotal?.toLocaleString()}</td>
-                      <td className="py-1.5 text-right w-20">
-                        <div className="w-full bg-surface-100 rounded-full h-3">
-                          <div className="h-3 rounded-full bg-blue-500" style={{ width: '100%' }} />
-                        </div>
-                      </td>
-                    </tr>
-                    <tr className="border-b border-surface-100">
-                      <td className="py-1.5 text-surface-600">{t.verificationStats.actualPollsTillNow}</td>
-                      <td className="py-1.5 text-right font-bold">{aggregated.totalPolls.toLocaleString()}</td>
-                      <td className="py-1.5 text-right w-20">
-                        <div className="w-full bg-surface-100 rounded-full h-3">
-                          <div className="h-3 rounded-full bg-emerald-500" style={{ width: `${Math.min(100, report.expectedPollsTotal > 0 ? (aggregated.totalPolls / report.expectedPollsTotal * 100) : 0)}%` }} />
-                        </div>
-                      </td>
-                    </tr>
-                    <tr className="border-b border-surface-100">
-                      <td className="py-1.5 text-surface-600">{t.verificationStats.actualMatchesExpected}</td>
-                      <td className="py-1.5 text-right" colSpan={2}>
-                        {aggregated.pollsMatch
-                          ? <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">YES</span>
-                          : <span className="font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded">NO</span>}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 mt-2">
-                  <p className="text-[10px] text-blue-700 font-medium">{t.verificationStats.note}</p>
-                  <p className="text-[10px] text-blue-600 mt-0.5">{report.expectedPollsMonthFormula}</p>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* ═══════════════════════════════════════════════════════════════════
                SECTION 3: Monthly Uptime Report Grid — Grouped by Category
@@ -552,15 +440,14 @@ export default function UptimeReportView() {
                         <th className="px-3 py-2 text-left font-semibold text-surface-600">{t.grid.application}</th>
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.slaTarget}</th>
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.actualUptime}</th>
-                        <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.verdict}</th>
-                        <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.expectedPolls}</th>
-                        <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.totalPolls}</th>
-                        <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.coveragePercent}</th>
+                        <th className="px-3 py-2 text-center font-semibold text-surface-600">Polls (Expected/Actual)</th>
+                        <th className="px-3 py-2 text-center font-semibold text-surface-600">Poll Coverage</th>
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.upPolls}</th>
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.downPolls}</th>
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.plannedDowntime}</th>
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.unplannedDowntime}</th>
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.pollStatus}</th>
+                        <th className="px-3 py-2 text-center font-semibold text-surface-600">SLA Compliance</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -575,14 +462,14 @@ export default function UptimeReportView() {
                               </span>
                             ) : <span className="text-surface-300">—</span>}
                           </td>
-                          <td className="px-3 py-2.5 text-center"><VerdictBadge verdict={app.slaVerdict} /></td>
-                          <td className="px-3 py-2.5 text-center text-surface-500">{app.expectedPollsElapsed?.toLocaleString()}</td>
                           <td className="px-3 py-2.5 text-center font-medium">
-                            <span className={app.pollsMatch ? 'text-surface-700' : 'text-amber-600'}>{app.totalPolls?.toLocaleString()}</span>
+                            <span className="text-surface-500">{report.expectedPollsElapsed?.toLocaleString()}</span>
+                            <span className="text-surface-400">/</span>
+                            <span className={report.actualPollsElapsed >= report.expectedPollsElapsed ? 'text-surface-700' : 'text-amber-600'}>{report.actualPollsElapsed?.toLocaleString()}</span>
                           </td>
                           <td className="px-3 py-2.5 text-center">
-                            <span className={`font-bold ${(app.coveragePercent || 0) >= 95 ? 'text-emerald-600' : (app.coveragePercent || 0) >= 80 ? 'text-amber-600' : 'text-red-600'}`}>
-                              {app.coveragePercent ?? '—'}%
+                            <span className={`font-bold ${(app.pollCoveragePercent || 0) >= 100 ? 'text-emerald-600' : (app.pollCoveragePercent || 0) >= 95 ? 'text-amber-600' : 'text-red-600'}`}>
+                              {app.pollCoveragePercent ?? '—'}%
                             </span>
                           </td>
                           <td className="px-3 py-2.5 text-center text-emerald-600 font-medium">{app.upPolls?.toLocaleString()}</td>
@@ -590,6 +477,7 @@ export default function UptimeReportView() {
                           <td className="px-3 py-2.5 text-center text-blue-600">{app.plannedDowntimeMinutes ?? 0} <span className="text-surface-400 text-[10px]">({app.plannedDowntimeEntries ?? 0} entries)</span></td>
                           <td className="px-3 py-2.5 text-center font-bold text-red-600">{app.unplannedDowntimeMinutes ?? 0}</td>
                           <td className="px-3 py-2.5 text-center"><PollStatusBadge status={app.pollVerificationStatus} /></td>
+                          <td className="px-3 py-2.5 text-center"><VerdictBadge verdict={app.slaVerdict} /></td>
                         </tr>
                       ))}
                     </tbody>
@@ -606,12 +494,12 @@ export default function UptimeReportView() {
           {/* ═══════════════════════════════════════════════════════════════════
                SECTION 4: Poll Verification (inline, not a separate tab)
              ═══════════════════════════════════════════════════════════════════ */}
-          {pollVerification?.applications && (
+          {report?.applications && (
             <div className="space-y-3">
               <SectionHeader icon={Target} title={t.pollVerification.title} subtitle={t.pollVerification.subtitle} iconColor="text-blue-600"
-                badge={pollVerification.pollerStartTimeDisplay && (
+                badge={report.pollerStartTimeDisplay && (
                   <span className="text-[10px] text-surface-400 bg-surface-100 px-2 py-0.5 rounded-full">
-                    {t.summary.pollerStartTime}: {pollVerification.pollerStartTimeDisplay} ({tzLabel})
+                    {t.summary.pollerStartTime}: {report.pollerStartTimeDisplay} ({tzLabel})
                   </span>
                 )} />
               <div className="overflow-x-auto border border-surface-200 rounded-xl bg-white shadow-sm">
@@ -624,12 +512,10 @@ export default function UptimeReportView() {
                       <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.pollVerification.expectedPolls}</th>
                       <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.pollVerification.coverage}</th>
                       <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.pollVerification.status}</th>
-                      <th className="px-3 py-2.5 text-left font-semibold text-surface-600">{t.pollVerification.firstPoll} ({tzLabel})</th>
-                      <th className="px-3 py-2.5 text-left font-semibold text-surface-600">{t.pollVerification.lastPoll} ({tzLabel})</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {pollVerification.applications.map(app => (
+                    {report.applications.map(app => (
                       <tr key={app.applicationId} className="border-b border-surface-50 hover:bg-surface-50/50">
                         <td className="px-3 py-2.5 font-medium text-surface-800">{app.name}</td>
                         <td className="px-3 py-2.5">
@@ -638,16 +524,14 @@ export default function UptimeReportView() {
                             <span className="text-surface-600">{app.categoryName || '—'}</span>
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 text-center font-bold text-surface-700">{app.actualPolls?.toLocaleString()}</td>
+                        <td className="px-3 py-2.5 text-center font-bold text-surface-700">{app.totalPolls?.toLocaleString()}</td>
                         <td className="px-3 py-2.5 text-center text-surface-500">{app.expectedPollsElapsed?.toLocaleString()}</td>
                         <td className="px-3 py-2.5 text-center">
-                          <span className={`font-bold ${app.coveragePercent >= 95 ? 'text-emerald-600' : app.coveragePercent >= 80 ? 'text-amber-600' : 'text-red-600'}`}>
-                            {app.coveragePercent}%
+                          <span className={`font-bold ${app.pollCoveragePercent >= 100 ? 'text-emerald-600' : app.pollCoveragePercent >= 95 ? 'text-amber-600' : 'text-red-600'}`}>
+                            {app.pollCoveragePercent}%
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 text-center"><PollStatusBadge status={app.status} /></td>
-                        <td className="px-3 py-2.5 text-surface-500">{app.firstPoll ? TimezoneService.formatTime(app.firstPoll) : '—'}</td>
-                        <td className="px-3 py-2.5 text-surface-500">{app.lastPoll ? TimezoneService.formatTime(app.lastPoll) : '—'}</td>
+                        <td className="px-3 py-2.5 text-center"><PollStatusBadge status={app.pollVerificationStatus} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -660,19 +544,18 @@ export default function UptimeReportView() {
                SECTION 5: Missed Polls
              ═══════════════════════════════════════════════════════════════════ */}
           {report?.applications && (() => {
-            // Filter applications with missed polls (actual polls < expected polls)
+            // Use global expected polls count for all apps
+            const globalExpected = report.expectedPollsElapsed || 0;
+            
+            // Filter applications with missed polls (actual polls < global expected polls)
             const missedApps = report.applications.filter(app => {
-              const expected = app.expectedPollsElapsed || 0;
               const actual = app.totalPolls || 0;
-              return actual < expected;
+              return actual < globalExpected;
             });
             
-            // Calculate total missed polls
-            const totalMissed = missedApps.reduce((sum, app) => {
-              const expected = app.expectedPollsElapsed || 0;
-              const actual = app.totalPolls || 0;
-              return sum + Math.max(0, expected - actual);
-            }, 0);
+            // Calculate total missed polls (global expected - global actual)
+            const globalActual = report.actualPollsElapsed || 0;
+            const totalMissed = Math.max(0, globalExpected - globalActual);
 
             return (
               <div className="space-y-3">
@@ -685,37 +568,40 @@ export default function UptimeReportView() {
                     <p className="text-xs text-emerald-700 font-medium">{t.missedPolls.noMissedPolls}</p>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto border border-surface-200 rounded-xl bg-white shadow-sm">
-                    <table className="w-full text-xs">
-                      <thead>
-                        <tr className="bg-amber-50 border-b border-amber-200">
-                          <th className="px-3 py-2.5 text-left font-semibold text-amber-700">{t.missedPolls.application}</th>
-                          <th className="px-3 py-2.5 text-center font-semibold text-amber-700">{t.pollVerification.expectedPolls}</th>
-                          <th className="px-3 py-2.5 text-center font-semibold text-amber-700">{t.pollVerification.actualPolls}</th>
-                          <th className="px-3 py-2.5 text-center font-semibold text-amber-700">{t.missedPolls.totalMissed}</th>
-                          <th className="px-3 py-2.5 text-center font-semibold text-amber-700">{t.pollVerification.coverage}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {missedApps.map(app => {
-                          const expected = app.expectedPollsElapsed || 0;
-                          const actual = app.totalPolls || 0;
-                          const missed = Math.max(0, expected - actual);
-                          const cov = expected > 0 ? Math.min(100, ((actual / expected) * 100)).toFixed(2) : 0;
-                          return (
-                            <tr key={app.applicationId} className="border-b border-surface-50 hover:bg-amber-50/30">
-                              <td className="px-3 py-2.5 font-medium text-surface-800">{app.name}</td>
-                              <td className="px-3 py-2.5 text-center text-surface-600">{expected.toLocaleString()}</td>
-                              <td className="px-3 py-2.5 text-center font-bold text-surface-700">{actual.toLocaleString()}</td>
-                              <td className="px-3 py-2.5 text-center font-bold text-red-600">{missed.toLocaleString()}</td>
-                              <td className="px-3 py-2.5 text-center">
-                                <span className={`font-bold ${cov >= 95 ? 'text-emerald-600' : cov >= 80 ? 'text-amber-600' : 'text-red-600'}`}>{cov}%</span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                  <div className="space-y-3">
+                    {missedApps.map(app => {
+                      const actual = app.totalPolls || 0;
+                      const missed = Math.max(0, globalExpected - actual);
+                      const cov = globalExpected > 0 ? Math.min(100, ((actual / globalExpected) * 100)).toFixed(2) : 0;
+                      const missedMinutes = app.missedPollMinutes || [];
+                      
+                      return (
+                        <div key={app.applicationId} className="border border-amber-200 rounded-xl overflow-hidden bg-white shadow-sm">
+                          <div className="bg-amber-50 px-4 py-3 border-b border-amber-200">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3 flex-1">
+                                <div>
+                                  <p className="font-medium text-surface-800">{app.name}</p>
+                                  <p className="text-xs text-surface-500 mt-0.5">Expected: {globalExpected} | Actual: {actual} | Missed: <span className="font-bold text-red-600">{missed}</span> | Coverage: <span className={`font-bold ${cov >= 95 ? 'text-emerald-600' : cov >= 80 ? 'text-amber-600' : 'text-red-600'}`}>{cov}%</span></p>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          {missedMinutes.length > 0 && (
+                            <div className="px-4 py-3 bg-amber-50/30 max-h-48 overflow-y-auto">
+                              <p className="text-xs font-semibold text-amber-700 mb-2">Missed Poll Minutes ({missedMinutes.length}):</p>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                                {missedMinutes.map((m, idx) => (
+                                  <div key={idx} className="bg-white border border-amber-200 rounded px-2 py-1.5">
+                                    <p className="text-xs text-surface-700">{m.display}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>

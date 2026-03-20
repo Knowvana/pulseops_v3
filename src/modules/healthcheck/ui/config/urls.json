@@ -19,6 +19,8 @@
     "pollerStart":         "/api/healthcheck/poller/start",
     "pollerStop":          "/api/healthcheck/poller/stop",
     "pollerPollNow":       "/api/healthcheck/poller/poll-now",
+    "pollerDeleteData":    "/api/healthcheck/poller/delete-data",
+    "pollerTotalCount":    "/api/healthcheck/poller/total-count",
 
     "dashboard":           "/api/healthcheck/dashboard",
     "dashboardLive":       "/api/healthcheck/dashboard/live",

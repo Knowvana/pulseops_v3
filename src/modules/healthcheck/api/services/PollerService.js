@@ -231,24 +231,55 @@ export async function start(config) {
 
   log.info(`Starting health poller — interval ${_currentConfig.intervalSeconds}s`);
 
-  // Always update poller start time when poller starts
-  _currentConfig.pollerStartTime = new Date().toISOString();
-  try {
-    await saveModuleConfig('poller_config', _currentConfig, 'Health poller configuration — interval, timeout, retry settings, and poller start timestamp.');
-    log.info('Poller start time updated', { pollerStartTime: _currentConfig.pollerStartTime });
-  } catch (err) {
-    log.warn('Failed to save poller start time', { message: err.message });
+  // Only set poller start time if empty (first time only)
+  if (!_currentConfig.pollerStartTime) {
+    // Align to next minute boundary for consistency (e.g., 12:00:00 or 12:01:00, not 12:00:45)
+    const now = new Date();
+    const nextMinute = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes() + 1, 0, 0);
+    _currentConfig.pollerStartTime = nextMinute.toISOString();
+    try {
+      await saveModuleConfig('poller_config', _currentConfig, 'Health poller configuration — interval, timeout, retry settings, and poller start timestamp.');
+      log.info('Poller start time set (first time)', { pollerStartTime: _currentConfig.pollerStartTime });
+    } catch (err) {
+      log.warn('Failed to save poller start time', { message: err.message });
+    }
+  } else {
+    log.info('Poller start time already set, not updating', { pollerStartTime: _currentConfig.pollerStartTime });
   }
 
-  // Execute first poll immediately
-  await executePollCycle();
+  // Always save pollerStartedAt when poller is started (different from pollerStartTime)
+  const nowForStart = new Date();
+  _currentConfig.pollerStartedAt = nowForStart.toISOString();
+  try {
+    await saveModuleConfig('poller_config', _currentConfig, 'Health poller configuration — interval, timeout, retry settings, and poller start timestamp.');
+    log.info('Poller started at', { pollerStartedAt: _currentConfig.pollerStartedAt });
+  } catch (err) {
+    log.warn('Failed to save poller started at time', { message: err.message });
+  }
 
-  // Start recurring interval
-  _intervalHandle = setInterval(() => {
-    executePollCycle().catch(err => log.error('Interval poll error', { message: err.message }));
-  }, intervalMs);
+  // Calculate delay to next minute boundary for aligned polling
+  const now = new Date();
+  const nextMinute = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes() + 1, 0, 0);
+  const delayToNextMinute = nextMinute.getTime() - now.getTime();
+
+  log.info(`Poller will execute first poll in ${delayToNextMinute}ms at minute boundary`, { nextPollTime: nextMinute.toISOString() });
+
+  // Schedule first poll at the next minute boundary
+  const firstPollTimeout = setTimeout(() => {
+    executePollCycle().catch(err => log.error('First poll error', { message: err.message }));
+    
+    // After first poll, start recurring interval aligned to minute boundaries
+    _intervalHandle = setInterval(() => {
+      executePollCycle().catch(err => log.error('Interval poll error', { message: err.message }));
+    }, intervalMs);
+  }, delayToNextMinute);
 
   _isRunning = true;
+  
+  // Store timeout handle so it can be cleared on stop
+  if (!_intervalHandle) {
+    _intervalHandle = firstPollTimeout; // Temporarily store for cleanup if needed
+  }
 }
 
 export function stop() {

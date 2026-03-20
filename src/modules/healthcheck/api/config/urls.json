@@ -19,6 +19,8 @@
     "pollerStart":                "/poller/start",
     "pollerStop":                 "/poller/stop",
     "pollerPollNow":              "/poller/poll-now",
+    "pollerDeleteData":           "/poller/delete-data",
+    "pollerTotalCount":           "/poller/total-count",
 
     "dashboard":                  "/dashboard",
     "dashboardLive":              "/dashboard/live",

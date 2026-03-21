@@ -6,6 +6,8 @@
   "navItems": {
     "dashboard": "Dashboard",
     "uptimeReport": "Uptime Report",
+    "applications": "Applications",
+    "categories": "Categories",
     "downtime": "Downtime",
     "config": "Configuration"
   },

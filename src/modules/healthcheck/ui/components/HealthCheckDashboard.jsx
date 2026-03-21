@@ -1,23 +1,23 @@
 // ============================================================================
-// HealthCheckDashboard — Enterprise-Grade App Health Monitoring Dashboard
+// HealthCheckDashboard — Enterprise Eyes-on-Glass Monitoring Dashboard
 //
-// PURPOSE: Professional real-time monitoring dashboard with:
-//   1. Executive summary — KPIs, uptime %, health score
-//   2. System health overview — status distribution, trends
-//   3. Performance metrics — response times, SLA compliance
-//   4. Live application grid — detailed per-app health with filtering
-//   5. Poller status & controls — real-time polling management
-//   6. Category breakdown — grouped health analysis
+// PURPOSE: Clean, professional real-time monitoring dashboard for enterprise
+//          operations teams. At-a-glance health status with minimal cognitive load.
+//
+// DESIGN PRINCIPLES:
+//   1. Immediate visual status recognition (color-coded, large indicators)
+//   2. Minimal information density - focus on what matters most
+//   3. Clean visual hierarchy with clear separation of concerns
+//   4. Real-time updates without overwhelming the user
+//   5. Professional enterprise aesthetics with subtle animations
 //
 // USED BY: manifest.jsx → getViews() → dashboard
 // ============================================================================
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
-  Activity, Loader2, RefreshCw, Zap, CheckCircle2, XCircle,
-  HelpCircle, Play, Pause, Clock, ArrowRight, ExternalLink,
-  Wifi, WifiOff, Timer, BarChart3, Globe, AlertCircle, TrendingUp,
-  TrendingDown, Eye, Gauge, Layers, Filter, Search, Download,
-  ChevronDown, ChevronUp, Info, Target,
+  Activity, Loader2, RefreshCw, CheckCircle2, XCircle, AlertCircle,
+  Play, Pause, Clock, Zap, Globe, Wifi, WifiOff, Eye, TrendingUp,
+  TrendingDown, BarChart3, Filter, Search, Timer,
 } from 'lucide-react';
 import { createLogger, TimezoneService } from '@shared';
 import ApiClient from '@shared/services/apiClient';
@@ -26,173 +26,423 @@ import urls from '../config/urls.json';
 
 const log = createLogger('HealthCheckDashboard.jsx');
 const t = uiText.dashboard;
-const tc = uiText.common;
 const api = urls.api;
 
-// ── Status icon helper ──────────────────────────────────────────────────────
-function StatusIcon({ status, size = 16 }) {
-  if (status === 'UP') return <CheckCircle2 size={size} className="text-emerald-500" />;
-  if (status === 'DOWN') return <XCircle size={size} className="text-red-500" />;
-  return <HelpCircle size={size} className="text-amber-500" />;
-}
-
-function StatusBadge({ status }) {
-  const colors = {
-    UP: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    DOWN: 'bg-red-50 text-red-700 border-red-200',
-    UNKNOWN: 'bg-amber-50 text-amber-700 border-amber-200',
+// ── Status Badge Component ─────────────────────────────────────────────────────
+function StatusBadge({ status, size = 'md' }) {
+  const sizes = {
+    sm: 'px-2 py-0.5 text-xs',
+    md: 'px-3 py-1 text-sm',
+    lg: 'px-4 py-2 text-base',
   };
+  
+  const colors = {
+    UP: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    DOWN: 'bg-red-100 text-red-800 border-red-200',
+    UNKNOWN: 'bg-amber-100 text-amber-800 border-amber-200',
+  };
+  
+  const icons = {
+    UP: <CheckCircle2 size={size === 'sm' ? 12 : size === 'md' ? 14 : 16} className="inline mr-1" />,
+    DOWN: <XCircle size={size === 'sm' ? 12 : size === 'md' ? 14 : 16} className="inline mr-1" />,
+    UNKNOWN: <AlertCircle size={size === 'sm' ? 12 : size === 'md' ? 14 : 16} className="inline mr-1" />,
+  };
+
   return (
-    <span className={`px-2.5 py-1 text-xs font-bold rounded-full border ${colors[status] || colors.UNKNOWN}`}>
-      {status === 'UP' ? tc.up : status === 'DOWN' ? tc.down : tc.unknown}
+    <span className={`inline-flex items-center font-medium rounded-full border ${sizes[size]} ${colors[status] || colors.UNKNOWN}`}>
+      {icons[status]}
+      {status === 'UP' ? 'Operational' : status === 'DOWN' ? 'Down' : 'Unknown'}
     </span>
   );
 }
 
-// ── Health Score Component ──────────────────────────────────────────────────
-function HealthScoreGauge({ upCount, totalCount }) {
-  const percentage = totalCount > 0 ? Math.round((upCount / totalCount) * 100) : 0;
-  const getColor = (pct) => {
-    if (pct >= 95) return 'text-emerald-600';
-    if (pct >= 80) return 'text-amber-600';
-    return 'text-red-600';
-  };
-  const getBgColor = (pct) => {
-    if (pct >= 95) return 'from-emerald-50 to-emerald-100';
-    if (pct >= 80) return 'from-amber-50 to-amber-100';
-    return 'from-red-50 to-red-100';
-  };
+// ── Health Overview Card ─────────────────────────────────────────────────────
+function HealthOverviewCard({ data }) {
+  const healthPercentage = data.totalApps > 0 ? Math.round((data.appsUp / data.totalApps) * 100) : 0;
+  const isHealthy = healthPercentage >= 95;
+  const isWarning = healthPercentage >= 80 && healthPercentage < 95;
+  
+  // Calculate additional metrics
+  const avgResponseTime = data.applications && data.applications.length > 0
+    ? Math.round(data.applications
+        .filter(a => a.latestResponseMs != null)
+        .reduce((sum, a) => sum + a.latestResponseMs, 0) / 
+        data.applications.filter(a => a.latestResponseMs != null).length) || 0
+    : 0;
+  
+  const criticalApps = data.applications ? data.applications.filter(a => a.latestStatus === 'DOWN').length : 0;
+  const warningApps = data.applications ? data.applications.filter(a => a.latestResponseMs > 5000).length : 0;
   
   return (
-    <div className={`bg-gradient-to-br ${getBgColor(percentage)} rounded-xl border border-surface-200 p-6 shadow-sm`}>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <Gauge size={18} className={getColor(percentage)} />
-          <span className="text-sm font-bold text-surface-700">Health Score</span>
-        </div>
-        <Info size={14} className="text-surface-400" />
-      </div>
-      <div className="flex items-baseline gap-2 mb-3">
-        <span className={`text-4xl font-bold ${getColor(percentage)}`}>{percentage}</span>
-        <span className="text-sm font-medium text-surface-600">%</span>
-      </div>
-      <div className="w-full bg-surface-200 rounded-full h-2 overflow-hidden">
-        <div 
-          className={`h-full rounded-full transition-all duration-300 ${
-            percentage >= 95 ? 'bg-emerald-500' : percentage >= 80 ? 'bg-amber-500' : 'bg-red-500'
-          }`}
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
-      <p className="text-xs text-surface-600 mt-3">{upCount} of {totalCount} apps operational</p>
-    </div>
-  );
-}
-
-// ── Metric Card Component ──────────────────────────────────────────────────
-function MetricCard({ icon: Icon, label, value, unit, trend, color = 'brand' }) {
-  const colorClasses = {
-    brand: 'text-brand-600 bg-brand-50 border-brand-200',
-    emerald: 'text-emerald-600 bg-emerald-50 border-emerald-200',
-    red: 'text-red-600 bg-red-50 border-red-200',
-    amber: 'text-amber-600 bg-amber-50 border-amber-200',
-    blue: 'text-blue-600 bg-blue-50 border-blue-200',
-  };
-  
-  return (
-    <div className={`bg-white rounded-xl border ${colorClasses[color]} border-opacity-50 p-5 shadow-sm hover:shadow-md transition-shadow`}>
-      <div className="flex items-start justify-between mb-3">
-        <div className={`w-10 h-10 rounded-lg ${colorClasses[color].split(' ')[1]} flex items-center justify-center`}>
-          <Icon size={18} className={colorClasses[color].split(' ')[0]} />
-        </div>
-        {trend && (
-          <div className={`flex items-center gap-0.5 text-xs font-medium ${trend > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-            {trend > 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-            {Math.abs(trend)}%
+    <div className={`rounded-2xl border-2 p-6 transition-all duration-300 ${
+      isHealthy 
+        ? 'bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200' 
+        : isWarning 
+          ? 'bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200'
+          : 'bg-gradient-to-br from-red-50 to-red-100 border-red-200'
+    }`}>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Health Status */}
+        <div className="text-center lg:text-left">
+          <div className="flex items-center justify-center lg:justify-start gap-4 mb-4">
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0 ${
+              isHealthy 
+                ? 'bg-emerald-500' 
+                : isWarning 
+                  ? 'bg-amber-500'
+                  : 'bg-red-500'
+            }`}>
+              {isHealthy ? (
+                <CheckCircle2 size={28} className="text-white" />
+              ) : isWarning ? (
+                <AlertCircle size={28} className="text-white" />
+              ) : (
+                <XCircle size={28} className="text-white" />
+              )}
+            </div>
+            <div>
+              <h2 className="text-3xl font-bold mb-1">
+                {healthPercentage}%
+              </h2>
+              <p className="text-lg font-medium">
+                {isHealthy ? 'All Systems Operational' : isWarning ? 'Some Issues Detected' : 'Critical Issues'}
+              </p>
+            </div>
           </div>
-        )}
-      </div>
-      <p className="text-xs font-medium text-surface-500 uppercase tracking-wide mb-1">{label}</p>
-      <div className="flex items-baseline gap-1">
-        <span className="text-2xl font-bold text-surface-800">{value}</span>
-        {unit && <span className="text-sm text-surface-500">{unit}</span>}
+          <p className="text-sm opacity-75">
+            {data.appsUp} of {data.totalApps} applications healthy
+          </p>
+        </div>
+
+        {/* Performance Metrics */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-surface-700 uppercase tracking-wider">Performance</h3>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-surface-600 flex items-center gap-2">
+                <Clock size={14} />
+                Avg Response Time
+              </span>
+              <span className={`font-semibold ${avgResponseTime > 5000 ? 'text-red-600' : avgResponseTime > 2000 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                {avgResponseTime}ms
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-surface-600 flex items-center gap-2">
+                <Activity size={14} />
+                Total Monitored
+              </span>
+              <span className="font-semibold text-surface-700">{data.totalApps}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Issue Breakdown */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-surface-700 uppercase tracking-wider">Issues</h3>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-surface-600 flex items-center gap-2">
+                <XCircle size={14} className="text-red-500" />
+                Critical (Down)
+              </span>
+              <span className="font-semibold text-red-600">{criticalApps}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-surface-600 flex items-center gap-2">
+                <AlertCircle size={14} className="text-amber-500" />
+                Slow (&gt;5s)
+              </span>
+              <span className="font-semibold text-amber-600">{warningApps}</span>
+            </div>
+          </div>
+          {data.appsDown > 0 && (
+            <div className="mt-3 inline-flex items-center gap-2 px-3 py-1 bg-white/50 rounded-full text-sm">
+              <XCircle size={14} />
+              {data.appsDown} app{data.appsDown > 1 ? 's' : ''} down
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-export default function HealthCheckDashboard({ onNavigate }) {
+// ── Application Data Grid Component ─────────────────────────────────────────────
+function ApplicationDataGrid({ applications, searchTerm, filterStatus, onSearch, onFilter }) {
+  const filteredApps = useMemo(() => {
+    return applications.filter(app => {
+      const matchesSearch = app.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           app.url.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesStatus = filterStatus === 'all' || app.latestStatus === filterStatus;
+      return matchesSearch && matchesStatus;
+    });
+  }, [applications, searchTerm, filterStatus]);
+
+  const getResponseTimeColor = (responseTime) => {
+    if (responseTime == null) return 'text-surface-300';
+    if (responseTime > 5000) return 'text-red-600 font-medium';
+    if (responseTime > 2000) return 'text-amber-600 font-medium';
+    return 'text-emerald-600 font-medium';
+  };
+
+  const getHttpCodeColor = (httpCode) => {
+    if (httpCode == null) return 'text-surface-300';
+    if (httpCode >= 200 && httpCode < 300) return 'text-emerald-600 font-medium';
+    return 'text-red-600 font-medium';
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Search and Filter Controls */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex-1 relative">
+          <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-surface-400" />
+          <input
+            type="text"
+            placeholder="Search applications..."
+            value={searchTerm}
+            onChange={e => onSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
+          />
+        </div>
+        <select
+          value={filterStatus}
+          onChange={e => onFilter(e.target.value)}
+          className="px-4 py-2 border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none bg-white"
+        >
+          <option value="all">All Status</option>
+          <option value="UP">Operational</option>
+          <option value="DOWN">Down</option>
+          <option value="UNKNOWN">Unknown</option>
+        </select>
+      </div>
+
+      {/* Applications Data Grid */}
+      {filteredApps.length === 0 ? (
+        <div className="text-center py-12 text-surface-400">
+          <Activity size={48} className="mx-auto mb-4 opacity-50" />
+          <p>No applications match your criteria</p>
+        </div>
+      ) : (
+        <div className="bg-white border border-surface-200 rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              {/* Table Header */}
+              <thead className="bg-surface-50 border-b border-surface-200">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-surface-700 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-surface-700 uppercase tracking-wider">
+                    Application
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-surface-700 uppercase tracking-wider">
+                    HTTP Code
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-surface-700 uppercase tracking-wider">
+                    Response Time
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-surface-700 uppercase tracking-wider">
+                    Last Checked
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-surface-700 uppercase tracking-wider">
+                    Category
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-surface-700 uppercase tracking-wider">
+                    Error Details
+                  </th>
+                </tr>
+              </thead>
+
+              {/* Table Body */}
+              <tbody className="divide-y divide-surface-100">
+                {filteredApps.map(app => (
+                  <tr 
+                    key={app.id} 
+                    className={`hover:bg-surface-50 transition-colors ${
+                      app.latestStatus === 'DOWN' ? 'bg-red-50/30' : ''
+                    }`}
+                  >
+                    {/* Status Column */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <StatusBadge status={app.latestStatus} size="sm" />
+                    </td>
+
+                    {/* Application Column */}
+                    <td className="px-4 py-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-surface-900 truncate">
+                          {app.name}
+                        </div>
+                        <a
+                          href={app.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-surface-500 hover:text-brand-600 truncate flex items-center gap-1 mt-0.5"
+                        >
+                          {app.url}
+                          <Eye size={10} />
+                        </a>
+                      </div>
+                    </td>
+
+                    {/* HTTP Code Column */}
+                    <td className="px-4 py-3 whitespace-nowrap text-center">
+                      {app.latestHttpCode ? (
+                        <span className={`font-mono text-sm ${getHttpCodeColor(app.latestHttpCode)}`}>
+                          {app.latestHttpCode}
+                        </span>
+                      ) : (
+                        <span className="text-surface-300">—</span>
+                      )}
+                    </td>
+
+                    {/* Response Time Column */}
+                    <td className="px-4 py-3 whitespace-nowrap text-center">
+                      {app.latestResponseMs != null ? (
+                        <span className={`font-mono text-sm ${getResponseTimeColor(app.latestResponseMs)}`}>
+                          {app.latestResponseMs}ms
+                        </span>
+                      ) : (
+                        <span className="text-surface-300">—</span>
+                      )}
+                    </td>
+
+                    {/* Last Checked Column */}
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-surface-600">
+                      <div className="flex items-center gap-1">
+                        <span className={`w-2 h-2 rounded-full ${
+                          app.latestStatus === 'UP' ? 'bg-emerald-500' : 
+                          app.latestStatus === 'DOWN' ? 'bg-red-500' : 'bg-amber-500'
+                        }`} />
+                        <span>{app.lastPolledAt ? TimezoneService.formatTime(app.lastPolledAt) : 'Never'}</span>
+                      </div>
+                    </td>
+
+                    {/* Category Column */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {app.categoryName ? (
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-3 h-3 rounded-full flex-shrink-0" 
+                            style={{ backgroundColor: app.categoryColor || '#64748b' }}
+                          />
+                          <span className="text-sm text-surface-700">{app.categoryName}</span>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-surface-400">Uncategorized</span>
+                      )}
+                    </td>
+
+                    {/* Error Details Column */}
+                    <td className="px-4 py-3 text-sm">
+                      {app.latestError ? (
+                        <div className="max-w-xs truncate text-red-600" title={app.latestError}>
+                          {app.latestError}
+                        </div>
+                      ) : (
+                        <span className="text-surface-300">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Summary Footer */}
+          <div className="bg-surface-50 px-4 py-3 border-t border-surface-200">
+            <div className="flex items-center justify-between text-sm text-surface-600">
+              <span>
+                Showing {filteredApps.length} of {applications.length} applications
+              </span>
+              <div className="flex items-center gap-4">
+                <span className="flex items-center gap-1">
+                  <CheckCircle2 size={14} className="text-emerald-500" />
+                  {filteredApps.filter(a => a.latestStatus === 'UP').length} UP
+                </span>
+                <span className="flex items-center gap-1">
+                  <XCircle size={14} className="text-red-500" />
+                  {filteredApps.filter(a => a.latestStatus === 'DOWN').length} DOWN
+                </span>
+                <span className="flex items-center gap-1">
+                  <AlertCircle size={14} className="text-amber-500" />
+                  {filteredApps.filter(a => a.latestStatus === 'UNKNOWN').length} UNKNOWN
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Dashboard Component ───────────────────────────────────────────────────
+export default function HealthCheckDashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [polling, setPolling] = useState(false);
   const [error, setError] = useState(null);
+  const [polling, setPolling] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [expandedCategory, setExpandedCategory] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const initRan = useRef(false);
   const sseRef = useRef(null);
+  const initRan = useRef(false);
 
-  const loadDashboard = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
+  const loadDashboard = useCallback(async () => {
     try {
       const res = await ApiClient.get(api.dashboard);
-      if (res?.success) setData(res.data);
-      else setError(res?.error?.message || tc.fetchError);
+      if (res?.success) {
+        setData(res.data);
+        setError(null);
+      } else {
+        setError(res?.error?.message || 'Failed to load dashboard');
+      }
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
 
+  // Load initial data
   useEffect(() => {
     if (initRan.current) return;
     initRan.current = true;
     loadDashboard();
   }, [loadDashboard]);
 
-  // Live clock — update current time every second
+  // Update current time
   useEffect(() => {
-    const clockInterval = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(clockInterval);
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
   }, []);
 
-  // Connect to SSE stream for real-time poll completion events
+  // Setup SSE for real-time updates
   useEffect(() => {
-    // Close existing connection if any
-    if (sseRef.current) {
-      sseRef.current.close();
-    }
+    if (!data?.poller?.isRunning) return;
 
-    const eventSource = new EventSource(`${api.pollEvents}`);
+    const eventSource = new EventSource(`/api/healthcheck/sse/dashboard-updates`);
     sseRef.current = eventSource;
-
-    eventSource.onopen = () => {
-      log.debug('SSE connection established for poll events');
-    };
 
     eventSource.onmessage = (event) => {
       try {
-        const eventData = JSON.parse(event.data);
-        
-        if (eventData.type === 'poll_complete') {
-          log.debug('Poll completion event received', { timestamp: eventData.timestamp });
-          // Refresh dashboard immediately when poll completes
-          loadDashboard(false);
+        const update = JSON.parse(event.data);
+        if (update.type === 'poller_update') {
+          setData(prev => prev ? { ...prev, poller: update.poller } : null);
+        } else if (update.type === 'applications_update') {
+          setData(prev => prev ? { ...prev, applications: update.applications } : null);
         }
       } catch (err) {
-        log.error('Failed to parse SSE event', { error: err.message });
+        log.error('Failed to parse SSE message', err);
       }
     };
 
-    eventSource.onerror = (err) => {
-      log.error('SSE connection error', { error: err.message });
+    eventSource.onerror = () => {
       eventSource.close();
+      sseRef.current = null;
     };
 
     return () => {
@@ -201,7 +451,7 @@ export default function HealthCheckDashboard({ onNavigate }) {
         sseRef.current = null;
       }
     };
-  }, [loadDashboard]);
+  }, [data?.poller?.isRunning]);
 
   const handlePollNow = useCallback(async () => {
     setPolling(true);
@@ -217,77 +467,31 @@ export default function HealthCheckDashboard({ onNavigate }) {
     }
   }, [loadDashboard]);
 
-  // Compute filtered applications
-  const filteredApps = useMemo(() => {
-    if (!data?.applications) return [];
-    return data.applications.filter(app => {
-      const matchesSearch = app.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           app.url.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = filterStatus === 'all' || app.latestStatus === filterStatus;
-      return matchesSearch && matchesStatus;
-    });
-  }, [data?.applications, searchTerm, filterStatus]);
-
-  // Group filtered apps by category
-  const groupedByCategory = useMemo(() => {
-    if (!filteredApps.length) return [];
-    const groups = {};
-    for (const app of filteredApps) {
-      const catName = app.categoryName || 'Uncategorized';
-      if (!groups[catName]) {
-        groups[catName] = { name: catName, color: app.categoryColor || '#64748b', apps: [] };
-      }
-      groups[catName].apps.push(app);
-    }
-    return Object.values(groups);
-  }, [filteredApps]);
-
-  // Compute performance metrics
-  const performanceMetrics = useMemo(() => {
-    if (!data?.applications) return { avgResponseTime: 0, p95ResponseTime: 0, slaCompliance: 0 };
-    const responseTimes = data.applications
-      .filter(a => a.latestResponseMs != null)
-      .map(a => a.latestResponseMs)
-      .sort((a, b) => a - b);
-    
-    const avgResponseTime = responseTimes.length > 0 
-      ? Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length)
-      : 0;
-    const p95ResponseTime = responseTimes.length > 0
-      ? responseTimes[Math.floor(responseTimes.length * 0.95)]
-      : 0;
-    const slaCompliance = data.applications.length > 0
-      ? Math.round(data.applications.reduce((sum, a) => sum + (a.slaTargetPercent || 0), 0) / data.applications.length)
-      : 0;
-
-    return { avgResponseTime, p95ResponseTime, slaCompliance };
-  }, [data?.applications]);
-
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-32">
-        <div className="w-12 h-12 rounded-full bg-brand-100 flex items-center justify-center mb-4 animate-pulse">
-          <Loader2 className="animate-spin text-brand-600" size={24} />
+      <div className="flex flex-col items-center justify-center min-h-[400px]">
+        <div className="w-16 h-16 rounded-full bg-brand-100 flex items-center justify-center mb-4">
+          <Loader2 className="animate-spin text-brand-600" size={32} />
         </div>
-        <p className="text-sm font-medium text-surface-600">{tc.loading}</p>
+        <p className="text-lg font-medium text-surface-600">Loading dashboard...</p>
       </div>
     );
   }
 
   if (!data || data.totalApps === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-32 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-surface-100 flex items-center justify-center mb-4">
-          <Activity size={28} className="text-surface-300" />
+      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+        <div className="w-20 h-20 rounded-2xl bg-surface-100 flex items-center justify-center mb-6">
+          <Activity size={36} className="text-surface-300" />
         </div>
-        <h2 className="text-lg font-bold text-surface-700">{t.notConfiguredTitle}</h2>
-        <p className="text-sm text-surface-400 mt-2 max-w-md">{t.notConfiguredSubtitle}</p>
-        {onNavigate && (
-          <button onClick={() => onNavigate('config')}
-            className="mt-6 px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 flex items-center gap-2 shadow-sm">
-            {t.goToConfig} <ArrowRight size={14} />
-          </button>
-        )}
+        <h2 className="text-2xl font-bold text-surface-700 mb-3">No Applications Configured</h2>
+        <p className="text-surface-400 mb-8 max-w-md">
+          Add applications to start monitoring their health status and performance.
+        </p>
+        <button className="px-6 py-3 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 flex items-center gap-2">
+          <Globe size={16} />
+          Add Your First Application
+        </button>
       </div>
     );
   }
@@ -295,317 +499,109 @@ export default function HealthCheckDashboard({ onNavigate }) {
   const poller = data.poller || {};
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <style jsx>{`
-        @keyframes heartbeat {
-          0% {
-            transform: scale(1);
-            opacity: 1;
-            color: rgb(251, 146, 60);
-          }
-          25% {
-            transform: scale(1.3);
-            opacity: 0.8;
-            color: rgb(251, 146, 60);
-          }
-          50% {
-            transform: scale(1);
-            opacity: 1;
-            color: rgb(251, 146, 60);
-          }
-          75% {
-            transform: scale(1.3);
-            opacity: 0.8;
-            color: rgb(251, 146, 60);
-          }
-          100% {
-            transform: scale(1);
-            opacity: 1;
-            color: rgb(251, 146, 60);
-          }
-        }
-        
-        .animate-heartbeat {
-          animation: heartbeat 2s ease-in-out infinite;
-          color: rgb(251, 146, 60);
-        }
-      `}</style>
-      {/* ════════════════════════════════════════════════════════════════════════════ */}
-      {/* HEADER — Title Only */}
-      {/* ════════════════════════════════════════════════════════════════════════════ */}
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center">
-          <Activity size={20} className="text-white" />
-        </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold text-surface-900">{t.title}</h1>
-          <p className="text-xs text-surface-500">{t.subtitle}</p>
+          <h1 className="text-2xl font-bold text-surface-900">System Health</h1>
+          <p className="text-surface-500">Real-time monitoring dashboard</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-surface-500">Current Time</p>
+          <p className="text-sm font-medium">{TimezoneService.formatTime(currentTime.toISOString())}</p>
         </div>
       </div>
 
+      {/* Error Alert */}
       {error && (
         <div className="flex items-center gap-3 px-4 py-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg">
-          <AlertCircle size={16} className="flex-shrink-0" />
+          <AlertCircle size={16} />
           <span>{error}</span>
         </div>
       )}
 
-      {/* ════════════════════════════════════════════════════════════════════════════ */}
-      {/* POLLER STATUS — Monitor poller status, timing, and manual controls */}
-      {/* ════════════════════════════════════════════════════════════════════════════ */}
-      <div className="bg-white rounded-xl border border-surface-200 shadow-sm">
-        <div className="px-5 py-3 border-b border-surface-100">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2">
+      {/* Health Overview */}
+      <HealthOverviewCard data={data} />
+
+      {/* Poller Status Bar */}
+      <div className="bg-white rounded-xl border border-surface-200 p-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div className="flex items-center gap-6">
+            {/* Poller Status */}
             <div className="flex items-center gap-3">
-              <h3 className="text-sm font-bold text-surface-800 flex items-center gap-2">
-                <Activity size={16} className="text-orange-500 animate-heartbeat" />
-                Poller Status
-              </h3>
-              <div className={`w-2 h-2 rounded-full ${poller.isRunning ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'}`} />
-              <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${poller.isRunning ? 'bg-emerald-50 text-emerald-700' : 'bg-surface-100 text-surface-500'}`}>
-                {poller.isRunning ? t.poller.running : t.poller.stopped}
-              </span>
-              {poller.intervalSeconds && (
-                <div className="flex items-center gap-1 text-xs text-surface-600">
-                  <Clock size={12} />
-                  <span>Polling Frequency: {poller.intervalSeconds}s</span>
+              <div className="relative">
+                <div className={`w-4 h-4 rounded-full ${poller.isRunning ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'}`} />
+                {poller.isRunning && (
+                  <div className="absolute inset-0 w-4 h-4 rounded-full bg-emerald-500 animate-ping opacity-75" />
+                )}
+              </div>
+              <div>
+                <span className="text-sm font-semibold text-surface-800">
+                  Poller {poller.isRunning ? 'Running' : 'Stopped'}
+                </span>
+                <div className="flex items-center gap-1 text-xs text-surface-500">
+                  <Activity size={10} />
+                  <span>{poller.isRunning ? 'Active' : 'Inactive'}</span>
                 </div>
-              )}
-            </div>
-            <p className="text-xs text-surface-500">Monitor poller status, timing, and manual controls</p>
-          </div>
-        </div>
-        <div className="p-5">
-          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-            {/* Current Time */}
-            <div className="flex items-center gap-2 text-sm min-w-[240px]">
-              <span className="text-surface-500">Current Time ({TimezoneService.getTimezoneLabel()}):</span>
-              <Clock size={14} className="text-surface-600" />
-              <span className="font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                {TimezoneService.formatTime(currentTime.toISOString())}
-              </span>
+              </div>
             </div>
 
-            {/* Gradient Separator */}
-            <div className="hidden lg:block w-px h-6 bg-gradient-to-b from-transparent via-surface-200 to-transparent" />
+            {/* Polling Frequency */}
+            <div className="flex items-center gap-3">
+              <Timer size={16} className="text-surface-400" />
+              <div>
+                <span className="text-sm font-semibold text-surface-800">
+                  {poller.intervalSeconds || 60}s
+                </span>
+                <div className="text-xs text-surface-500">Interval</div>
+              </div>
+            </div>
 
             {/* Last Poll */}
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-surface-500">{t.poller.lastPoll} ({poller.timezoneLabel || 'IST'}):</span>
-              <span className="font-medium text-surface-800">
-                {poller.lastPollTimeDisplay || t.poller.notStarted}
-              </span>
+            {poller.isRunning && (
+              <div className="flex items-center gap-3">
+                <Clock size={16} className="text-surface-400" />
+                <div>
+                  <span className="text-sm font-semibold text-surface-800">
+                    {poller.lastPollTimeDisplay || 'Never'}
+                  </span>
+                  <div className="text-xs text-surface-500">Last Poll</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right Side Info */}
+          <div className="flex items-center gap-6">
+            {/* Applications Count */}
+            <div className="flex items-center gap-3">
+              <Globe size={16} className="text-surface-400" />
+              <div>
+                <span className="text-sm font-semibold text-surface-800">{data.totalApps}</span>
+                <div className="text-xs text-surface-500">Applications</div>
+              </div>
             </div>
 
-            {/* Poll Now Button */}
-            <div className="flex items-center ml-auto">
-              <button onClick={handlePollNow} disabled={polling}
-                className="px-3 py-1.5 text-xs font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 disabled:opacity-50 flex items-center gap-1.5 shadow-sm transition-colors">
-                {polling ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
-                {t.pollNow}
-              </button>
-            </div>
+            {/* Manual Poll Button */}
+            <button onClick={handlePollNow} disabled={polling}
+              className="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 disabled:opacity-50 flex items-center gap-2 shadow-sm transition-all">
+              {polling ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+              {polling ? 'Polling...' : 'Poll Now'}
+            </button>
           </div>
         </div>
       </div>
 
-      {/* ════════════════════════════════════════════════════════════════════════════ */}
-      {/* EXECUTIVE SUMMARY — KPIs & HEALTH SCORE */}
-      {/* ════════════════════════════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        <HealthScoreGauge upCount={data.appsUp} totalCount={data.totalApps} />
-        <MetricCard icon={Globe} label="Total Apps" value={data.totalApps} color="brand" />
-        <MetricCard icon={CheckCircle2} label="Apps UP" value={data.appsUp} color="emerald" />
-        <MetricCard icon={XCircle} label="Apps DOWN" value={data.appsDown} color="red" />
-      </div>
-
-      {/* ════════════════════════════════════════════════════════════════════════════ */}
-      {/* PERFORMANCE METRICS */}
-      {/* ════════════════════════════════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <MetricCard 
-          icon={Timer} 
-          label="Avg Response Time" 
-          value={performanceMetrics.avgResponseTime} 
-          unit="ms" 
-          color="blue"
+      {/* Applications Data Grid */}
+      <div className="bg-white rounded-xl border border-surface-200 p-6">
+        <h2 className="text-lg font-semibold text-surface-800 mb-4">Applications</h2>
+        <ApplicationDataGrid
+          applications={data.applications || []}
+          searchTerm={searchTerm}
+          filterStatus={filterStatus}
+          onSearch={setSearchTerm}
+          onFilter={setFilterStatus}
         />
-        <MetricCard 
-          icon={Gauge} 
-          label="P95 Response Time" 
-          value={performanceMetrics.p95ResponseTime} 
-          unit="ms" 
-          color="amber"
-        />
-        <MetricCard 
-          icon={Target} 
-          label="Avg SLA Compliance" 
-          value={performanceMetrics.slaCompliance} 
-          unit="%" 
-          color="emerald"
-        />
-      </div>
-
-      {/* ════════════════════════════════════════════════════════════════════════════ */}
-      {/* CATEGORY BREAKDOWN — Health by Category */}
-      {/* ════════════════════════════════════════════════════════════════════════════ */}
-      {data.categories && data.categories.length > 0 && (
-        <div className="bg-white rounded-xl border border-surface-200 p-5 shadow-sm">
-          <h3 className="text-sm font-bold text-surface-800 mb-4 flex items-center gap-2">
-            <Layers size={16} className="text-brand-600" />
-            Health by Category
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-            {data.categories.map(cat => (
-              <div 
-                key={cat.name} 
-                className="p-4 bg-surface-50 rounded-lg border border-surface-200 hover:border-surface-300 hover:shadow-sm transition-all cursor-pointer"
-                onClick={() => setExpandedCategory(expandedCategory === cat.name ? null : cat.name)}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3 flex-1">
-                    <div className="w-3 h-10 rounded-full" style={{ backgroundColor: cat.color }} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-surface-800">{cat.name}</p>
-                      <p className="text-xs text-surface-500 mt-0.5">{cat.total} apps</p>
-                    </div>
-                  </div>
-                  {expandedCategory === cat.name ? <ChevronUp size={14} className="text-surface-400" /> : <ChevronDown size={14} className="text-surface-400" />}
-                </div>
-                <div className="flex items-center gap-3 text-xs">
-                  <div className="flex items-center gap-1">
-                    <CheckCircle2 size={12} className="text-emerald-600" />
-                    <span className="font-medium text-emerald-700">{cat.up}</span>
-                  </div>
-                  {cat.down > 0 && (
-                    <div className="flex items-center gap-1">
-                      <XCircle size={12} className="text-red-600" />
-                      <span className="font-medium text-red-700">{cat.down}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ════════════════════════════════════════════════════════════════════════════ */}
-      {/* LIVE APPLICATION GRID — Detailed Health Status */}
-      {/* ════════════════════════════════════════════════════════════════════════════ */}
-      <div className="bg-white rounded-xl border border-surface-200 shadow-sm">
-        <div className="px-5 py-4 border-b border-surface-100">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-bold text-surface-800 flex items-center gap-2">
-                <Eye size={16} className="text-brand-600" />
-                Live Application Status
-              </h3>
-              <p className="text-xs text-surface-500 mt-1">Real-time health monitoring of all configured applications</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1 lg:flex-none">
-                <Search size={14} className="absolute left-3 top-2.5 text-surface-400" />
-                <input 
-                  type="text" 
-                  placeholder="Search apps..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-xs border border-surface-200 rounded-lg focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
-                />
-              </div>
-              <select 
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-3 py-2 text-xs border border-surface-200 rounded-lg focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 bg-white"
-              >
-                <option value="all">All Status</option>
-                <option value="UP">UP</option>
-                <option value="DOWN">DOWN</option>
-                <option value="UNKNOWN">Unknown</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {groupedByCategory.length > 0 ? (
-          <div className="divide-y divide-surface-100">
-            {groupedByCategory.map(group => (
-              <div key={group.name}>
-                {/* Category Header */}
-                <div className="flex items-center gap-3 px-5 py-3 bg-surface-50/70">
-                  <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: group.color }} />
-                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: group.color }}>{group.name}</span>
-                  <span className="text-xs text-surface-400">{group.apps.length} app{group.apps.length !== 1 ? 's' : ''}</span>
-                  <div className="flex items-center gap-2 ml-auto text-xs">
-                    <span className="text-emerald-600 font-medium">{group.apps.filter(a => a.latestStatus === 'UP').length} UP</span>
-                    {group.apps.filter(a => a.latestStatus === 'DOWN').length > 0 && (
-                      <span className="text-red-600 font-medium">{group.apps.filter(a => a.latestStatus === 'DOWN').length} DOWN</span>
-                    )}
-                  </div>
-                </div>
-                {/* Apps Table for this category */}
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-surface-100">
-                        <th className="px-5 py-2 text-left font-semibold text-surface-500 text-xs">{tc.status}</th>
-                        <th className="px-5 py-2 text-left font-semibold text-surface-500 text-xs">{tc.name}</th>
-                        <th className="px-5 py-2 text-center font-semibold text-surface-500 text-xs">{t.liveStatus.httpCode}</th>
-                        <th className="px-5 py-2 text-center font-semibold text-surface-500 text-xs">{t.liveStatus.responseTime}</th>
-                        <th className="px-5 py-2 text-left font-semibold text-surface-500 text-xs">{t.liveStatus.lastChecked}</th>
-                        <th className="px-5 py-2 text-left font-semibold text-surface-500 text-xs">{t.liveStatus.error}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {group.apps.map(app => (
-                        <tr key={app.id} className={`border-b border-surface-50 hover:bg-surface-50/50 transition-colors ${app.latestStatus === 'DOWN' ? 'bg-red-50/40' : ''}`}>
-                          <td className="px-5 py-3">
-                            <StatusBadge status={app.latestStatus} />
-                          </td>
-                          <td className="px-5 py-3">
-                            <div>
-                              <p className="font-medium text-surface-800">{app.name}</p>
-                              <a href={app.url} target="_blank" rel="noopener noreferrer"
-                                className="text-xs text-brand-600 hover:text-brand-700 flex items-center gap-1 mt-0.5">
-                                {app.url} <ExternalLink size={10} />
-                              </a>
-                            </div>
-                          </td>
-                          <td className="px-5 py-3 text-center">
-                            {app.latestHttpCode ? (
-                              <span className={`font-mono font-medium text-sm ${app.latestHttpCode >= 200 && app.latestHttpCode < 300 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                {app.latestHttpCode}
-                              </span>
-                            ) : <span className="text-surface-300">—</span>}
-                          </td>
-                          <td className="px-5 py-3 text-center">
-                            {app.latestResponseMs != null ? (
-                              <span className={`font-mono text-sm font-medium ${app.latestResponseMs > 5000 ? 'text-red-600' : app.latestResponseMs > 2000 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                                {app.latestResponseMs}ms
-                              </span>
-                            ) : <span className="text-surface-300">—</span>}
-                          </td>
-                          <td className="px-5 py-3 text-sm text-surface-500">
-                            {app.lastPolledAt ? TimezoneService.formatTime(app.lastPolledAt) : '—'}
-                          </td>
-                          <td className="px-5 py-3 text-sm text-red-600 max-w-xs truncate" title={app.latestError || ''}>
-                            {app.latestError || '—'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-12">
-            <Eye size={32} className="mx-auto text-surface-300 mb-3" />
-            <p className="text-sm text-surface-500">{searchTerm || filterStatus !== 'all' ? 'No applications match your filters' : t.liveStatus.noApps}</p>
-          </div>
-        )}
       </div>
     </div>
   );

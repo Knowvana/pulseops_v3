@@ -365,7 +365,7 @@ export default function UptimeReportView() {
                 </span>
               </div>
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3" style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 2fr)' }}>
               {/* LEFT COLUMN: SLA Compliance - Monthly (Target/Actual) */}
               {(() => {
                 const target = report.slaTargetPercent || 0;
@@ -400,11 +400,25 @@ export default function UptimeReportView() {
                 );
               })()}
               
-              {/* RIGHT COLUMN: Supporting tiles in single row */}
-              <div className="grid grid-cols-4 gap-3">
+              {/* RIGHT COLUMN: Supporting tiles with adjusted widths */}
+              <div className="grid gap-3" style={{ gridTemplateColumns: '1fr 0.8fr 2fr 1fr' }}>
                 <SummaryCard label={t.summary.totalApps} value={report.applications?.length || 0} icon={Target} color="blue" />
-                <SummaryCard label={t.summary.intervalSeconds} value={`${report.intervalSeconds}s`} icon={Clock} color="amber" />
-                <SummaryCard label={`${t.summary.pollerStartTime} (${tzLabel})`} value={report.pollerStartTimeDisplay || '—'} icon={Clock} color="brand" />
+                <div className="flex items-center gap-2 p-3 bg-white rounded-lg border border-surface-100">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-amber-600 bg-amber-50">
+                    <Clock size={14} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs text-surface-400 truncate">{t.summary.intervalSeconds}</p>
+                    <p className="text-sm font-bold text-surface-700">{report.intervalSeconds}s</p>
+                  </div>
+                </div>
+                <SummaryCard
+                  label={`${t.summary.pollerStartTime} (${tzLabel})`}
+                  value={report.pollerStartTimeDisplay || '—'}
+                  icon={Clock}
+                  color="brand"
+                  className="font-normal"
+                />
                 {/* Polls (Expected & Actuals) — color coded green if match, red if mismatch */}
                 {(() => {
                   const expected = report.expectedPollsElapsed || 0;
@@ -442,13 +456,15 @@ export default function UptimeReportView() {
           </div>
 
 
-          {/* ═══════════════════════════════════════════════════════════════════
-               SECTION 3: Monthly Uptime Report Grid — Grouped by Category
-             ═══════════════════════════════════════════════════════════════════ */}
-          <div className="space-y-4">
-            <SectionHeader icon={BarChart3} title={t.title} subtitle={t.subtitle} iconColor="text-indigo-600" />
+          {/* Monthly Report Details */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <BarChart3 size={16} className="text-indigo-600" />
+                <h3 className="text-sm font-bold text-surface-800">{t.title}</h3>
+                <p className="text-xs text-surface-500">{t.subtitle}</p>
+              </div>
 
-            {groupedApps.length > 0 ? groupedApps.map(group => (
+              {groupedApps.length > 0 ? groupedApps.map(group => (
               <div key={group.name} className="border border-surface-200 rounded-xl bg-white shadow-sm overflow-hidden">
                 {/* Category Header */}
                 <div className="flex items-center gap-3 px-4 py-3 border-b border-surface-100" style={{ backgroundColor: `${group.color}10` }}>
@@ -465,18 +481,21 @@ export default function UptimeReportView() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
+                      <tr className="bg-surface-100 border-b border-surface-200">
+                        <th className="px-3 py-2 text-center font-semibold text-surface-600" colSpan="4">SLA Compliance</th>
+                        <th className="px-3 py-2 text-center font-semibold text-surface-600" colSpan="6">Verification</th>
+                      </tr>
                       <tr className="bg-surface-50 border-b border-surface-100">
-                        <th className="px-3 py-2 text-left font-semibold text-surface-600">{t.grid.application}</th>
+                        <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.application}</th>
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.slaTarget}</th>
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.actualUptime}</th>
-                        <th className="px-3 py-2 text-center font-semibold text-surface-600">Polls (Expected/Actual)</th>
+                        <th className="px-3 py-2 text-center font-semibold text-surface-600">SLA Compliance</th>
+                        <th className="px-3 py-2 text-center font-semibold text-surface-600 bg-gradient-to-r from-transparent via-surface-200 to-transparent">Polls (Expected/Actual)</th>
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">Poll Coverage</th>
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.upPolls}</th>
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.downPolls}</th>
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.plannedDowntime}</th>
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.unplannedDowntime}</th>
-                        <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.pollStatus}</th>
-                        <th className="px-3 py-2 text-center font-semibold text-surface-600">SLA Compliance</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -491,7 +510,9 @@ export default function UptimeReportView() {
                               </span>
                             ) : <span className="text-surface-300">—</span>}
                           </td>
-                          <td className="px-3 py-2.5 text-center font-medium">
+                          <td className="px-3 py-2.5 text-center"><VerdictBadge verdict={app.slaVerdict} /></td>
+                          <td className="px-3 py-2.5 text-center font-medium relative">
+                            <div className="absolute left-0 top-0 h-full w-px bg-gradient-to-b from-transparent via-surface-300 to-transparent"></div>
                             <span className="text-surface-500">{report.expectedPollsElapsed?.toLocaleString()}</span>
                             <span className="text-surface-400">/</span>
                             <span className={report.actualPollsElapsed >= report.expectedPollsElapsed ? 'text-surface-700' : 'text-amber-600'}>{report.actualPollsElapsed?.toLocaleString()}</span>
@@ -505,8 +526,6 @@ export default function UptimeReportView() {
                           <td className="px-3 py-2.5 text-center text-red-600 font-medium">{app.downPolls?.toLocaleString()}</td>
                           <td className="px-3 py-2.5 text-center text-blue-600">{app.plannedDowntimeMinutes ?? 0} <span className="text-surface-400 text-[10px]">({app.plannedDowntimeEntries ?? 0} entries)</span></td>
                           <td className="px-3 py-2.5 text-center font-bold text-red-600">{app.unplannedDowntimeMinutes ?? 0}</td>
-                          <td className="px-3 py-2.5 text-center"><PollStatusBadge status={app.pollVerificationStatus} /></td>
-                          <td className="px-3 py-2.5 text-center"><VerdictBadge verdict={app.slaVerdict} /></td>
                         </tr>
                       ))}
                     </tbody>
@@ -604,7 +623,7 @@ export default function UptimeReportView() {
                                   {missedMinutes.length > 0 ? (
                                     <div className="flex flex-wrap gap-1">
                                       {missedMinutes.slice(0, displayCount).map((m, idx) => (
-                                        <span key={idx} className="px-2 py-0.5 bg-red-50 border border-red-200 rounded text-red-700 text-xs font-medium whitespace-nowrap">
+                                        <span key={idx} className="px-2 py-0.5 bg-gray-100 border border-gray-200 rounded text-red-700 text-xs font-medium whitespace-nowrap">
                                           {m.display}
                                         </span>
                                       ))}

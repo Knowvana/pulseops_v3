@@ -36,11 +36,11 @@ import uiText from './config/uiText.json';
 import HealthCheckDashboard from './components/HealthCheckDashboard';
 import UptimeReportView     from './components/UptimeReportView';
 import DowntimeView          from './components/DowntimeView';
+import ApplicationsView      from './components/ApplicationsView';
+import CategoriesView        from './components/CategoriesView';
 
 // ── Config Tab Components (lazy-mounted via render functions) ─────────────────
 import PollerConfigTab      from './components/settings/PollerConfigTab';
-import AppManagementTab     from './components/settings/AppManagementTab';
-import CategoryTab          from './components/settings/CategoryTab';
 import SLATargetsTab        from './components/settings/SLATargetsTab';
 import DowntimeSourceTab    from './components/settings/DowntimeSourceTab';
 import GeneralSettingsTab   from './components/settings/GeneralSettingsTab';
@@ -61,6 +61,8 @@ const healthcheckManifest = {
   navItems: [
     { id: 'dashboard',     label: navText.dashboard,     icon: LayoutDashboard },
     { id: 'uptimeReport',  label: navText.uptimeReport,  icon: BarChart3       },
+    { id: 'applications',  label: navText.applications,  icon: Globe           },
+    { id: 'categories',    label: navText.categories,    icon: Tag             },
     { id: 'downtime',      label: navText.downtime,      icon: AlertTriangle   },
     { type: 'separator' },
     { id: 'config',        label: navText.config,        icon: Sliders         },
@@ -76,6 +78,8 @@ const healthcheckManifest = {
   getViews: () => ({
     dashboard:     HealthCheckDashboard,
     uptimeReport:  UptimeReportView,
+    applications:  ApplicationsView,
+    categories:    CategoriesView,
     downtime:      DowntimeView,
   }),
 
@@ -91,18 +95,6 @@ const healthcheckManifest = {
       label:   cfgText.tabs.pollerConfig.label,
       icon:    Timer,
       content: () => <PollerConfigTab />,
-    },
-    {
-      id:      cfgText.tabs.applications.id,
-      label:   cfgText.tabs.applications.label,
-      icon:    Globe,
-      content: () => <AppManagementTab />,
-    },
-    {
-      id:      cfgText.tabs.categories.id,
-      label:   cfgText.tabs.categories.label,
-      icon:    Tag,
-      content: () => <CategoryTab />,
     },
     {
       id:      cfgText.tabs.slaTargets.id,

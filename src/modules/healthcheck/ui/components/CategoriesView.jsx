@@ -1,17 +1,17 @@
 // ============================================================================
 // CategoriesView — HealthCheck Module Categories Management
 //
-// PURPOSE: Full CRUD management for application categories — add, edit, delete,
-//          toggle used for SLA. Modal popup form for Add/Edit with confirmation.
+// PURPOSE: Full CRUD management for application categories — add, edit, delete.
+//          Modal popup form for Add/Edit with confirmation.
 //          Persistent success messages. ConfirmDialog for delete.
-//          Includes color picker and "Used for Uptime SLA" toggle.
+//          Includes color picker. Core System (Uptime Monitoring) is system default
+//          and cannot be edited or deleted.
 //
 // USED BY: manifest.jsx → getViews() → sidebar navigation (categories)
 // ============================================================================
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Plus, Edit3, Trash2, Loader2, CheckCircle2, AlertCircle, Save, X, Tag,
-  ToggleLeft, ToggleRight,
+  Plus, Edit3, Trash2, Loader2, CheckCircle2, AlertCircle, Save, X, Tag, Lock,
 } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
@@ -24,8 +24,9 @@ const t = uiText.categories;
 const api = urls.api;
 
 const COLOR_PRESETS = ['#10b981','#f59e0b','#6366f1','#8b5cf6','#ef4444','#3b82f6','#ec4899','#14b8a6','#f97316','#64748b'];
+const CORE_SYSTEM_CATEGORY = 'Core System (Uptime Monitoring)';
 
-const EMPTY_FORM = { name: '', description: '', color: '#6366f1', sort_order: 99, used_for_sla: false };
+const EMPTY_FORM = { name: '', description: '', color: '#6366f1', sort_order: 99 };
 
 export default function CategoriesView() {
   const [categories, setCategories] = useState([]);
@@ -69,9 +70,13 @@ export default function CategoriesView() {
   };
 
   const handleEdit = (cat) => {
+    if (cat.is_system_default) {
+      setError('Core System (Uptime Monitoring) is a system default category and cannot be edited.');
+      return;
+    }
     setForm({
       name: cat.name, description: cat.description || '', color: cat.color,
-      sort_order: cat.sort_order, used_for_sla: cat.used_for_sla,
+      sort_order: cat.sort_order,
     });
     setEditId(cat.id);
     setShowModal(true);
@@ -171,7 +176,6 @@ export default function CategoriesView() {
                 <th className="px-3 py-2.5 text-left font-semibold text-surface-600">{t.grid.name}</th>
                 <th className="px-3 py-2.5 text-left font-semibold text-surface-600">{t.grid.description}</th>
                 <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.grid.color}</th>
-                <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.grid.usedForSla}</th>
                 <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.grid.appCount}</th>
                 <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.grid.sortOrder}</th>
                 <th className="px-3 py-2.5 text-center font-semibold text-surface-600">{t.grid.actions}</th>
@@ -189,20 +193,6 @@ export default function CategoriesView() {
                     </div>
                   </td>
                   <td className="px-3 py-2.5 text-center">
-                    <button onClick={async () => {
-                      try {
-                        const res = await ApiClient.patch(api.categoryToggle.replace('{id}', cat.id));
-                        if (res?.success) await loadData();
-                      } catch (err) {
-                        setError(err.message);
-                      }
-                    }} className="inline-flex">
-                      {cat.used_for_sla
-                        ? <ToggleRight size={18} className="text-emerald-500" />
-                        : <ToggleLeft size={18} className="text-surface-300" />}
-                    </button>
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
                     <span className="px-2 py-1 bg-surface-100 rounded text-surface-600 text-xs font-medium">
                       {cat.app_count || 0}
                     </span>
@@ -210,12 +200,21 @@ export default function CategoriesView() {
                   <td className="px-3 py-2.5 text-center text-surface-400">{cat.sort_order}</td>
                   <td className="px-3 py-2.5 text-center">
                     <div className="flex items-center justify-center gap-1">
-                      <button onClick={() => handleEdit(cat)} className="p-1 text-surface-400 hover:text-brand-600 rounded">
-                        <Edit3 size={13} />
-                      </button>
-                      <button onClick={() => setDeleteTarget(cat)} className="p-1 text-surface-400 hover:text-red-600 rounded">
-                        <Trash2 size={13} />
-                      </button>
+                      {cat.is_system_default ? (
+                        <div className="flex items-center gap-1 text-surface-400" title="System default category cannot be edited">
+                          <Lock size={13} />
+                          <span className="text-xs">System</span>
+                        </div>
+                      ) : (
+                        <>
+                          <button onClick={() => handleEdit(cat)} className="p-1 text-surface-400 hover:text-brand-600 rounded">
+                            <Edit3 size={13} />
+                          </button>
+                          <button onClick={() => setDeleteTarget(cat)} className="p-1 text-surface-400 hover:text-red-600 rounded">
+                            <Trash2 size={13} />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -260,24 +259,12 @@ export default function CategoriesView() {
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-surface-600 mb-1">{t.form.sortOrderLabel}</label>
-                  <input type="number" value={form.sort_order} onChange={e => setForm(p => ({ ...p, sort_order: parseInt(e.target.value) || 99 }))}
-                    className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
-                    placeholder={t.form.sortOrderPlaceholder} />
-                </div>
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-surface-600">{t.form.usedForSlaLabel}</label>
-                  <button onClick={() => setForm(p => ({ ...p, used_for_sla: !p.used_for_sla }))}
-                    className="inline-flex">
-                    {form.used_for_sla
-                      ? <ToggleRight size={18} className="text-emerald-500" />
-                      : <ToggleLeft size={18} className="text-surface-300" />}
-                  </button>
-                </div>
+              <div>
+                <label className="block text-xs font-medium text-surface-600 mb-1">{t.form.sortOrderLabel}</label>
+                <input type="number" value={form.sort_order} onChange={e => setForm(p => ({ ...p, sort_order: parseInt(e.target.value) || 99 }))}
+                  className="w-full px-3 py-2 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
+                  placeholder={t.form.sortOrderPlaceholder} />
               </div>
-              <p className="text-xs text-surface-400">{t.form.usedForSlaDesc}</p>
             </div>
             <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-surface-100 bg-surface-50">
               <button onClick={resetForm} className="px-4 py-2 text-sm font-medium text-surface-600 bg-white border border-surface-200 rounded-lg hover:bg-surface-50">
@@ -304,7 +291,6 @@ export default function CategoriesView() {
             { label: t.form.nameLabel, value: form.name },
             { label: t.form.descriptionLabel, value: form.description || 'None' },
             { label: t.form.colorLabel, value: form.color },
-            { label: t.form.usedForSlaLabel, value: form.used_for_sla ? 'Yes' : 'No' },
           ]}
           confirmLabel={t.form.saveButton}
           action={executeSave}

@@ -22,16 +22,16 @@
     },
     {
       "name": "hc_categories",
-      "description": "User-defined categories for grouping monitored applications. Each app belongs to exactly one category.",
+      "description": "Categories for grouping monitored applications. 'Core System (Uptime Monitoring)' is a system default and cannot be edited. Each app belongs to exactly one category. Only apps in Core System category are used for uptime monitoring.",
       "columns": [
-        { "name": "id",           "type": "SERIAL PRIMARY KEY" },
-        { "name": "name",         "type": "VARCHAR(100) UNIQUE NOT NULL" },
-        { "name": "description",  "type": "TEXT" },
-        { "name": "color",        "type": "VARCHAR(20) DEFAULT '#6366f1'" },
-        { "name": "sort_order",   "type": "INTEGER NOT NULL DEFAULT 99" },
-        { "name": "used_for_sla", "type": "BOOLEAN NOT NULL DEFAULT FALSE" },
-        { "name": "created_at",   "type": "TIMESTAMPTZ DEFAULT NOW()" },
-        { "name": "updated_at",   "type": "TIMESTAMPTZ DEFAULT NOW()" }
+        { "name": "id",                 "type": "SERIAL PRIMARY KEY" },
+        { "name": "name",               "type": "VARCHAR(100) UNIQUE NOT NULL" },
+        { "name": "description",        "type": "TEXT" },
+        { "name": "color",              "type": "VARCHAR(20) DEFAULT '#6366f1'" },
+        { "name": "sort_order",         "type": "INTEGER NOT NULL DEFAULT 99" },
+        { "name": "is_system_default",  "type": "BOOLEAN NOT NULL DEFAULT FALSE" },
+        { "name": "created_at",         "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "updated_at",         "type": "TIMESTAMPTZ DEFAULT NOW()" }
       ],
       "indexes": [
         { "name": "idx_hc_categories_name", "columns": ["name"], "unique": true }

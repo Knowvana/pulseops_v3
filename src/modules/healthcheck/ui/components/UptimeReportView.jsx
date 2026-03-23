@@ -19,6 +19,7 @@ import {
   XCircle, HelpCircle, TrendingUp, Clock, Target, Shield,
   ShieldCheck, ShieldAlert, AlertTriangle, Calendar, Layers,
   Info, ArrowDown, ArrowUp, FileWarning, Wrench, ArrowLeft,
+  ChevronLeft, ChevronRight, Download,
 } from 'lucide-react';
 import { createLogger, TimezoneService } from '@shared';
 import { SetupRequiredOverlay } from '@components';
@@ -30,6 +31,38 @@ const log = createLogger('UptimeReportView.jsx');
 const t = uiText.uptimeReport;
 const tc = uiText.common;
 const api = urls.api;
+
+// Helper function to format time with timezone
+const formatTimeWithTimezone = (timeString) => {
+  if (!timeString) return 'Never';
+  const formattedTime = TimezoneService.formatTime(timeString);
+  const timezone = TimezoneService.getTimezone();
+  const timezoneAbbrev = getTimezoneAbbreviation(timezone);
+  return `${formattedTime} ${timezoneAbbrev}`;
+};
+
+// Helper function to get timezone abbreviation
+const getTimezoneAbbreviation = (timezone) => {
+  const timezoneMap = {
+    'Asia/Kolkata': 'IST',
+    'Asia/Karachi': 'PKT',
+    'Asia/Dhaka': 'BST',
+    'Asia/Riyadh': 'AST',
+    'Asia/Dubai': 'GST',
+    'Europe/London': 'GMT',
+    'Europe/Paris': 'CET',
+    'Europe/Berlin': 'CET',
+    'America/New_York': 'EST',
+    'America/Los_Angeles': 'PST',
+    'America/Chicago': 'CST',
+    'Asia/Tokyo': 'JST',
+    'Asia/Shanghai': 'CST',
+    'Asia/Singapore': 'SGT',
+    'Australia/Sydney': 'AEST',
+    'UTC': 'UTC'
+  };
+  return timezoneMap[timezone] || timezone;
+};
 
 function currentMonth() {
   const now = new Date();
@@ -178,7 +211,11 @@ export default function UptimeReportView() {
       }
 
       // Check if report has applications (data exists for this month)
-      if (!reportRes.data?.uptime?.applications || reportRes.data.uptime.applications.length === 0) {
+      const apps = reportRes.data?.uptime?.applications || [];
+      const hasPollData = apps.length > 0 && apps.some(app => (app.totalPolls || 0) > 0);
+      
+      if (apps.length === 0 || !hasPollData) {
+        log.warn('loadReport', 'No poll data available for month', { month: targetMonth, appCount: apps.length, hasPollData });
         setShowNoDataModal(true);
         setReport(null);
         setPollVerification(null);
@@ -209,6 +246,136 @@ export default function UptimeReportView() {
   }, [loadReport, month]);
 
   const handleGenerate = useCallback(() => loadReport(month), [loadReport, month]);
+
+  const handleDownloadPDF = useCallback(() => {
+    if (!report) return;
+    
+    // Create HTML content matching the report view
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Monthly Uptime Report - ${report.monthDisplay}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1f2937; line-height: 1.6; }
+          .container { max-width: 1000px; margin: 0 auto; padding: 40px; }
+          .header { margin-bottom: 40px; border-bottom: 2px solid #e5e7eb; padding-bottom: 20px; }
+          .header h1 { font-size: 28px; font-weight: bold; color: #111827; margin-bottom: 5px; }
+          .header p { color: #6b7280; font-size: 14px; }
+          .meta { display: flex; justify-content: space-between; margin-top: 15px; font-size: 12px; color: #9ca3af; }
+          .summary-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 40px; }
+          .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; background: #f9fafb; }
+          .card-label { font-size: 12px; color: #6b7280; margin-bottom: 8px; text-transform: uppercase; }
+          .card-value { font-size: 24px; font-weight: bold; color: #111827; }
+          .card-status { font-size: 12px; margin-top: 8px; padding: 4px 8px; border-radius: 4px; display: inline-block; }
+          .status-met { background: #d1fae5; color: #065f46; }
+          .status-not-met { background: #fee2e2; color: #991b1b; }
+          .section { margin-bottom: 40px; }
+          .section-title { font-size: 18px; font-weight: bold; color: #111827; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #e5e7eb; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+          th { background: #f3f4f6; padding: 12px; text-align: left; font-size: 12px; font-weight: 600; color: #374151; border-bottom: 2px solid #e5e7eb; }
+          td { padding: 12px; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
+          tr:hover { background: #f9fafb; }
+          .text-center { text-align: center; }
+          .text-right { text-align: right; }
+          .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+          .badge-success { background: #d1fae5; color: #065f46; }
+          .badge-danger { background: #fee2e2; color: #991b1b; }
+          .badge-warning { background: #fef3c7; color: #92400e; }
+          .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #9ca3af; }
+          .page-break { page-break-after: always; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Monthly Uptime Report</h1>
+            <p>SLA compliance, poll verification, and uptime metrics per application</p>
+            <div class="meta">
+              <span>Report: ${report.monthDisplay}</span>
+              <span>Generated: ${report.generatedAtDisplay} (${report.timezoneLabel})</span>
+            </div>
+          </div>
+
+          <div class="summary-cards">
+            <div class="card">
+              <div class="card-label">SLA Compliance - Monthly</div>
+              <div class="card-value">${report.actualSlaCompliance || 0}%</div>
+              <div class="card-label" style="margin-top: 8px;">Target: ${report.slaTargetPercent}%</div>
+              <div class="card-status ${(report.actualSlaCompliance || 0) >= report.slaTargetPercent ? 'status-met' : 'status-not-met'}">
+                ${(report.actualSlaCompliance || 0) >= report.slaTargetPercent ? '✓ Met' : '✗ Not Met'}
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-label">Applications</div>
+              <div class="card-value">${report.applications?.length || 0}</div>
+              <div class="card-label" style="margin-top: 8px;">Total Monitored</div>
+            </div>
+            <div class="card">
+              <div class="card-label">Poll Interval</div>
+              <div class="card-value">${report.intervalSeconds || 60}s</div>
+              <div class="card-label" style="margin-top: 8px;">Expected Polls</div>
+            </div>
+          </div>
+
+          <div class="section">
+            <h2 class="section-title">Core System (Uptime Monitoring)</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Application</th>
+                  <th>SLA Target %</th>
+                  <th>Actual Uptime %</th>
+                  <th>SLA Compliance</th>
+                  <th class="text-right">Total Polls</th>
+                  <th class="text-right">UP Polls</th>
+                  <th class="text-right">DOWN Polls</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${report.applications?.map(app => `
+                  <tr>
+                    <td><strong>${app.applicationName}</strong></td>
+                    <td class="text-center">${app.slaTarget}%</td>
+                    <td class="text-center">${app.actualUptimePercent || 0}%</td>
+                    <td class="text-center">
+                      <span class="badge ${app.slaCompliance ? 'badge-success' : 'badge-danger'}">
+                        ${app.slaCompliance ? '✓ Met' : '✗ Not Met'}
+                      </span>
+                    </td>
+                    <td class="text-right">${app.totalPolls || 0}</td>
+                    <td class="text-right"><span class="badge badge-success">${app.upPolls || 0}</span></td>
+                    <td class="text-right"><span class="badge badge-danger">${app.downPolls || 0}</span></td>
+                  </tr>
+                `).join('') || '<tr><td colspan="7" class="text-center">No applications</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="footer">
+            <p>This report was automatically generated by PulseOps V3 HealthCheck Module.</p>
+            <p>For more details, visit the Monthly Uptime Report view in the HealthCheck module.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    // Create blob and download
+    const blob = new Blob([htmlContent], { type: 'text/html' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Uptime-Report-${report.month}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    
+    log.info('handleDownloadPDF', 'Report downloaded', { month: report.month });
+  }, [report]);
 
   // ── Derived Data ────────────────────────────────────────────────────────
 
@@ -250,9 +417,11 @@ export default function UptimeReportView() {
     const expectedUptimePct = sla;
     const expectedDowntimePct = parseFloat((100 - sla).toFixed(2));
 
-    // SLA compliance — use weighted average of per-app uptime (poll-based, most accurate)
-    const weightedUptime = apps.reduce((s, a) => s + ((a.actualUptimePercent || 0) * (a.totalPolls || 0)), 0);
-    const isCompliant = totalPolls > 0 ? (weightedUptime / totalPolls) >= sla : false;
+    // SLA compliance — use simple average of per-app uptime percentages (matches backend calculation)
+    const simpleAverageUptime = apps.length > 0 
+      ? apps.reduce((s, a) => s + (a.actualUptimePercent || 0), 0) / apps.length
+      : 0;
+    const isCompliant = simpleAverageUptime >= sla;
 
     // Polls match
     const pollsMatch = totalPolls >= (report.expectedPollsElapsed || 0);
@@ -270,7 +439,7 @@ export default function UptimeReportView() {
   const tzLabel = report?.timezoneLabel || 'IST';
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in relative">
       {/* Spinner Modal */}
       <SpinnerModal visible={loading} />
 
@@ -286,14 +455,15 @@ export default function UptimeReportView() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-0 bg-surface-100 rounded-lg border border-surface-200 overflow-hidden">
+          {/* Elegant Date Picker */}
+          <div className="flex items-center gap-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-1 shadow-sm">
             <button onClick={() => {
               const [year, m] = month.split('-');
               const prevMonth = parseInt(m) === 1 ? `${parseInt(year) - 1}-12` : `${year}-${String(parseInt(m) - 1).padStart(2, '0')}`;
               setMonth(prevMonth);
             }} disabled={loading}
-              className="p-2 text-surface-600 hover:text-surface-800 hover:bg-surface-200 transition-colors disabled:opacity-50 border-r border-surface-200">
-              <ArrowDown size={16} className="rotate-90" />
+              className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-100 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              <ChevronLeft size={18} strokeWidth={2.5} />
             </button>
             
             <input type="month" value={month} onChange={e => {
@@ -302,7 +472,7 @@ export default function UptimeReportView() {
                 setMonth(e.target.value);
               }
             }} max={currentMonth()}
-              className="px-3 py-2 text-sm font-medium text-surface-700 bg-surface-100 border-none outline-none focus:bg-white focus:ring-2 focus:ring-brand-300 min-w-[140px] cursor-pointer" />
+              className="px-4 py-2 text-sm font-semibold text-blue-900 bg-white border border-blue-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent min-w-[150px] cursor-pointer hover:border-blue-300 transition-colors" />
             
             <button onClick={() => {
               const [year, m] = month.split('-');
@@ -312,15 +482,24 @@ export default function UptimeReportView() {
                 setMonth(nextMonth);
               }
             }} disabled={loading}
-              className="p-2 text-surface-600 hover:text-surface-800 hover:bg-surface-200 transition-colors disabled:opacity-50 border-l border-surface-200">
-              <ArrowUp size={16} className="rotate-90" />
+              className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-100 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+              <ChevronRight size={18} strokeWidth={2.5} />
             </button>
           </div>
-          <button onClick={handleGenerate} disabled={loading}
-            className="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 disabled:opacity-50 flex items-center gap-1.5">
-            {loading ? <Loader2 size={14} className="animate-spin" /> : <TrendingUp size={14} />}
-            {loading ? t.generating : t.generateButton}
-          </button>
+          
+          <div className="flex items-center gap-2">
+            <button onClick={handleGenerate} disabled={loading}
+              className="px-3 py-2 text-xs font-semibold text-white bg-gradient-to-r from-teal-600 to-emerald-600 rounded-lg hover:from-teal-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-md hover:shadow-lg transition-all">
+              {loading ? <Loader2 size={14} className="animate-spin" /> : <TrendingUp size={14} />}
+              {loading ? t.generating : t.generateButton}
+            </button>
+            
+            <button onClick={handleDownloadPDF} disabled={!report || loading}
+              className="px-3 py-2 text-xs font-semibold text-white bg-gradient-to-r from-teal-600 to-emerald-600 rounded-lg hover:from-teal-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-md hover:shadow-lg transition-all">
+              <Download size={14} />
+              Download PDF
+            </button>
+          </div>
         </div>
       </div>
 
@@ -330,18 +509,28 @@ export default function UptimeReportView() {
         </div>
       )}
 
-      {/* No Data Modal */}
-      <SetupRequiredOverlay
-        isOpen={showNoDataModal}
-        icon={Calendar}
-        header="No Data Available"
-        messageDetail={`No poll data exists for ${new Date(`${month}-01`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}. Please select a different month or check if the health check poller has collected data.`}
-        actionIcon={ArrowLeft}
-        actionText="Select Different Month"
-        onAction={() => setShowNoDataModal(false)}
-        onClose={() => setShowNoDataModal(false)}
-        variant="warning"
-      />
+      {/* No Data Modal Overlay */}
+      {showNoDataModal && (
+        <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 animate-fade-in">
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center">
+                <Calendar size={32} className="text-amber-600" />
+              </div>
+            </div>
+            <h2 className="text-xl font-bold text-center text-surface-900 mb-3">No Report Data Available</h2>
+            <p className="text-sm text-center text-surface-600 mb-6">
+              No poll data exists for <span className="font-semibold">{new Date(`${month}-01`).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</span> ({getTimezoneAbbreviation(TimezoneService.getTimezone())}). Please select a different month or ensure the health check poller has collected sufficient data.
+            </p>
+            <button
+              onClick={() => setShowNoDataModal(false)}
+              className="w-full px-4 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-amber-500 to-orange-500 rounded-lg hover:from-amber-600 hover:to-orange-600 transition-all shadow-md"
+            >
+              Select Different Month
+            </button>
+          </div>
+        </div>
+      )}
 
       {report && report.applications && report.applications.length > 0 ? (
         <>
@@ -447,7 +636,7 @@ export default function UptimeReportView() {
               if (pollerStart > monthStartDate) {
                 return (
                   <p className="text-[10px] text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">
-                    {t.summary.proratedNote} {report.pollerStartTimeDisplay || report.pollerStartTime} {t.summary.proratedReason} {report.pollerStartTimeDisplay || report.pollerStartTime}
+                    {t.summary.proratedNote} {formatTimeWithTimezone(report.pollerStartTime)} {t.summary.proratedReason} {formatTimeWithTimezone(report.pollerStartTime)}
                   </p>
                 );
               }
@@ -458,23 +647,26 @@ export default function UptimeReportView() {
 
           {/* Monthly Report Details */}
             <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <BarChart3 size={16} className="text-indigo-600" />
-                <h3 className="text-sm font-bold text-surface-800">{t.title}</h3>
-                <p className="text-xs text-surface-500">{t.subtitle}</p>
-              </div>
-
               {groupedApps.length > 0 ? groupedApps.map(group => (
               <div key={group.name} className="border border-surface-200 rounded-xl bg-white shadow-sm overflow-hidden">
                 {/* Category Header */}
                 <div className="flex items-center gap-3 px-4 py-3 border-b border-surface-100" style={{ backgroundColor: `${group.color}10` }}>
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: group.color }} />
-                  <span className="text-xs font-bold uppercase tracking-wider" style={{ color: group.color }}>{group.name}</span>
-                  <span className="text-xs text-surface-400 ml-1">{group.apps.length} app{group.apps.length !== 1 ? 's' : ''}</span>
+                  <BarChart3 size={16} className="text-surface-600" />
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-bold uppercase tracking-wider" style={{ color: group.color }}>{group.name}</span>
+                    {group.name === 'Core System (Uptime Monitoring)' && (
+                      <span className="text-xs text-surface-400">SLA compliance, poll verification, and uptime metrics per application</span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 ml-auto text-xs">
+                    <span className="text-surface-600 font-medium">{group.apps.length} Apps</span>
+                    <span className="text-surface-400">/</span>
                     <span className="text-emerald-600 font-medium">{group.apps.filter(a => a.slaVerdict === 'MET').length} Met</span>
                     {group.apps.filter(a => a.slaVerdict === 'NOT_MET').length > 0 && (
-                      <span className="text-red-600 font-medium">{group.apps.filter(a => a.slaVerdict === 'NOT_MET').length} Not Met</span>
+                      <>
+                        <span className="text-surface-400">/</span>
+                        <span className="text-red-600 font-medium">{group.apps.filter(a => a.slaVerdict === 'NOT_MET').length} Not Met</span>
+                      </>
                     )}
                   </div>
                 </div>
@@ -482,16 +674,16 @@ export default function UptimeReportView() {
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="bg-surface-100 border-b border-surface-200">
-                        <th className="px-3 py-2 text-center font-semibold text-surface-600" colSpan="4">SLA Compliance</th>
-                        <th className="px-3 py-2 text-center font-semibold text-surface-600" colSpan="6">Verification</th>
+                        <th className="px-3 py-2 text-center font-semibold text-emerald-700 border-r border-surface-300" colSpan="4">SLA Compliance</th>
+                        <th className="px-3 py-2 text-center font-semibold text-blue-700 border-l border-r border-surface-300" colSpan="6">Verification</th>
                       </tr>
                       <tr className="bg-surface-50 border-b border-surface-100">
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.application}</th>
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.slaTarget}</th>
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.actualUptime}</th>
-                        <th className="px-3 py-2 text-center font-semibold text-surface-600">SLA Compliance</th>
-                        <th className="px-3 py-2 text-center font-semibold text-surface-600 bg-gradient-to-r from-transparent via-surface-200 to-transparent">Polls (Expected/Actual)</th>
-                        <th className="px-3 py-2 text-center font-semibold text-surface-600">Poll Coverage</th>
+                        <th className="px-3 py-2 text-center font-semibold text-emerald-700 border-r border-surface-300">SLA Compliance</th>
+                        <th className="px-3 py-2 text-center font-semibold text-blue-700 border-r border-surface-300 bg-gradient-to-r from-transparent via-surface-200 to-transparent">Polls (Expected/Actual)</th>
+                        <th className="px-3 py-2 text-center font-semibold text-blue-700">Poll Coverage</th>
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.upPolls}</th>
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.downPolls}</th>
                         <th className="px-3 py-2 text-center font-semibold text-surface-600">{t.grid.plannedDowntime}</th>
@@ -596,7 +788,7 @@ export default function UptimeReportView() {
                           const cov = globalExpected > 0 ? ((actual / globalExpected) * 100).toFixed(1) : 0;
                           const missedMinutes = app.missedPollMinutes || [];
                           const isExpanded = expandedMissedApps[app.applicationId];
-                          const displayCount = isExpanded ? missedMinutes.length : 3;
+                          const displayCount = isExpanded ? missedMinutes.length : 1;
                           
                           return (
                             <React.Fragment key={app.applicationId}>
@@ -612,29 +804,42 @@ export default function UptimeReportView() {
                                     </button>
                                   )}
                                 </td>
-                                <td className="px-4 py-3 font-medium text-surface-800">{app.name}</td>
+                                <td className="px-4 py-3">
+                                    <div className="space-y-0.5">
+                                      <div className="font-medium text-surface-800">{app.name}</div>
+                                      <div className="text-xs text-surface-500 truncate max-w-xs">{app.url}</div>
+                                    </div>
+                                  </td>
                                 <td className="px-4 py-3 text-center text-surface-600">{globalExpected}</td>
-                                <td className="px-4 py-3 text-center font-bold text-surface-700">{actual}</td>
+                                <td className="px-4 py-3 text-center font-bold">
+                                  <span className={missed === 0 ? 'text-emerald-600' : 'text-red-600'}>
+                                    {actual}
+                                  </span>
+                                </td>
                                 <td className="px-4 py-3 text-center font-bold text-red-600">{missed}</td>
                                 <td className="px-4 py-3 text-center">
                                   <span className={`font-bold ${cov >= 95 ? 'text-emerald-600' : cov >= 80 ? 'text-amber-600' : 'text-red-600'}`}>{cov}%</span>
                                 </td>
                                 <td className="px-4 py-3">
                                   {missedMinutes.length > 0 ? (
-                                    <div className="flex flex-wrap gap-1">
-                                      {missedMinutes.slice(0, displayCount).map((m, idx) => (
-                                        <span key={idx} className="px-2 py-0.5 bg-gray-100 border border-gray-200 rounded text-red-700 text-xs font-medium whitespace-nowrap">
-                                          {m.display}
-                                        </span>
-                                      ))}
-                                      {!isExpanded && missedMinutes.length > 3 && (
-                                        <button
-                                          onClick={() => setExpandedMissedApps(p => ({ ...p, [app.applicationId]: true }))}
-                                          className="px-2 py-0.5 bg-amber-100 border border-amber-300 rounded text-amber-700 text-xs font-medium hover:bg-amber-200"
-                                        >
-                                          +{missedMinutes.length - 3}
-                                        </button>
-                                      )}
+                                    <div className={`max-h-20 overflow-y-auto px-2 py-1 ${isExpanded ? '' : 'scrollbar-thin'}`}>
+                                      <div className="space-y-0.5">
+                                        {missedMinutes.slice(0, displayCount).map((m, idx) => (
+                                          <div key={idx} className="flex items-center justify-between">
+                                            <span className="text-xs text-red-600 font-medium">
+                                              {m.display}
+                                            </span>
+                                            {!isExpanded && missedMinutes.length > 1 && idx === 0 && (
+                                              <button
+                                                onClick={() => setExpandedMissedApps(p => ({ ...p, [app.applicationId]: true }))}
+                                                className="text-xs text-amber-600 font-medium hover:text-amber-700 transition-colors ml-2"
+                                              >
+                                                +{missedMinutes.length - 1} more
+                                              </button>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
                                     </div>
                                   ) : (
                                     <span className="text-surface-400">—</span>

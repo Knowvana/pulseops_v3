@@ -47,96 +47,75 @@
   ],
   "hc_categories": [
     {
+      "name": "Core System (Uptime Monitoring)",
+      "description": "Core system applications for uptime monitoring. This is a system default category and cannot be edited or deleted. Only applications in this category are used for uptime monitoring and SLA calculations.",
+      "color": "#10b981",
+      "sort_order": 1,
+      "is_system_default": true
+    },
+    {
       "name": "Source Interfaces",
       "description": "Source interface applications and inbound data feeds.",
       "color": "#3b82f6",
-      "sort_order": 1,
-      "used_for_sla": true
-    },
-    {
-      "name": "Core System",
-      "description": "Core platform systems and services.",
-      "color": "#10b981",
       "sort_order": 2,
-      "used_for_sla": true
-    },
-    {
-      "name": "Production",
-      "description": "Production environment applications and services.",
-      "color": "#f59e0b",
-      "sort_order": 3,
-      "used_for_sla": false
-    },
-    {
-      "name": "Infrastructure",
-      "description": "Core infrastructure services — DNS, load balancers, databases.",
-      "color": "#6366f1",
-      "sort_order": 4,
-      "used_for_sla": false
-    },
-    {
-      "name": "External",
-      "description": "Third-party external services and APIs.",
-      "color": "#8b5cf6",
-      "sort_order": 5,
-      "used_for_sla": false
+      "is_system_default": false
     }
   ],
   "hc_applications": [
     {
       "name": "Google Homepage",
       "url": "https://www.google.com",
-      "category_id": 5,
+      "category_id": 1,
       "expected_status_code": 200,
       "expected_text": "Google",
       "timeout_ms": 10000,
       "is_active": true,
-      "description": "Google homepage — page text monitoring. Checks for 'Google' in the HTML response body.",
+      "description": "Google homepage for Core System uptime monitoring.",
       "sort_order": 1
     },
     {
-      "name": "GitHub API Status",
+      "name": "GitHub Status API",
       "url": "https://www.githubstatus.com/api/v2/status.json",
-      "category_id": 5,
+      "category_id": 1,
       "expected_status_code": 200,
       "expected_text": null,
       "timeout_ms": 10000,
       "is_active": true,
-      "description": "GitHub Status API — JSON endpoint that returns current platform status. Monitors API response code 200.",
+      "description": "GitHub Status API for Core System uptime monitoring.",
       "sort_order": 2
     },
     {
-      "name": "JSONPlaceholder REST API",
+      "name": "JSONPlaceholder API",
       "url": "https://jsonplaceholder.typicode.com/posts/1",
-      "category_id": 5,
+      "category_id": 2,
       "expected_status_code": 200,
       "expected_text": "sunt aut facere",
       "timeout_ms": 8000,
       "is_active": true,
-      "description": "JSONPlaceholder fake REST API — fetches post #1 and checks for expected title text in JSON response.",
-      "sort_order": 3
+      "description": "JSONPlaceholder fake REST API for Source Interfaces.",
+      "sort_order": 1
     },
     {
-      "name": "httpbin HTTP Status Check",
+      "name": "httpbin Status Check",
       "url": "https://httpbin.org/status/200",
-      "category_id": 4,
+      "category_id": 2,
       "expected_status_code": 200,
       "expected_text": null,
       "timeout_ms": 15000,
       "is_active": true,
-      "description": "httpbin status endpoint — returns HTTP 200. Used to test basic connectivity and response code monitoring.",
-      "sort_order": 4
+      "description": "httpbin status endpoint for Source Interfaces.",
+      "sort_order": 2
     },
     {
-      "name": "Microsoft Azure Status Page",
+      "name": "Azure Status Page",
       "url": "https://status.azure.com/en-us/status",
-      "category_id": 5,
+      "category_id": 2,
       "expected_status_code": 200,
       "expected_text": "Azure",
       "timeout_ms": 15000,
       "is_active": true,
-      "description": "Microsoft Azure status page — page text monitoring. Verifies 'Azure' appears in the response HTML.",
-      "sort_order": 5
+      "description": "Microsoft Azure status page for Source Interfaces.",
+      "sort_order": 3
     }
   ]
 }

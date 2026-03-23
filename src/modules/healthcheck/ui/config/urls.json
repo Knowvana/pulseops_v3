@@ -40,6 +40,7 @@
     "pollEvents":          "/api/healthcheck/events/poll",
 
     "schemaInfo":          "/api/healthcheck/schema/info",
+    "schemaStatus":        "/api/healthcheck/schema/status",
     "loadDefaults":        "/api/healthcheck/data/defaults",
     "resetData":           "/api/healthcheck/data/reset"
   }

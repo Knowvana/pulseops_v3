@@ -24,6 +24,7 @@ const api = urls.api;
 
 export default function DataManagementTab() {
   const [schema, setSchema] = useState(null);
+  const [dataStatus, setDataStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadingDefaults, setLoadingDefaults] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -33,13 +34,84 @@ export default function DataManagementTab() {
   const initRan = useRef(false);
 
   const loadSchema = useCallback(async () => {
-    setLoading(true); setError(null);
+    setLoading(true);
+    setError(null);
+    log.debug('loadSchema', 'Starting schema and data status fetch');
+    
     try {
-      const res = await ApiClient.get(api.schemaInfo);
-      if (res?.success) setSchema(res.data);
-      else setError(res?.error?.message || tc.fetchError);
-    } catch (err) { setError(tc.fetchError); }
-    finally { setLoading(false); }
+      // Fetch schema info
+      log.debug('loadSchema', 'Fetching schema info', { endpoint: api.schemaInfo });
+      const schemaRes = await ApiClient.get(api.schemaInfo);
+      
+      if (!schemaRes) {
+        const errMsg = 'Schema info response is null or undefined';
+        log.error('loadSchema', 'Schema info fetch returned empty response', { endpoint: api.schemaInfo });
+        setError(errMsg);
+        return;
+      }
+
+      if (schemaRes?.success) {
+        log.info('loadSchema', 'Schema info loaded successfully', { 
+          tables: schemaRes.data?.tables?.length || 0,
+          initialized: schemaRes.data?.initialized 
+        });
+        setSchema(schemaRes.data);
+      } else {
+        const errMsg = schemaRes?.error?.message || tc.fetchError;
+        log.error('loadSchema', 'Schema info fetch failed', { 
+          error: schemaRes?.error,
+          endpoint: api.schemaInfo 
+        });
+        setError(errMsg);
+        return;
+      }
+
+      // Fetch data status
+      log.debug('loadSchema', 'Fetching data status', { endpoint: api.schemaStatus });
+      try {
+        const statusRes = await ApiClient.get(api.schemaStatus);
+        
+        if (!statusRes) {
+          log.warn('loadSchema', 'Data status response is null or undefined', { endpoint: api.schemaStatus });
+          return;
+        }
+
+        if (statusRes?.success) {
+          log.info('loadSchema', 'Data status loaded successfully', { 
+            schemaInitialized: statusRes.data?.schemaInitialized,
+            defaultDataLoaded: statusRes.data?.defaultDataLoaded,
+            message: statusRes.data?.message,
+            details: statusRes.data?.details
+          });
+          setDataStatus(statusRes.data);
+        } else {
+          log.warn('loadSchema', 'Data status fetch returned error', { 
+            error: statusRes?.error,
+            endpoint: api.schemaStatus 
+          });
+          // Don't set error state for this — it's secondary to schema info
+        }
+      } catch (statusErr) {
+        log.error('loadSchema', 'Data status fetch threw exception', { 
+          message: statusErr?.message,
+          code: statusErr?.code,
+          endpoint: api.schemaStatus,
+          stack: statusErr?.stack
+        });
+        // Don't set error state for this — it's secondary to schema info
+      }
+    } catch (err) {
+      const errMsg = err?.message || tc.fetchError;
+      log.error('loadSchema', 'Failed with exception', { 
+        message: errMsg,
+        code: err?.code,
+        stack: err?.stack
+      });
+      setError(errMsg);
+    } finally {
+      setLoading(false);
+      log.debug('loadSchema', 'Fetch complete');
+    }
   }, []);
 
   useEffect(() => {
@@ -49,30 +121,112 @@ export default function DataManagementTab() {
   }, [loadSchema]);
 
   const handleLoadDefaults = useCallback(async () => {
-    setLoadingDefaults(true); setError(null); setSuccess(null);
+    setLoadingDefaults(true);
+    setError(null);
+    setSuccess(null);
+    log.debug('handleLoadDefaults', 'Starting default data load', { endpoint: api.loadDefaults });
+    
     try {
+      log.debug('handleLoadDefaults', 'Posting to load defaults endpoint', { endpoint: api.loadDefaults });
       const res = await ApiClient.post(api.loadDefaults);
+      
+      if (!res) {
+        const errMsg = 'Load defaults response is null or undefined';
+        log.error('handleLoadDefaults', 'Load defaults returned empty response', { endpoint: api.loadDefaults });
+        setError(errMsg);
+        return;
+      }
+
       if (res?.success) {
-        setSuccess(res.message);
+        const successMsg = res.message || 'Default data loaded successfully';
+        log.info('handleLoadDefaults', 'Default data loaded successfully', { 
+          message: successMsg,
+          tables: res.data?.tables,
+          rows: res.data?.rows
+        });
+        setSuccess(successMsg);
         setTimeout(() => setSuccess(null), 4000);
+        
+        // Refresh schema and data status
+        log.debug('handleLoadDefaults', 'Refreshing schema after loading defaults');
         await loadSchema();
-      } else { setError(res?.error?.message || 'Failed'); }
-    } catch (err) { setError(err.message); }
-    finally { setLoadingDefaults(false); }
+      } else {
+        const errMsg = res?.error?.message || 'Failed to load default data';
+        log.error('handleLoadDefaults', 'Load defaults failed', { 
+          error: res?.error,
+          endpoint: api.loadDefaults 
+        });
+        setError(errMsg);
+      }
+    } catch (err) {
+      const errMsg = err?.message || 'Exception occurred while loading defaults';
+      log.error('handleLoadDefaults', 'Threw exception', { 
+        message: errMsg,
+        code: err?.code,
+        endpoint: api.loadDefaults,
+        stack: err?.stack
+      });
+      setError(errMsg);
+    } finally {
+      setLoadingDefaults(false);
+      log.debug('handleLoadDefaults', 'Operation complete');
+    }
   }, [loadSchema]);
 
   const handleReset = useCallback(async () => {
-    setResetting(true); setError(null); setSuccess(null);
+    setResetting(true);
+    setError(null);
+    setSuccess(null);
     setShowResetConfirm(false);
+    log.debug('handleReset', 'Starting data reset', { endpoint: api.resetData });
+    
     try {
+      log.debug('handleReset', 'Deleting all module data', { endpoint: api.resetData });
       const res = await ApiClient.delete(api.resetData);
+      
+      if (!res) {
+        const errMsg = 'Reset response is null or undefined';
+        log.error('handleReset', 'Reset returned empty response', { endpoint: api.resetData });
+        setError(errMsg);
+        return;
+      }
+
       if (res?.success) {
-        setSuccess(res.message);
+        const successMsg = res.message || 'All data reset successfully';
+        log.info('handleReset', 'Data reset successfully', { 
+          message: successMsg,
+          dropped: res.data?.dropped,
+          skipped: res.data?.skipped,
+          errors: res.data?.errors,
+          totalRows: res.data?.totalRows
+        });
+        setSuccess(successMsg);
         setTimeout(() => setSuccess(null), 4000);
+        
+        // Refresh schema and data status
+        log.debug('handleReset', 'Refreshing schema after reset');
         await loadSchema();
-      } else { setError(res?.error?.message || 'Failed'); }
-    } catch (err) { setError(err.message); }
-    finally { setResetting(false); }
+      } else {
+        const errMsg = res?.error?.message || 'Failed to reset data';
+        log.error('handleReset', 'Reset failed', { 
+          error: res?.error,
+          endpoint: api.resetData 
+        });
+        setError(errMsg);
+      }
+    } catch (err) {
+      const errMsg = err?.message || 'Exception occurred while resetting data';
+      log.error('handleReset', 'Threw exception', { 
+        message: errMsg,
+        code: err?.code,
+        endpoint: api.resetData,
+        stack: err?.stack
+      });
+      setError(errMsg);
+    } finally {
+      setResetting(false);
+      log.debug('handleReset', 'Operation complete');
+    }
   }, [loadSchema]);
 
   if (loading) return <PageSpinner />;
@@ -141,10 +295,48 @@ export default function DataManagementTab() {
         )}
       </div>
 
+      {/* Data Status Message */}
+      {dataStatus && (
+        <div className={`px-4 py-3 rounded-lg border flex items-start gap-2.5 ${
+          dataStatus.defaultDataLoaded
+            ? 'bg-emerald-50 border-emerald-200'
+            : 'bg-amber-50 border-amber-200'
+        }`}>
+          {dataStatus.defaultDataLoaded ? (
+            <>
+              <CheckCircle2 size={16} className="text-emerald-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-emerald-800">Default Data Already Loaded</p>
+                <p className="text-xs text-emerald-700 mt-0.5">All default categories and applications are already configured in the database. Click "Reset All Data" if you want to reload from scratch.</p>
+              </div>
+            </>
+          ) : dataStatus.schemaInitialized ? (
+            <>
+              <AlertTriangle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-800">Schema Initialized - Data Not Loaded</p>
+                <p className="text-xs text-amber-700 mt-0.5">Database tables exist but default data has not been loaded. Click "Load Default Data" to populate the database with sample categories and applications.</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <AlertCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-800">Schema Not Initialized</p>
+                <p className="text-xs text-amber-700 mt-0.5">Database tables have not been created yet. Please initialize the schema first.</p>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Action buttons */}
       <div className="flex items-center gap-3">
-        <button onClick={handleLoadDefaults} disabled={loadingDefaults}
-          className="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 disabled:opacity-50 flex items-center gap-1.5">
+        <button 
+          onClick={handleLoadDefaults} 
+          disabled={loadingDefaults || dataStatus?.defaultDataLoaded}
+          title={dataStatus?.defaultDataLoaded ? 'Default data is already loaded' : ''}
+          className="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
           {loadingDefaults ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
           {loadingDefaults ? t.loadingDefaultsButton : t.loadDefaultsButton}
         </button>

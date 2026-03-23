@@ -32,7 +32,9 @@
     "updateFailed":             "Failed to update category: {message}",
     "deleteFailed":             "Failed to delete category: {message}",
     "notFound":                 "Category not found.",
-    "inUse":                    "Category cannot be deleted — it is assigned to {count} application(s)."
+    "inUse":                    "Category cannot be deleted — it is assigned to {count} application(s).",
+    "systemDefaultCannotEdit":  "Core System (Uptime Monitoring) is a system default category and cannot be edited.",
+    "systemDefaultCannotDelete":"Core System (Uptime Monitoring) is a system default category and cannot be deleted."
   },
 
   "poller": {

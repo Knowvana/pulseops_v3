@@ -117,12 +117,14 @@ async function executePollCycle() {
   const cycleStart = Date.now();
 
   try {
-    // Load active applications
+    // Load ALL active applications (both Core System and other categories)
+    // Poll results are saved for all apps, but only Core System apps are used for uptime/SLA calculations
     const appsResult = await DatabaseService.query(
-      `SELECT id, name, url, expected_status_code, expected_text, timeout_ms
-       FROM ${dbSchema}.hc_applications
-       WHERE is_active = true
-       ORDER BY sort_order, name`
+      `SELECT a.id, a.name, a.url, a.expected_status_code, a.expected_text, a.timeout_ms, c.name as category_name
+       FROM ${dbSchema}.hc_applications a
+       LEFT JOIN ${dbSchema}.hc_categories c ON a.category_id = c.id
+       WHERE a.is_active = true
+       ORDER BY c.sort_order, a.sort_order, a.name`
     );
     const apps = appsResult.rows || [];
 
@@ -132,7 +134,7 @@ async function executePollCycle() {
       return { up: 0, down: 0, total: 0, errors: 0 };
     }
 
-    log.info(`Poll cycle starting — ${apps.length} application(s)`);
+    log.info(`Poll cycle starting — ${apps.length} application(s) (all categories)`);
 
     // Poll all apps concurrently
     const timeoutMs = _currentConfig?.timeoutMs || 10000;

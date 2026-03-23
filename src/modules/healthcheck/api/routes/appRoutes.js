@@ -170,17 +170,17 @@ router.get(routes.categories, async (req, res) => {
   }
 });
 
-// ── POST /categories ─────────────────────────────────────────────────────────
+// ── POST /categories ─────────────────────────────────────────────────────
 router.post(routes.categories, async (req, res) => {
   try {
-    const { name, description, color, sort_order, used_for_sla } = req.body;
+    const { name, description, color, sort_order } = req.body;
     if (!name?.trim()) return res.status(400).json({ success: false, error: { message: apiErrors.categories.nameRequired } });
 
     const result = await DatabaseService.query(
-      `INSERT INTO ${dbSchema}.hc_categories (name, description, color, sort_order, used_for_sla)
+      `INSERT INTO ${dbSchema}.hc_categories (name, description, color, sort_order, is_system_default)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [name.trim(), description || null, color || '#6366f1', sort_order || 99, used_for_sla === true]
+      [name.trim(), description || null, color || '#6366f1', sort_order || 99, false]
     );
     log.info('Category created', { id: result.rows[0].id, name: name.trim() });
     res.status(201).json({ success: true, data: result.rows[0], message: apiMessages.categories.created });
@@ -194,17 +194,26 @@ router.post(routes.categories, async (req, res) => {
 router.put(routes.categoryById, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, color, sort_order, used_for_sla } = req.body;
+    const { name, description, color, sort_order } = req.body;
     if (!name?.trim()) return res.status(400).json({ success: false, error: { message: apiErrors.categories.nameRequired } });
+
+    // Check if this is the Core System category
+    const catCheck = await DatabaseService.query(
+      `SELECT is_system_default FROM ${dbSchema}.hc_categories WHERE id = $1`,
+      [id]
+    );
+    if (catCheck.rows.length === 0) return res.status(404).json({ success: false, error: { message: apiErrors.categories.notFound } });
+    if (catCheck.rows[0].is_system_default) {
+      return res.status(403).json({ success: false, error: { message: apiErrors.categories.systemDefaultCannotEdit } });
+    }
 
     const result = await DatabaseService.query(
       `UPDATE ${dbSchema}.hc_categories
-       SET name = $1, description = $2, color = $3, sort_order = $4, used_for_sla = $5, updated_at = NOW()
-       WHERE id = $6
+       SET name = $1, description = $2, color = $3, sort_order = $4, updated_at = NOW()
+       WHERE id = $5
        RETURNING *`,
-      [name.trim(), description || null, color || '#6366f1', sort_order || 99, used_for_sla === true, id]
+      [name.trim(), description || null, color || '#6366f1', sort_order || 99, id]
     );
-    if (result.rows.length === 0) return res.status(404).json({ success: false, error: { message: apiErrors.categories.notFound } });
     log.info('Category updated', { id, name: name.trim() });
     res.json({ success: true, data: result.rows[0], message: apiMessages.categories.updated });
   } catch (err) {
@@ -217,6 +226,17 @@ router.put(routes.categoryById, async (req, res) => {
 router.delete(routes.categoryById, async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Check if this is the Core System category
+    const catCheck = await DatabaseService.query(
+      `SELECT is_system_default FROM ${dbSchema}.hc_categories WHERE id = $1`,
+      [id]
+    );
+    if (catCheck.rows.length === 0) return res.status(404).json({ success: false, error: { message: apiErrors.categories.notFound } });
+    if (catCheck.rows[0].is_system_default) {
+      return res.status(403).json({ success: false, error: { message: apiErrors.categories.systemDefaultCannotDelete } });
+    }
+    
     // Check if category is in use
     const usageResult = await DatabaseService.query(
       `SELECT COUNT(*)::int AS count FROM ${dbSchema}.hc_applications WHERE category_id = $1`,

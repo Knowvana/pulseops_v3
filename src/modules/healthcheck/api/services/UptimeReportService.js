@@ -6,7 +6,7 @@
 //
 // ARCHITECTURE:
 //   - Global SLA % (single value, measured monthly) from hc_module_config
-//   - Only apps in categories with used_for_sla=true are included in reports
+//   - Only apps in 'Core System (Uptime Monitoring)' category are included in reports
 //   - Planned downtime entries are pre-fetched by the route handler (which has
 //     auth cookies) and passed into getMonthlyUptimeReport() as a parameter
 //   - Expected polls: Days in Month × 24 × 60 (1 poll per minute)
@@ -88,6 +88,10 @@ async function loadDisplayTimezone() {
  */
 function calcPlannedDowntimeMinutes(downtimeEntries, monthStart, monthEnd) {
   if (!downtimeEntries || downtimeEntries.length === 0) return 0;
+  if (!monthStart || !monthEnd) {
+    log.warn('calcPlannedDowntimeMinutes', 'monthStart or monthEnd is null', { monthStart, monthEnd });
+    return 0;
+  }
 
   // Clip windows to month boundaries and sort
   const windows = downtimeEntries
@@ -98,7 +102,10 @@ function calcPlannedDowntimeMinutes(downtimeEntries, monthStart, monthEnd) {
       // Parse: the times may be in display TZ format "YYYY-MM-DDTHH:MM:SS" or ISO
       const sDate = new Date(sRaw);
       const eDate = new Date(eRaw);
-      if (isNaN(sDate.getTime()) || isNaN(eDate.getTime())) return null;
+      if (isNaN(sDate.getTime()) || isNaN(eDate.getTime())) {
+        log.debug('calcPlannedDowntimeMinutes', 'Invalid date in downtime entry', { sRaw, eRaw });
+        return null;
+      }
       return {
         start: new Date(Math.max(sDate.getTime(), monthStart.getTime())),
         end:   new Date(Math.min(eDate.getTime(), monthEnd.getTime())),
@@ -267,12 +274,12 @@ export async function getMonthlyUptimeReport(monthStr, plannedDowntimeEntries = 
   // Elapsed hours for SLA display
   const elapsedHours = parseFloat((elapsedMinutes / 60).toFixed(2));
 
-  // Load only active apps in categories with used_for_sla = true
+  // Load only active apps in Core System (Uptime Monitoring) category
   const appsResult = await DatabaseService.query(
-    `SELECT a.*, c.name as category_name, c.color as category_color, c.used_for_sla
+    `SELECT a.*, c.name as category_name, c.color as category_color, c.is_system_default
      FROM ${dbSchema}.hc_applications a
      LEFT JOIN ${dbSchema}.hc_categories c ON a.category_id = c.id
-     WHERE a.is_active = true AND c.used_for_sla = true
+     WHERE a.is_active = true AND c.name = 'Core System (Uptime Monitoring)'
      ORDER BY c.sort_order, a.sort_order, a.name`
   );
   const apps = appsResult.rows || [];
@@ -379,10 +386,10 @@ export async function getMonthlyUptimeReport(monthStr, plannedDowntimeEntries = 
     });
   }
 
-  // Calculate combined/actual SLA compliance across all apps
-  const slaContributingApps = report.filter(app => app.slaCompliance !== null);
+  // Calculate combined/actual SLA compliance across all apps using simple average
+  const slaContributingApps = report.filter(app => app.actualUptimePercent !== null);
   const actualSlaCompliance = slaContributingApps.length > 0
-    ? parseFloat((slaContributingApps.reduce((sum, app) => sum + (app.slaCompliance || 0), 0) / slaContributingApps.length).toFixed(2))
+    ? parseFloat((slaContributingApps.reduce((sum, app) => sum + (app.actualUptimePercent || 0), 0) / slaContributingApps.length).toFixed(2))
     : null;
 
   log.info('Monthly uptime report generated', { month: monthStr, apps: report.length, plannedDowntime: plannedDowntimeEntries.length, actualSla: actualSlaCompliance });
@@ -472,7 +479,7 @@ export async function getPollVerification(monthStr) {
        ON pr.application_id = a.id
        AND pr.polled_at >= $1
        AND pr.polled_at < $2
-     WHERE a.is_active = true AND c.used_for_sla = true
+     WHERE a.is_active = true AND c.name = 'Core System (Uptime Monitoring)'
      GROUP BY a.id, a.name, a.url, c.name, c.color
      ORDER BY a.sort_order, a.name`,
     [monthStart.toISOString(), monthEnd.toISOString()]
@@ -634,15 +641,18 @@ export async function getUnplannedDowntime(monthStr, appId, plannedDowntimeEntri
 export async function getDashboardSummary() {
   log.info('Generating dashboard summary');
 
-  // Get all active apps with categories
+  // Get all active apps with categories (including all for display, but uptime metrics only for Core System)
   const appsResult = await DatabaseService.query(
-    `SELECT a.*, c.name as category_name, c.color as category_color
+    `SELECT a.*, c.name as category_name, c.color as category_color, c.is_system_default
      FROM ${dbSchema}.hc_applications a
      LEFT JOIN ${dbSchema}.hc_categories c ON a.category_id = c.id
      WHERE a.is_active = true
      ORDER BY a.sort_order, a.name`
   );
   const apps = appsResult.rows || [];
+  
+  // Filter for Core System apps only for uptime monitoring
+  const coreSystemApps = apps.filter(a => a.category_name === 'Core System (Uptime Monitoring)');
 
   // Get latest poll result per app
   const latestResult = await DatabaseService.query(

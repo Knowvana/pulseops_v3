@@ -17,9 +17,10 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   Activity, Loader2, RefreshCw, CheckCircle2, XCircle, AlertCircle,
   Play, Pause, Clock, Zap, Globe, Wifi, WifiOff, Eye, TrendingUp,
-  TrendingDown, BarChart3, Filter, Search, Timer,
+  TrendingDown, BarChart3, Filter, Search, Timer, AlertTriangle,
 } from 'lucide-react';
 import { createLogger, TimezoneService } from '@shared';
+import { SetupRequiredOverlay } from '@components';
 import ApiClient from '@shared/services/apiClient';
 import uiText from '../config/uiText.json';
 import urls from '../config/urls.json';
@@ -28,6 +29,49 @@ const log = createLogger('HealthCheckDashboard.jsx');
 const t = uiText.dashboard;
 const api = urls.api;
 
+// Helper function to format time with timezone
+const formatTimeWithTimezone = (timeString) => {
+  if (!timeString) return 'Never';
+  const formattedTime = TimezoneService.formatTime(timeString);
+  const timezone = TimezoneService.getTimezone();
+  const timezoneAbbrev = getTimezoneAbbreviation(timezone);
+  return `${formattedTime} ${timezoneAbbrev}`;
+};
+
+// Helper function to format time without seconds
+const formatTimeWithoutSeconds = (timeString) => {
+  if (!timeString) return 'Never';
+  const formattedTime = TimezoneService.formatTime(timeString);
+  const timezone = TimezoneService.getTimezone();
+  const timezoneAbbrev = getTimezoneAbbreviation(timezone);
+  // Remove seconds from formatted time (HH:MM:SS → HH:MM)
+  const timeWithoutSeconds = formattedTime.replace(/:\d{2}(?=\s|$)/, '');
+  return `${timeWithoutSeconds} ${timezoneAbbrev}`;
+};
+
+// Helper function to get timezone abbreviation
+const getTimezoneAbbreviation = (timezone) => {
+  const timezoneMap = {
+    'Asia/Kolkata': 'IST',
+    'Asia/Karachi': 'PKT',
+    'Asia/Dhaka': 'BST',
+    'Asia/Riyadh': 'AST',
+    'Asia/Dubai': 'GST',
+    'Europe/London': 'GMT',
+    'Europe/Paris': 'CET',
+    'Europe/Berlin': 'CET',
+    'America/New_York': 'EST',
+    'America/Los_Angeles': 'PST',
+    'America/Chicago': 'CST',
+    'Asia/Tokyo': 'JST',
+    'Asia/Shanghai': 'CST',
+    'Asia/Singapore': 'SGT',
+    'Australia/Sydney': 'AEST',
+    'UTC': 'UTC'
+  };
+  return timezoneMap[timezone] || timezone;
+};
+
 // ── Status Badge Component ─────────────────────────────────────────────────────
 function StatusBadge({ status, size = 'md' }) {
   const sizes = {
@@ -35,13 +79,13 @@ function StatusBadge({ status, size = 'md' }) {
     md: 'px-3 py-1 text-sm',
     lg: 'px-4 py-2 text-base',
   };
-  
+
   const colors = {
     UP: 'bg-emerald-100 text-emerald-800 border-emerald-200',
     DOWN: 'bg-red-100 text-red-800 border-red-200',
     UNKNOWN: 'bg-amber-100 text-amber-800 border-amber-200',
   };
-  
+
   const icons = {
     UP: <CheckCircle2 size={size === 'sm' ? 12 : size === 'md' ? 14 : 16} className="inline mr-1" />,
     DOWN: <XCircle size={size === 'sm' ? 12 : size === 'md' ? 14 : 16} className="inline mr-1" />,
@@ -58,34 +102,57 @@ function StatusBadge({ status, size = 'md' }) {
 
 // ── Health Overview Card ─────────────────────────────────────────────────────
 function HealthOverviewCard({ data }) {
-  const healthPercentage = data.totalApps > 0 ? Math.round((data.appsUp / data.totalApps) * 100) : 0;
-  const isHealthy = healthPercentage >= 95;
-  const isWarning = healthPercentage >= 80 && healthPercentage < 95;
-  
-  // Calculate additional metrics
-  const avgResponseTime = data.applications && data.applications.length > 0
-    ? Math.round(data.applications
-        .filter(a => a.latestResponseMs != null)
-        .reduce((sum, a) => sum + a.latestResponseMs, 0) / 
-        data.applications.filter(a => a.latestResponseMs != null).length) || 0
+  // Core System apps metrics
+  const coreSystemApps = data.applications ? data.applications.filter(a => a.categoryName === 'Core System (Uptime Monitoring)') : [];
+  const coreSystemUp = coreSystemApps.filter(a => a.latestStatus === 'UP').length;
+  const coreSystemTotal = coreSystemApps.length;
+  const coreHealthPercentage = coreSystemTotal > 0 ? Math.round((coreSystemUp / coreSystemTotal) * 100) : 0;
+  const coreIsHealthy = coreHealthPercentage >= 95;
+  const coreIsWarning = coreHealthPercentage >= 80 && coreHealthPercentage < 95;
+  const coreAvgResponseTime = coreSystemApps && coreSystemApps.length > 0
+    ? Math.round(coreSystemApps
+      .filter(a => a.latestResponseMs != null)
+      .reduce((sum, a) => sum + a.latestResponseMs, 0) /
+      coreSystemApps.filter(a => a.latestResponseMs != null).length) || 0
     : 0;
-  
-  const criticalApps = data.applications ? data.applications.filter(a => a.latestStatus === 'DOWN').length : 0;
-  const warningApps = data.applications ? data.applications.filter(a => a.latestResponseMs > 5000).length : 0;
-  
-  return (
-    <div className={`rounded-2xl border-2 p-6 transition-all duration-300 ${
-      isHealthy 
-        ? 'bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200' 
-        : isWarning 
+  const coreCriticalApps = coreSystemApps.filter(a => a.latestStatus === 'DOWN').length;
+  const coreWarningApps = coreSystemApps.filter(a => a.latestResponseMs > 5000).length;
+  const coreDownApps = coreSystemApps.filter(a => a.latestStatus === 'DOWN');
+
+  // Other apps metrics
+  const otherApps = data.applications ? data.applications.filter(a => a.categoryName !== 'Core System (Uptime Monitoring)') : [];
+  const otherUp = otherApps.filter(a => a.latestStatus === 'UP').length;
+  const otherTotal = otherApps.length;
+  const otherHealthPercentage = otherTotal > 0 ? Math.round((otherUp / otherTotal) * 100) : 0;
+  const otherIsHealthy = otherHealthPercentage >= 95;
+  const otherIsWarning = otherHealthPercentage >= 80 && otherHealthPercentage < 95;
+  const otherAvgResponseTime = otherApps && otherApps.length > 0
+    ? Math.round(otherApps
+      .filter(a => a.latestResponseMs != null)
+      .reduce((sum, a) => sum + a.latestResponseMs, 0) /
+      otherApps.filter(a => a.latestResponseMs != null).length) || 0
+    : 0;
+  const otherCriticalApps = otherApps.filter(a => a.latestStatus === 'DOWN').length;
+  const otherWarningApps = otherApps.filter(a => a.latestResponseMs > 5000).length;
+  const otherDownApps = otherApps.filter(a => a.latestStatus === 'DOWN');
+
+  // Helper function to render status card
+  const StatusCard = ({ title, healthPercentage, isHealthy, isWarning, avgResponseTime, criticalApps, warningApps, totalApps, upApps, downApps = [] }) => (
+    <div className={`rounded-xl border-2 p-4 transition-all duration-300 ${isHealthy
+        ? 'bg-gradient-to-br from-emerald-50 to-emerald-100 border-emerald-200'
+        : isWarning
           ? 'bg-gradient-to-br from-amber-50 to-amber-100 border-amber-200'
           : 'bg-gradient-to-br from-red-50 to-red-100 border-red-200'
-    }`}>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Health Status */}
-        <div className="text-center lg:text-left">
-          <div className="flex items-center justify-center lg:justify-start gap-4 mb-4">
-            <div className={`w-16 h-16 rounded-full flex items-center justify-center flex-shrink-0 ${
+      }`}>
+      <div className="space-y-2">
+        {/* Header with title */}
+        <h3 className="text-xs font-semibold text-surface-700 uppercase tracking-wider">{title}</h3>
+
+        {/* Main Status - Logical Grouping Layout */}
+        <div className="flex items-center justify-between">
+          {/* Health Status Section */}
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
               isHealthy 
                 ? 'bg-emerald-500' 
                 : isWarning 
@@ -93,77 +160,94 @@ function HealthOverviewCard({ data }) {
                   : 'bg-red-500'
             }`}>
               {isHealthy ? (
-                <CheckCircle2 size={28} className="text-white" />
+                <CheckCircle2 size={20} className="text-white" />
               ) : isWarning ? (
-                <AlertCircle size={28} className="text-white" />
+                <AlertCircle size={20} className="text-white" />
               ) : (
-                <XCircle size={28} className="text-white" />
+                <XCircle size={20} className="text-white" />
               )}
             </div>
             <div>
-              <h2 className="text-3xl font-bold mb-1">
-                {healthPercentage}%
-              </h2>
-              <p className="text-lg font-medium">
-                {isHealthy ? 'All Systems Operational' : isWarning ? 'Some Issues Detected' : 'Critical Issues'}
-              </p>
+              <h2 className="text-xl font-bold leading-tight">{healthPercentage}%</h2>
+              <p className="text-xs font-medium opacity-75">{upApps} of {totalApps} healthy</p>
             </div>
           </div>
-          <p className="text-sm opacity-75">
-            {data.appsUp} of {data.totalApps} applications healthy
-          </p>
-        </div>
 
-        {/* Performance Metrics */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-surface-700 uppercase tracking-wider">Performance</h3>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-surface-600 flex items-center gap-2">
-                <Clock size={14} />
-                Avg Response Time
-              </span>
-              <span className={`font-semibold ${avgResponseTime > 5000 ? 'text-red-600' : avgResponseTime > 2000 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                {avgResponseTime}ms
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-surface-600 flex items-center gap-2">
-                <Activity size={14} />
-                Total Monitored
-              </span>
-              <span className="font-semibold text-surface-700">{data.totalApps}</span>
-            </div>
-          </div>
-        </div>
+          {/* Logical Metrics Groups */}
+          <div className="flex gap-8">
+            {/* Performance Group */}
+            <div className="flex gap-4">
+              {/* Average Response */}
+              <div className="text-center">
+                <p className="text-[10px] text-surface-600 uppercase font-semibold">Avg Response</p>
+                <p className={`text-xs font-semibold ${avgResponseTime > 5000 ? 'text-red-600' : avgResponseTime > 2000 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  {avgResponseTime}ms
+                </p>
+              </div>
 
-        {/* Issue Breakdown */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-surface-700 uppercase tracking-wider">Issues</h3>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-surface-600 flex items-center gap-2">
-                <XCircle size={14} className="text-red-500" />
-                Critical (Down)
-              </span>
-              <span className="font-semibold text-red-600">{criticalApps}</span>
+              {/* Slow Applications */}
+              <div className="text-center">
+                <p className="text-[10px] text-surface-600 uppercase font-semibold">Slow (&gt;5s)</p>
+                <p className="text-xs font-semibold text-amber-600">{warningApps}</p>
+              </div>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-surface-600 flex items-center gap-2">
-                <AlertCircle size={14} className="text-amber-500" />
-                Slow (&gt;5s)
-              </span>
-              <span className="font-semibold text-amber-600">{warningApps}</span>
+
+            {/* Issues Group */}
+            <div className="flex gap-4">
+              {/* Critical/Down Applications */}
+              <div className="text-center">
+                <p className="text-[10px] text-surface-600 uppercase font-semibold">Critical Issues</p>
+                <div className="flex flex-wrap justify-center gap-1 min-h-[20px]">
+                  {downApps.length > 0 ? (
+                    downApps.map(app => (
+                      <span key={app.id} className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800 rounded-full">
+                        <XCircle size={8} />
+                        {app.name}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs font-semibold text-emerald-600">None</span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-          {data.appsDown > 0 && (
-            <div className="mt-3 inline-flex items-center gap-2 px-3 py-1 bg-white/50 rounded-full text-sm">
-              <XCircle size={14} />
-              {data.appsDown} app{data.appsDown > 1 ? 's' : ''} down
-            </div>
-          )}
         </div>
       </div>
+    </div>
+  );
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Core System Status */}
+      <StatusCard
+        title="Core System (Uptime Monitoring)"
+        healthPercentage={coreHealthPercentage}
+        isHealthy={coreIsHealthy}
+        isWarning={coreIsWarning}
+        avgResponseTime={coreAvgResponseTime}
+        criticalApps={coreCriticalApps}
+        warningApps={coreWarningApps}
+        totalApps={coreSystemTotal}
+        upApps={coreSystemUp}
+        downApps={coreDownApps}
+      />
+
+      {/* Other Apps Status */}
+      {otherTotal > 0 && (
+        <StatusCard
+          title="Other Applications"
+          healthPercentage={otherHealthPercentage}
+          isHealthy={otherIsHealthy}
+          isWarning={otherIsWarning}
+          avgResponseTime={otherAvgResponseTime}
+          criticalApps={otherCriticalApps}
+          warningApps={otherWarningApps}
+          totalApps={otherTotal}
+          upApps={otherUp}
+          downApps={otherDownApps}
+        />
+      )}
     </div>
   );
 }
@@ -173,7 +257,7 @@ function ApplicationDataGrid({ applications, searchTerm, filterStatus, onSearch,
   const filteredApps = useMemo(() => {
     return applications.filter(app => {
       const matchesSearch = app.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           app.url.toLowerCase().includes(searchTerm.toLowerCase());
+        app.url.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = filterStatus === 'all' || app.latestStatus === filterStatus;
       return matchesSearch && matchesStatus;
     });
@@ -194,29 +278,6 @@ function ApplicationDataGrid({ applications, searchTerm, filterStatus, onSearch,
 
   return (
     <div className="space-y-4">
-      {/* Search and Filter Controls */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex-1 relative">
-          <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-surface-400" />
-          <input
-            type="text"
-            placeholder="Search applications..."
-            value={searchTerm}
-            onChange={e => onSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
-          />
-        </div>
-        <select
-          value={filterStatus}
-          onChange={e => onFilter(e.target.value)}
-          className="px-4 py-2 border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none bg-white"
-        >
-          <option value="all">All Status</option>
-          <option value="UP">Operational</option>
-          <option value="DOWN">Down</option>
-          <option value="UNKNOWN">Unknown</option>
-        </select>
-      </div>
 
       {/* Applications Data Grid */}
       {filteredApps.length === 0 ? (
@@ -258,11 +319,10 @@ function ApplicationDataGrid({ applications, searchTerm, filterStatus, onSearch,
               {/* Table Body */}
               <tbody className="divide-y divide-surface-100">
                 {filteredApps.map(app => (
-                  <tr 
-                    key={app.id} 
-                    className={`hover:bg-surface-50 transition-colors ${
-                      app.latestStatus === 'DOWN' ? 'bg-red-50/30' : ''
-                    }`}
+                  <tr
+                    key={app.id}
+                    className={`hover:bg-surface-50 transition-colors ${app.latestStatus === 'DOWN' ? 'bg-red-50/30' : ''
+                      }`}
                   >
                     {/* Status Column */}
                     <td className="px-4 py-3 whitespace-nowrap">
@@ -312,11 +372,10 @@ function ApplicationDataGrid({ applications, searchTerm, filterStatus, onSearch,
                     {/* Last Checked Column */}
                     <td className="px-4 py-3 whitespace-nowrap text-sm text-surface-600">
                       <div className="flex items-center gap-1">
-                        <span className={`w-2 h-2 rounded-full ${
-                          app.latestStatus === 'UP' ? 'bg-emerald-500' : 
-                          app.latestStatus === 'DOWN' ? 'bg-red-500' : 'bg-amber-500'
-                        }`} />
-                        <span>{app.lastPolledAt ? TimezoneService.formatTime(app.lastPolledAt) : 'Never'}</span>
+                        <span className={`w-2 h-2 rounded-full ${app.latestStatus === 'UP' ? 'bg-emerald-500' :
+                            app.latestStatus === 'DOWN' ? 'bg-red-500' : 'bg-amber-500'
+                          }`} />
+                        <span>{formatTimeWithTimezone(app.lastPolledAt)}</span>
                       </div>
                     </td>
 
@@ -324,8 +383,8 @@ function ApplicationDataGrid({ applications, searchTerm, filterStatus, onSearch,
                     <td className="px-4 py-3 whitespace-nowrap">
                       {app.categoryName ? (
                         <div className="flex items-center gap-2">
-                          <div 
-                            className="w-3 h-3 rounded-full flex-shrink-0" 
+                          <div
+                            className="w-3 h-3 rounded-full flex-shrink-0"
                             style={{ backgroundColor: app.categoryColor || '#64748b' }}
                           />
                           <span className="text-sm text-surface-700">{app.categoryName}</span>
@@ -380,14 +439,17 @@ function ApplicationDataGrid({ applications, searchTerm, filterStatus, onSearch,
 }
 
 // ── Main Dashboard Component ───────────────────────────────────────────────────
-export default function HealthCheckDashboard() {
+export default function HealthCheckDashboard({ onNavigate }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [polling, setPolling] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [coreSearchTerm, setCoreSearchTerm] = useState('');
+  const [coreFilterStatus, setCoreFilterStatus] = useState('all');
+  const [otherSearchTerm, setOtherSearchTerm] = useState('');
+  const [otherFilterStatus, setOtherFilterStatus] = useState('all');
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [showNoAppsModal, setShowNoAppsModal] = useState(false);
   const sseRef = useRef(null);
   const initRan = useRef(false);
 
@@ -395,12 +457,21 @@ export default function HealthCheckDashboard() {
     try {
       const res = await ApiClient.get(api.dashboard);
       if (res?.success) {
+        log.info('Dashboard data loaded', { 
+          hasData: !!res.data,
+          dataKeys: res.data ? Object.keys(res.data) : [],
+          coreAppsCount: res.data?.coreApplications?.length || 0,
+          otherAppsCount: res.data?.otherApplications?.length || 0,
+          applicationsCount: res.data?.applications?.length || 0
+        });
         setData(res.data);
         setError(null);
       } else {
+        log.error('Dashboard load failed', { error: res?.error?.message });
         setError(res?.error?.message || 'Failed to load dashboard');
       }
     } catch (err) {
+      log.error('Dashboard load error', { message: err.message });
       setError(err.message);
     } finally {
       setLoading(false);
@@ -411,6 +482,7 @@ export default function HealthCheckDashboard() {
   useEffect(() => {
     if (initRan.current) return;
     initRan.current = true;
+    log.info('HealthCheckDashboard mounted, loading dashboard');
     loadDashboard();
   }, [loadDashboard]);
 
@@ -418,22 +490,21 @@ export default function HealthCheckDashboard() {
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [currentTime]);
 
   // Setup SSE for real-time updates
   useEffect(() => {
     if (!data?.poller?.isRunning) return;
 
-    const eventSource = new EventSource(`/api/healthcheck/sse/dashboard-updates`);
+    const eventSource = new EventSource(`/api/healthcheck/events/poll`);
     sseRef.current = eventSource;
 
     eventSource.onmessage = (event) => {
       try {
         const update = JSON.parse(event.data);
-        if (update.type === 'poller_update') {
-          setData(prev => prev ? { ...prev, poller: update.poller } : null);
-        } else if (update.type === 'applications_update') {
-          setData(prev => prev ? { ...prev, applications: update.applications } : null);
+        if (update.type === 'poll_complete') {
+          // Reload dashboard data when poll completes
+          loadDashboard();
         }
       } catch (err) {
         log.error('Failed to parse SSE message', err);
@@ -456,10 +527,7 @@ export default function HealthCheckDashboard() {
   const handlePollNow = useCallback(async () => {
     setPolling(true);
     try {
-      const res = await ApiClient.post(api.pollerPollNow);
-      if (res?.success) {
-        await loadDashboard();
-      }
+      await loadDashboard();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -478,20 +546,19 @@ export default function HealthCheckDashboard() {
     );
   }
 
-  if (!data || data.totalApps === 0) {
+  if (!data || !data.applications || data.applications.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
-        <div className="w-20 h-20 rounded-2xl bg-surface-100 flex items-center justify-center mb-6">
-          <Activity size={36} className="text-surface-300" />
-        </div>
-        <h2 className="text-2xl font-bold text-surface-700 mb-3">No Applications Configured</h2>
-        <p className="text-surface-400 mb-8 max-w-md">
-          Add applications to start monitoring their health status and performance.
-        </p>
-        <button className="px-6 py-3 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 flex items-center gap-2">
-          <Globe size={16} />
-          Add Your First Application
-        </button>
+      <div className="relative min-h-[600px]">
+        <SetupRequiredOverlay
+          isOpen={true}
+          icon={AlertTriangle}
+          header="No Applications Configured"
+          messageDetail="Add applications to start monitoring their health status and performance."
+          actionIcon={Globe}
+          actionText="Add Your First Application"
+          onAction={() => onNavigate && onNavigate('applications')}
+          variant="info"
+        />
       </div>
     );
   }
@@ -506,9 +573,12 @@ export default function HealthCheckDashboard() {
           <h1 className="text-2xl font-bold text-surface-900">System Health</h1>
           <p className="text-surface-500">Real-time monitoring dashboard</p>
         </div>
-        <div className="text-right">
-          <p className="text-xs text-surface-500">Current Time</p>
-          <p className="text-sm font-medium">{TimezoneService.formatTime(currentTime.toISOString())}</p>
+        {/* Current Time */}
+        <div className="flex items-center gap-2">
+          <Clock size={16} className="text-surface-400" />
+          <span className="text-sm font-semibold text-surface-800">
+            {formatTimeWithTimezone(currentTime.toISOString())}
+          </span>
         </div>
       </div>
 
@@ -526,83 +596,179 @@ export default function HealthCheckDashboard() {
       {/* Poller Status Bar */}
       <div className="bg-white rounded-xl border border-surface-200 p-4">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div className="flex items-center gap-6">
+          <div className="flex flex-wrap items-center gap-6">
             {/* Poller Status */}
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <div className={`w-4 h-4 rounded-full ${poller.isRunning ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'}`} />
-                {poller.isRunning && (
-                  <div className="absolute inset-0 w-4 h-4 rounded-full bg-emerald-500 animate-ping opacity-75" />
-                )}
-              </div>
-              <div>
-                <span className="text-sm font-semibold text-surface-800">
-                  Poller {poller.isRunning ? 'Running' : 'Stopped'}
-                </span>
-                <div className="flex items-center gap-1 text-xs text-surface-500">
-                  <Activity size={10} />
-                  <span>{poller.isRunning ? 'Active' : 'Inactive'}</span>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
+                <div className="relative">
+                  <div className={`w-3 h-3 rounded-full ${poller.isRunning ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'}`} />
+                  {poller.isRunning && (
+                    <div className="absolute inset-0 w-3 h-3 rounded-full bg-emerald-500 animate-ping opacity-75" />
+                  )}
                 </div>
+                <Activity size={12} className={poller.isRunning ? 'animate-pulse text-emerald-600' : 'text-surface-400'} />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs text-surface-500 font-medium">Poller Status</span>
+                <span className="text-sm font-semibold text-surface-800">
+                  {poller.isRunning ? 'Running' : 'Stopped'}
+                </span>
               </div>
             </div>
 
             {/* Polling Frequency */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <Timer size={16} className="text-surface-400" />
-              <div>
+              <div className="flex flex-col">
+                <span className="text-xs text-surface-500 font-medium">Interval</span>
                 <span className="text-sm font-semibold text-surface-800">
                   {poller.intervalSeconds || 60}s
                 </span>
-                <div className="text-xs text-surface-500">Interval</div>
               </div>
             </div>
 
             {/* Last Poll */}
             {poller.isRunning && (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 <Clock size={16} className="text-surface-400" />
-                <div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-surface-500 font-medium">Last Poll</span>
                   <span className="text-sm font-semibold text-surface-800">
-                    {poller.lastPollTimeDisplay || 'Never'}
+                    {poller.lastPollTimeDisplay ? formatTimeWithoutSeconds(poller.lastPollTimeDisplay) : 'Never'}
                   </span>
-                  <div className="text-xs text-surface-500">Last Poll</div>
                 </div>
               </div>
             )}
-          </div>
 
-          {/* Right Side Info */}
-          <div className="flex items-center gap-6">
+
             {/* Applications Count */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <Globe size={16} className="text-surface-400" />
-              <div>
-                <span className="text-sm font-semibold text-surface-800">{data.totalApps}</span>
-                <div className="text-xs text-surface-500">Applications</div>
+              <div className="flex flex-col">
+                <span className="text-xs text-surface-500 font-medium">Applications</span>
+                <span className="text-sm font-semibold text-surface-800">
+                  {(() => {
+                    // Try coreApplications/otherApplications first, fallback to applications array
+                    const coreCount = data.coreApplications ? data.coreApplications.length : 0;
+                    const otherCount = data.otherApplications ? data.otherApplications.length : 0;
+                    const totalCount = data.applications ? data.applications.length : 0;
+                    
+                    log.debug('Applications count', { coreCount, otherCount, totalCount, hasCore: !!data.coreApplications, hasOther: !!data.otherApplications, hasApps: !!data.applications });
+                    
+                    // If we have core/other counts, use them; otherwise show total
+                    if (coreCount > 0 || otherCount > 0) {
+                      return `${coreCount}/${otherCount}`;
+                    }
+                    return totalCount > 0 ? `${totalCount}` : '0/0';
+                  })()}
+                </span>
               </div>
             </div>
-
-            {/* Manual Poll Button */}
-            <button onClick={handlePollNow} disabled={polling}
-              className="px-4 py-2 text-sm font-medium text-white bg-brand-600 rounded-lg hover:bg-brand-700 disabled:opacity-50 flex items-center gap-2 shadow-sm transition-all">
-              {polling ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-              {polling ? 'Polling...' : 'Poll Now'}
-            </button>
           </div>
+
+          {/* Refresh Dashboard Button */}
+          <button onClick={handlePollNow} disabled={polling}
+            className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-teal-600 to-emerald-600 rounded-lg hover:from-teal-700 hover:to-emerald-700 disabled:opacity-50 flex items-center gap-2 shadow-md hover:shadow-lg transition-all whitespace-nowrap">
+            {polling ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
+            {polling ? 'Refreshing...' : 'Refresh Dashboard'}
+          </button>
         </div>
       </div>
 
-      {/* Applications Data Grid */}
+      {/* Core System Applications Section */}
       <div className="bg-white rounded-xl border border-surface-200 p-6">
-        <h2 className="text-lg font-semibold text-surface-800 mb-4">Applications</h2>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className={`w-3 h-3 rounded-full ${poller.isRunning ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'}`} />
+              {poller.isRunning && (
+                <div className="absolute inset-0 w-3 h-3 rounded-full bg-emerald-500 animate-ping opacity-75" />
+              )}
+            </div>
+            <h2 className="text-lg font-semibold text-surface-800">Core System Applications</h2>
+            <span className="text-lg font-semibold text-surface-800">
+              ({data.applications ? data.applications.filter(a => a.categoryName === 'Core System (Uptime Monitoring)').length : 0})
+            </span>
+            <span className="text-xs text-surface-500 ml-2">- Monitored for uptime and SLA compliance</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-surface-400" />
+              <input
+                type="text"
+                placeholder="Search applications..."
+                value={coreSearchTerm}
+                onChange={e => setCoreSearchTerm(e.target.value)}
+                className="w-64 pl-10 pr-3 py-1.5 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
+              />
+            </div>
+            <select
+              value={coreFilterStatus}
+              onChange={e => setCoreFilterStatus(e.target.value)}
+              className="px-3 py-1.5 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none bg-white"
+            >
+              <option value="all">All Status</option>
+              <option value="UP">Operational</option>
+              <option value="DOWN">Down</option>
+              <option value="UNKNOWN">Unknown</option>
+            </select>
+          </div>
+        </div>
         <ApplicationDataGrid
-          applications={data.applications || []}
-          searchTerm={searchTerm}
-          filterStatus={filterStatus}
-          onSearch={setSearchTerm}
-          onFilter={setFilterStatus}
+          applications={data.applications ? data.applications.filter(a => a.categoryName === 'Core System (Uptime Monitoring)') : []}
+          searchTerm={coreSearchTerm}
+          filterStatus={coreFilterStatus}
+          onSearch={setCoreSearchTerm}
+          onFilter={setCoreFilterStatus}
         />
       </div>
+
+      {/* Other Applications Section */}
+      {data.applications && data.applications.filter(a => a.categoryName !== 'Core System (Uptime Monitoring)').length > 0 && (
+        <div className="bg-white rounded-xl border border-surface-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="w-3 h-3 rounded-full bg-blue-500" />
+              </div>
+              <h2 className="text-lg font-semibold text-surface-800">Other Applications</h2>
+              <span className="text-lg font-semibold text-surface-800">
+                ({data.applications.filter(a => a.categoryName !== 'Core System (Uptime Monitoring)').length})
+              </span>
+              <span className="text-xs text-surface-500 ml-2">- Monitored for status, not included in SLA calculations</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-surface-400" />
+                <input
+                  type="text"
+                  placeholder="Search applications..."
+                  value={otherSearchTerm}
+                  onChange={e => setOtherSearchTerm(e.target.value)}
+                  className="w-64 pl-10 pr-3 py-1.5 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none"
+                />
+              </div>
+              <select
+                value={otherFilterStatus}
+                onChange={e => setOtherFilterStatus(e.target.value)}
+                className="px-3 py-1.5 text-sm border border-surface-200 rounded-lg focus:ring-2 focus:ring-brand-200 focus:border-brand-400 outline-none bg-white"
+              >
+                <option value="all">All Status</option>
+                <option value="UP">Operational</option>
+                <option value="DOWN">Down</option>
+                <option value="UNKNOWN">Unknown</option>
+              </select>
+            </div>
+          </div>
+          <ApplicationDataGrid
+            applications={data.applications.filter(a => a.categoryName !== 'Core System (Uptime Monitoring)')}
+            searchTerm={otherSearchTerm}
+            filterStatus={otherFilterStatus}
+            onSearch={setOtherSearchTerm}
+            onFilter={setOtherFilterStatus}
+          />
+        </div>
+      )}
     </div>
   );
 }

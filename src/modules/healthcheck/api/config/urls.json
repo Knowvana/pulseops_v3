@@ -39,6 +39,7 @@
     "pollEvents":                 "/events/poll",
 
     "schemaInfo":                 "/schema/info",
+    "schemaStatus":               "/schema/status",
     "dataDefaults":               "/data/defaults",
     "dataReset":                  "/data/reset"
   }

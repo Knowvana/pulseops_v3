@@ -87,6 +87,175 @@ router.get(routes.schemaInfo, async (req, res) => {
   }
 });
 
+// ── GET /schema/status ───────────────────────────────────────────────────────
+// Check if schema is initialized and default data is loaded
+router.get(routes.schemaStatus, async (req, res) => {
+  const startTime = Date.now();
+  log.debug('GET /schema/status — checking schema and data status');
+  
+  try {
+    // Step 1: Resolve schema file path
+    const schemaPath = resolveModuleDbFile(SCHEMA_JSON_FILE);
+    if (!schemaPath) {
+      log.warn('Schema file not found', { file: SCHEMA_JSON_FILE });
+      return res.json({
+        success: true,
+        data: {
+          schemaInitialized: false,
+          defaultDataLoaded: false,
+          message: 'Schema file not found',
+        },
+      });
+    }
+    log.debug('Schema file resolved', { path: schemaPath });
+
+    // Step 2: Parse schema definition
+    let schemaDef;
+    try {
+      const schemaContent = fs.readFileSync(schemaPath, 'utf8');
+      schemaDef = JSON.parse(schemaContent);
+      log.debug('Schema definition parsed successfully', { tableCount: schemaDef.tables?.length || 0 });
+    } catch (parseErr) {
+      log.error('Failed to parse schema file', { 
+        file: schemaPath, 
+        message: parseErr.message,
+        code: parseErr.code 
+      });
+      return res.status(500).json({ 
+        success: false, 
+        error: { message: `Invalid schema file: ${parseErr.message}` } 
+      });
+    }
+
+    const tables = schemaDef.tables || [];
+    if (tables.length === 0) {
+      log.warn('Schema definition contains no tables');
+    }
+
+    // Step 3: Check if all tables exist in database
+    log.debug('Checking table existence', { tableCount: tables.length });
+    let schemaInitialized = true;
+    const tableStatus = {};
+    
+    for (const tbl of tables) {
+      try {
+        await DatabaseService.query(
+          `SELECT 1 FROM ${dbSchema}.${tbl.name} LIMIT 1`
+        );
+        tableStatus[tbl.name] = 'exists';
+        log.debug(`Table exists: ${tbl.name}`);
+      } catch (tableErr) {
+        tableStatus[tbl.name] = 'missing';
+        schemaInitialized = false;
+        log.debug(`Table missing: ${tbl.name}`, { error: tableErr.message });
+      }
+    }
+
+    if (!schemaInitialized) {
+      log.warn('Schema not fully initialized', { 
+        totalTables: tables.length,
+        missingTables: Object.entries(tableStatus)
+          .filter(([_, status]) => status === 'missing')
+          .map(([name]) => name)
+      });
+    } else {
+      log.info('Schema fully initialized', { totalTables: tables.length });
+    }
+
+    // Step 4: Check if default data is loaded
+    log.debug('Checking default data status');
+    let defaultDataLoaded = false;
+    let coreSystemCategoryCount = 0;
+    let applicationCount = 0;
+
+    if (schemaInitialized) {
+      try {
+        // Check for Core System category
+        const catResult = await DatabaseService.query(
+          `SELECT COUNT(*)::int AS cnt FROM ${dbSchema}.hc_categories WHERE is_system_default = true`
+        );
+        coreSystemCategoryCount = catResult.rows[0]?.cnt || 0;
+        log.debug('Core System category check', { count: coreSystemCategoryCount });
+
+        // Check for applications
+        const appResult = await DatabaseService.query(
+          `SELECT COUNT(*)::int AS cnt FROM ${dbSchema}.hc_applications`
+        );
+        applicationCount = appResult.rows[0]?.cnt || 0;
+        log.debug('Applications check', { count: applicationCount });
+
+        // Default data is loaded if Core System category exists and apps are present
+        defaultDataLoaded = coreSystemCategoryCount > 0 && applicationCount > 0;
+        
+        if (defaultDataLoaded) {
+          log.info('Default data is loaded', { 
+            coreSystemCategories: coreSystemCategoryCount,
+            applications: applicationCount 
+          });
+        } else {
+          log.warn('Default data not fully loaded', { 
+            coreSystemCategories: coreSystemCategoryCount,
+            applications: applicationCount 
+          });
+        }
+      } catch (dataErr) {
+        log.error('Failed to check default data status', { 
+          message: dataErr.message,
+          code: dataErr.code 
+        });
+        defaultDataLoaded = false;
+      }
+    } else {
+      log.debug('Skipping default data check — schema not initialized');
+    }
+
+    // Step 5: Build response
+    const duration = Date.now() - startTime;
+    const statusMessage = defaultDataLoaded
+      ? 'Schema initialized and default data loaded'
+      : schemaInitialized
+        ? 'Schema initialized but default data not loaded'
+        : 'Schema not initialized';
+
+    log.info('Schema status check complete', { 
+      schemaInitialized,
+      defaultDataLoaded,
+      durationMs: duration,
+      message: statusMessage
+    });
+
+    res.json({
+      success: true,
+      data: {
+        schemaInitialized,
+        defaultDataLoaded,
+        message: statusMessage,
+        details: {
+          tableCount: tables.length,
+          coreSystemCategories: coreSystemCategoryCount,
+          applications: applicationCount,
+          durationMs: duration,
+        },
+      },
+    });
+  } catch (err) {
+    const duration = Date.now() - startTime;
+    log.error('GET /schema/status failed', { 
+      message: err.message,
+      code: err.code,
+      stack: err.stack,
+      durationMs: duration
+    });
+    res.status(500).json({ 
+      success: false, 
+      error: { 
+        message: apiErrors.data.schemaInfoFailed.replace('{message}', err.message),
+        code: err.code 
+      } 
+    });
+  }
+});
+
 // ── POST /data/defaults ──────────────────────────────────────────────────────
 router.post(routes.dataDefaults, async (req, res) => {
   try {

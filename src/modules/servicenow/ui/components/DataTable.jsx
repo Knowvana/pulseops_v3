@@ -246,8 +246,8 @@ export default function DataTable({
         <div className="px-4 py-2 border-b border-surface-100 bg-surface-50/30 flex items-center justify-between gap-3">
           {/* Search (left) */}
           {searchable ? (
-            <div className="flex items-center gap-2 max-w-[260px] w-full">
-              <Search size={13} className="text-surface-400 flex-shrink-0" />
+            <div className="flex items-center gap-2 max-w-md w-full px-3 py-2 rounded-lg border border-brand-300 bg-gradient-to-r from-brand-50 to-blue-50 shadow-sm">
+              <Search size={14} className="text-brand-500 flex-shrink-0" />
               <input
                 type="text"
                 value={searchQuery}
@@ -256,11 +256,11 @@ export default function DataTable({
                 className="flex-1 text-xs text-surface-700 bg-transparent outline-none placeholder:text-surface-400 min-w-0"
               />
               {searchQuery && (
-                <button onClick={() => { setSearchQuery(''); setPage(0); }} className="text-surface-400 hover:text-surface-600">
-                  <X size={12} />
+                <button onClick={() => { setSearchQuery(''); setPage(0); }} className="text-surface-400 hover:text-brand-600 transition-colors">
+                  <X size={13} />
                 </button>
               )}
-              <span className="text-[10px] text-surface-400 whitespace-nowrap">
+              <span className="text-[10px] text-surface-500 whitespace-nowrap font-medium">
                 {filteredData.length}/{data.length}
               </span>
             </div>

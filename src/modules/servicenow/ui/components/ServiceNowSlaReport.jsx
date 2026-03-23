@@ -126,20 +126,19 @@ function PrioritySummaryTable({ summaryByPriority }) {
 
   return (
     <div className="bg-white rounded-xl border border-surface-200 shadow-sm overflow-hidden">
-      <div className="px-5 py-3 border-b border-surface-100 bg-surface-50/50">
-        <h3 className="text-xs font-bold text-surface-600 uppercase tracking-wide">SLA Summary by Priority</h3>
+      <div className="px-4 py-2 border-b border-surface-100 bg-surface-50/50">
+        <h3 className="text-[10px] font-bold text-surface-600 uppercase tracking-wide">SLA Summary by Priority</h3>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-[10px]">
           <thead>
             <tr className="bg-surface-50/80 border-b border-surface-200">
-              <th className="text-left px-4 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider">Priority</th>
-              <th className="text-right px-4 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider">Total</th>
-              <th className="text-right px-4 py-2.5 text-[10px] font-bold text-emerald-600 uppercase tracking-wider">Met</th>
-              <th className="text-right px-4 py-2.5 text-[10px] font-bold text-rose-600 uppercase tracking-wider">Breached</th>
-              <th className="text-right px-4 py-2.5 text-[10px] font-bold text-surface-400 uppercase tracking-wider">Pending</th>
-              <th className="text-right px-4 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider">Target</th>
-              <th className="text-right px-4 py-2.5 text-[10px] font-bold text-surface-500 uppercase tracking-wider">Compliance</th>
+              <th className="text-left px-2 py-1.5 text-[9px] font-bold text-surface-500 uppercase tracking-wider">Priority</th>
+              <th className="text-right px-2 py-1.5 text-[9px] font-bold text-surface-500 uppercase tracking-wider">Total</th>
+              <th className="text-right px-2 py-1.5 text-[9px] font-bold text-emerald-600 uppercase tracking-wider">Met</th>
+              <th className="text-right px-2 py-1.5 text-[9px] font-bold text-rose-600 uppercase tracking-wider">Breached</th>
+              <th className="text-right px-2 py-1.5 text-[9px] font-bold text-surface-400 uppercase tracking-wider">Pending</th>
+              <th className="text-right px-2 py-1.5 text-[9px] font-bold text-surface-500 uppercase tracking-wider">Target</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-surface-50">
@@ -148,28 +147,20 @@ function PrioritySummaryTable({ summaryByPriority }) {
               const total = (d.met || 0) + (d.breached || 0) + (d.pending || 0);
               const resolved = total - (d.pending || 0);
               const compliance = resolved > 0 ? Math.round(((d.met || 0) / resolved) * 100) : null;
-              const compColor = compliance === null ? 'text-surface-400' : compliance >= 90 ? 'text-emerald-600' : compliance >= 70 ? 'text-amber-600' : 'text-rose-600';
               return (
                 <tr key={priority} className="hover:bg-surface-50/50 transition-colors">
-                  <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-                      <span className="text-xs font-semibold text-surface-700">{priority}</span>
+                  <td className="px-2 py-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <div className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                      <span className="text-[10px] font-semibold text-surface-700">{priority}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-2.5 text-right text-xs font-bold text-surface-700">{total}</td>
-                  <td className="px-4 py-2.5 text-right text-xs font-bold text-emerald-600">{d.met || 0}</td>
-                  <td className="px-4 py-2.5 text-right text-xs font-bold text-rose-600">{d.breached || 0}</td>
-                  <td className="px-4 py-2.5 text-right text-xs font-medium text-surface-400">{d.pending || 0}</td>
-                  <td className="px-4 py-2.5 text-right text-xs text-surface-500">
+                  <td className="px-2 py-1.5 text-right text-[10px] font-bold text-surface-700">{total}</td>
+                  <td className="px-2 py-1.5 text-right text-[10px] font-bold text-emerald-600">{d.met || 0}</td>
+                  <td className="px-2 py-1.5 text-right text-[10px] font-bold text-rose-600">{d.breached || 0}</td>
+                  <td className="px-2 py-1.5 text-right text-[10px] font-medium text-surface-400">{d.pending || 0}</td>
+                  <td className="px-2 py-1.5 text-right text-[10px] text-surface-500">
                     {d.targetMinutes ? formatMinutes(d.targetMinutes) : '—'}
-                  </td>
-                  <td className="px-4 py-2.5 text-right">
-                    {compliance !== null ? (
-                      <span className={`text-xs font-black ${compColor}`}>{compliance}%</span>
-                    ) : (
-                      <span className="text-xs text-surface-400">—</span>
-                    )}
                   </td>
                 </tr>
               );
@@ -177,19 +168,12 @@ function PrioritySummaryTable({ summaryByPriority }) {
           </tbody>
           <tfoot>
             <tr className="bg-surface-50 border-t-2 border-surface-200">
-              <td className="px-4 py-2.5 text-xs font-black text-surface-700 uppercase">Total</td>
-              <td className="px-4 py-2.5 text-right text-xs font-black text-surface-700">{totals.total}</td>
-              <td className="px-4 py-2.5 text-right text-xs font-black text-emerald-600">{totals.met}</td>
-              <td className="px-4 py-2.5 text-right text-xs font-black text-rose-600">{totals.breached}</td>
-              <td className="px-4 py-2.5 text-right text-xs font-bold text-surface-400">{totals.pending}</td>
-              <td className="px-4 py-2.5 text-right text-xs text-surface-500">—</td>
-              <td className="px-4 py-2.5 text-right">
-                {overallCompliance !== null ? (
-                  <span className={`text-xs font-black ${overallCompliance >= 90 ? 'text-emerald-600' : overallCompliance >= 70 ? 'text-amber-600' : 'text-rose-600'}`}>
-                    {overallCompliance}%
-                  </span>
-                ) : <span className="text-xs text-surface-400">—</span>}
-              </td>
+              <td className="px-2 py-1.5 text-[10px] font-black text-surface-700 uppercase">Total</td>
+              <td className="px-2 py-1.5 text-right text-[10px] font-black text-surface-700">{totals.total}</td>
+              <td className="px-2 py-1.5 text-right text-[10px] font-black text-emerald-600">{totals.met}</td>
+              <td className="px-2 py-1.5 text-right text-[10px] font-black text-rose-600">{totals.breached}</td>
+              <td className="px-2 py-1.5 text-right text-[10px] font-bold text-surface-400">{totals.pending}</td>
+              <td className="px-2 py-1.5 text-right text-[10px] text-surface-500">—</td>
             </tr>
           </tfoot>
         </table>
@@ -266,69 +250,147 @@ export default function ServiceNowSlaReport() {
     if (!data) return;
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
-    const rows = (data.incidents || []).map(inc => `
+
+    // Build Configuration section
+    const businessDaysHtml = (data.businessHours || [])
+      .filter(day => day.isBusinessDay)
+      .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
+      .map(day => {
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        return `<tr><td style="padding:4px 8px;font-size:10px">${dayNames[day.dayOfWeek]}</td><td style="padding:4px 8px;font-size:10px">${day.startTime} - ${day.endTime}</td></tr>`;
+      }).join('');
+
+    const slaTargetsHtml = (data.slaThresholds || [])
+      .sort((a, b) => (a.priorityValue || a.priority) - (b.priorityValue || b.priority))
+      .map(sla => `<tr><td style="padding:4px 8px;font-size:10px">${sla.priority}</td><td style="padding:4px 8px;font-size:10px">${formatMinutes(sla.resolutionMinutes)}</td></tr>`)
+      .join('');
+
+    // Build Breached Incidents section
+    const breachedIncidents = (data.incidents || []).filter(inc => inc.slaStatus === 'breached');
+    const breachedHtml = breachedIncidents.map(inc => `
       <tr>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-family:monospace;font-size:11px">${inc.number}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${inc.shortDescription || ''}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px">${inc.priority}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px">${inc.createdAt ? new Date(inc.createdAt).toLocaleString() : '—'}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px">${inc.expectedClosure ? new Date(inc.expectedClosure).toLocaleString() : '—'}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px">${inc.closedAt ? new Date(inc.closedAt).toLocaleString() : '—'}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:right">${inc.resolutionMinutes != null ? formatMinutes(inc.resolutionMinutes) : '—'}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px;text-align:right">${formatMinutes(inc.targetMinutes)}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:11px;font-weight:bold;color:${inc.slaMet === true ? '#059669' : inc.slaMet === false ? '#dc2626' : '#6b7280'}">${inc.slaMet === true ? 'Met' : inc.slaMet === false ? 'Breached' : 'Pending'}</td>
+        <td style="padding:4px 8px;font-size:10px;font-weight:bold;color:#dc2626">${inc.number}</td>
+        <td style="padding:4px 8px;font-size:10px">${inc.createdAt ? formatDate(inc.createdAt) : '—'}</td>
+        <td style="padding:4px 8px;font-size:10px">${inc.closedAt ? formatDate(inc.closedAt) : '—'}</td>
+        <td style="padding:4px 8px;font-size:10px">${STATE_MAP[inc.state] || inc.state}</td>
+        <td style="padding:4px 8px;font-size:10px;font-weight:bold;color:#dc2626;text-align:right">${inc.slaVariance !== null && inc.slaVariance !== undefined ? (inc.slaVariance >= 0 ? '+' : '') + formatMinutes(inc.slaVariance) : '—'}</td>
       </tr>
     `).join('');
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>Incident Resolution SLA Report</title></head><body style="font-family:system-ui,sans-serif;padding:24px;color:#1e293b">
-      <h1 style="font-size:18px;margin:0">Incident Resolution SLA Report</h1>
-      <p style="font-size:12px;color:#64748b;margin:4px 0 16px">Generated: ${new Date().toLocaleString()} | Period: ${data.startDate} to ${data.endDate} (${period})</p>
-      <table style="width:100%;border-collapse:collapse">
-        <thead><tr style="background:#f1f5f9">
-          <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Number</th>
-          <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Description</th>
-          <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Priority</th>
-          <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Created</th>
-          <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Expected Closure</th>
-          <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Actual Closure</th>
-          <th style="padding:8px;text-align:right;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Resolution</th>
-          <th style="padding:8px;text-align:right;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">Target</th>
-          <th style="padding:8px;text-align:left;font-size:10px;text-transform:uppercase;color:#64748b;border-bottom:2px solid #e2e8f0">SLA Status</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
+
+    // Build Priority Summary section
+    const prioritySummaryHtml = Object.entries(data.summaryByPriority || {})
+      .sort((a, b) => (a[1].priorityValue || 0) - (b[1].priorityValue || 0))
+      .map(([priority, d]) => `
+        <tr>
+          <td style="padding:4px 8px;font-size:10px">${priority}</td>
+          <td style="padding:4px 8px;font-size:10px;text-align:right">${(d.met || 0) + (d.breached || 0) + (d.pending || 0)}</td>
+          <td style="padding:4px 8px;font-size:10px;text-align:right;color:#059669">${d.met || 0}</td>
+          <td style="padding:4px 8px;font-size:10px;text-align:right;color:#dc2626">${d.breached || 0}</td>
+          <td style="padding:4px 8px;font-size:10px;text-align:right">${d.pending || 0}</td>
+          <td style="padding:4px 8px;font-size:10px;text-align:right">${d.targetMinutes ? formatMinutes(d.targetMinutes) : '—'}</td>
+        </tr>
+      `).join('');
+
+    // Build Incident Details Grid
+    const incidentRows = (data.incidents || []).map(inc => `
+      <tr>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-family:monospace;font-size:10px">${inc.number}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:10px;max-width:150px;overflow:hidden;text-overflow:ellipsis">${inc.shortDescription || ''}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:10px">${inc.priority || ''}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:10px">${STATE_MAP[inc.state] || inc.state}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:10px">${inc.createdAt ? formatDate(inc.createdAt) : ''}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:10px">${inc.expectedClosure ? formatDate(inc.expectedClosure) : '—'}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:10px">${inc.closedAt ? formatDate(inc.closedAt) : '—'}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:10px;font-weight:bold">${inc.resolutionMinutes ? formatMinutes(inc.resolutionMinutes) : '—'}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:10px;font-weight:bold">${inc.targetMinutes ? formatMinutes(inc.targetMinutes) : '—'}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:10px;font-weight:bold;color:${inc.slaVariance && inc.slaVariance < 0 ? '#dc2626' : '#059669'}">${inc.slaVariance !== null && inc.slaVariance !== undefined ? (inc.slaVariance >= 0 ? '+' : '') + formatMinutes(inc.slaVariance) : '—'}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:10px;font-weight:bold;color:${inc.slaStatus === 'met' ? '#059669' : inc.slaStatus === 'breached' ? '#dc2626' : '#f59e0b'}">${inc.slaStatus === 'met' ? 'Met' : inc.slaStatus === 'breached' ? 'Breached' : 'Pending'}</td>
+      </tr>
+    `).join('');
+
+    printWindow.document.write(`<!DOCTYPE html><html><head><title>Incident Resolution SLA Report</title><style>body{font-family:system-ui,sans-serif;padding:16px;color:#1e293b;line-height:1.4}h1{font-size:18px;margin:0 0 2px;font-weight:bold}p{font-size:10px;color:#64748b;margin:0 0 12px}.box{border:1px solid #e2e8f0;padding:10px;border-radius:3px;background:#fafbfc}.box-title{font-size:11px;font-weight:bold;color:#1e293b;margin-bottom:6px;border-bottom:1px solid #e2e8f0;padding-bottom:3px}.row-5col{display:grid;grid-template-columns:1fr 1fr 1fr 2fr 2fr;gap:8px;margin-bottom:12px}table{width:100%;border-collapse:collapse;font-size:9px}th{background-color:#f1f5f9;padding:4px 6px;text-align:left;font-weight:bold;border-bottom:1px solid #cbd5e1;font-size:9px}td{padding:4px 6px;border-bottom:1px solid #f0f0f0}.section-title{font-size:11px;font-weight:bold;color:#1e293b;margin-bottom:6px;border-bottom:1px solid #e2e8f0;padding-bottom:3px}</style></head><body>
+      <h1>Incident Resolution SLA Report</h1>
+      <p><strong>Generated:</strong> ${new Date().toLocaleString()} | <strong>Period:</strong> ${data.startDate} to ${data.endDate} | <strong>Timezone:</strong> ${data.timezone || 'N/A'}</p>
+
+      <div class="row-5col">
+        <div class="box">
+          <div class="box-title">Configuration - Business Days</div>
+          <table><tbody>${businessDaysHtml}</tbody></table>
+        </div>
+        <div class="box">
+          <div class="box-title">Configuration - SLA Targets</div>
+          <table><tbody>${slaTargetsHtml}</tbody></table>
+        </div>
+        <div class="box">
+          <div class="box-title">SLA Summary</div>
+          <table><tbody>
+            <tr><td>Total Incidents</td><td style="text-align:right;font-weight:bold">${stats.total}</td></tr>
+            <tr><td>SLA Met</td><td style="text-align:right;font-weight:bold;color:#059669">${stats.met}</td></tr>
+            <tr><td>SLA Breached</td><td style="text-align:right;font-weight:bold;color:#dc2626">${stats.breached}</td></tr>
+            <tr><td>Pending</td><td style="text-align:right;font-weight:bold">${stats.pending}</td></tr>
+            <tr style="background-color:#f1f5f9"><td><strong>Overall Compliance</strong></td><td style="text-align:right;font-weight:bold;color:${stats.compliance >= 90 ? '#059669' : stats.compliance >= 70 ? '#f59e0b' : '#dc2626'}">${stats.compliance !== null ? stats.compliance + '%' : '—'}</td></tr>
+          </tbody></table>
+        </div>
+        <div class="box">
+          <div class="box-title">Incidents - SLA Breached</div>
+          ${breachedIncidents.length > 0 ? `
+            <table style="white-space:nowrap">
+              <thead><tr><th>INC Number</th><th>Created</th><th>Closed</th><th>Status</th><th style="text-align:right">SLA Variance</th></tr></thead>
+              <tbody>${breachedHtml}</tbody>
+            </table>
+          ` : '<p style="color:#64748b;font-style:italic;font-size:9px">No breached incidents</p>'}
+        </div>
+        <div class="box">
+          <div class="box-title">SLA Summary by Priority</div>
+          <table>
+            <thead><tr><th>Priority</th><th style="text-align:right">Total</th><th style="text-align:right;color:#059669">Met</th><th style="text-align:right;color:#dc2626">Breached</th><th style="text-align:right">Pending</th><th style="text-align:right">Target</th></tr></thead>
+            <tbody>${prioritySummaryHtml}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <div class="section-title">Resolution SLA Details - All Incidents</div>
+        <table>
+          <thead>
+            <tr><th>Number</th><th>Description</th><th>Priority</th><th>State</th><th>Created</th><th>Expected</th><th>Closed</th><th>Resolution</th><th>Target</th><th>Variance</th><th>Status</th></tr>
+          </thead>
+          <tbody>${incidentRows}</tbody>
+        </table>
+      </div>
     </body></html>`);
     printWindow.document.close();
     setTimeout(() => { printWindow.print(); }, 500);
-  }, [data, period]);
+  }, [data, period, stats]);
 
   // ── SLA Detail grid columns (with custom renderers) ──────────────────
   const slaColumns = useMemo(() => [
-    { key: 'number', label: 'Number', sortable: true, width: '100px',
-      render: (v) => <span className="font-mono text-xs text-brand-600 font-semibold">{v}</span> },
-    { key: 'shortDescription', label: 'Description', sortable: true, width: '200px',
-      render: (v) => <span className="block truncate max-w-[200px]" title={v}>{v || '—'}</span> },
-    { key: 'priority', label: 'Priority', sortable: true,
+    { key: 'number', label: 'Number', sortable: true, width: '80px',
+      render: (v) => <span className="font-mono text-xs text-brand-600 font-semibold truncate">{v}</span> },
+    { key: 'shortDescription', label: 'Description', sortable: true, width: '140px',
+      render: (v) => <span className="block truncate text-xs text-surface-600" title={v}>{v || '—'}</span> },
+    { key: 'priority', label: 'Priority', sortable: true, width: '60px',
       render: (v) => {
         const cfg = PRIORITY_CONFIG[v] || PRIORITY_CONFIG['4 - Low'];
-        return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border ${cfg.badge}`}>
-          <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />{cfg.short}
+        return <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] font-bold border ${cfg.badge}`}>
+          <span className={`w-1 h-1 rounded-full ${cfg.dot}`} /><span className="truncate">{cfg.short}</span>
         </span>;
       } },
-    { key: 'state', label: 'State', sortable: true,
-      render: (v) => <span className="text-xs text-surface-600">{STATE_MAP[v] || v}</span> },
-    { key: 'assignedTo', label: 'Assigned To', sortable: true,
-      render: (v) => <span className="text-xs text-surface-500 max-w-[120px] truncate block">{v || '—'}</span> },
-    { key: 'createdAt', label: 'Created', sortable: true,
+    { key: 'state', label: 'State', sortable: true, width: '80px',
+      render: (v) => <span className="text-xs text-surface-600 truncate">{STATE_MAP[v] || v}</span> },
+    { key: 'assignedTo', label: 'Assigned To', sortable: true, width: '90px',
+      render: (v) => <span className="text-xs text-surface-500 truncate block" title={v}>{v || '—'}</span> },
+    { key: 'createdAt', label: 'Created', sortable: true, width: '110px',
       render: (v) => <span className="text-xs text-surface-500 whitespace-nowrap">{formatDate(v)}</span> },
-    { key: 'expectedClosure', label: 'Expected Closure', sortable: true,
+    { key: 'expectedClosure', label: 'Expected', sortable: true, width: '110px',
       render: (v) => <span className="text-xs font-semibold text-brand-700 whitespace-nowrap">{v ? formatDate(v) : '—'}</span> },
-    { key: 'closedAt', label: 'Actual Closure', sortable: true,
+    { key: 'closedAt', label: 'Actual', sortable: true, width: '110px',
       render: (v) => <span className="text-xs text-surface-500 whitespace-nowrap">{formatDate(v)}</span> },
-    { key: 'resolutionMinutes', label: 'Resolution', sortable: true, align: 'right',
+    { key: 'resolutionMinutes', label: 'Resolution', sortable: true, align: 'right', width: '80px',
       render: (v) => <span className="text-xs font-semibold text-surface-700">{formatMinutes(v)}</span> },
-    { key: 'targetMinutes', label: 'SLA Target', sortable: true, align: 'right',
+    { key: 'targetMinutes', label: 'Target', sortable: true, align: 'right', width: '70px',
       render: (v) => <span className="text-xs text-surface-500">{formatMinutes(v)}</span> },
-    { key: 'slaVariance', label: 'Variance', sortable: true, align: 'right',
+    { key: 'slaVariance', label: 'Variance', sortable: true, align: 'right', width: '75px',
       render: (variance) => {
         return variance !== null && variance !== undefined
           ? <span className={`text-xs font-semibold ${variance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -336,15 +398,15 @@ export default function ServiceNowSlaReport() {
             </span>
           : <span className="text-xs text-surface-400">—</span>;
       } },
-    { key: 'slaStatus', label: 'SLA Status', sortable: true, align: 'center',
+    { key: 'slaStatus', label: 'Status', sortable: true, align: 'center', width: '85px',
       render: (status) => {
         if (status === 'met') {
-          return <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200"><CheckCircle2 size={10} /> Met</span>;
+          return <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 whitespace-nowrap"><CheckCircle2 size={9} /> Met</span>;
         }
         if (status === 'breached') {
-          return <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200"><XCircle size={10} /> Breached</span>;
+          return <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 whitespace-nowrap"><XCircle size={9} /> Breached</span>;
         }
-        return <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200"><Clock size={10} /> In Progress</span>;
+        return <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 whitespace-nowrap"><Clock size={9} /> Pending</span>;
       }
     },
   ], []);
@@ -352,7 +414,7 @@ export default function ServiceNowSlaReport() {
 
   // ── Render ─────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 space-y-5 animate-fade-in">
+    <div className="px-1 py-6 space-y-5 animate-fade-in">
       {/* ── Report Header ──────────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl border border-surface-200 shadow-sm p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -366,19 +428,16 @@ export default function ServiceNowSlaReport() {
                 <div className="flex items-center gap-3 mt-1 flex-wrap">
                   <span className="text-[11px] text-surface-500">
                     <span className="font-semibold text-surface-600">Generated:</span> {data?.generatedAt ? formatDate(data.generatedAt) : new Date().toLocaleString()}
+                    {data?.timezone && (
+                      <span className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full border border-brand-100">
+                        <Globe size={10} /> {data.timezone}
+                      </span>
+                    )}
                   </span>
                   <span className="w-px h-3 bg-surface-200" />
                   <span className="text-[11px] text-surface-500">
-                    <span className="font-semibold text-surface-600">Period:</span> {data?.startDate || '...'} to {data?.endDate || '...'} ({period.charAt(0).toUpperCase() + period.slice(1)})
+                    <span className="font-semibold text-surface-600">Period:</span> <span className="font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-amber-900">{data?.startDate || '...'} to {data?.endDate || '...'}</span> <span className="text-surface-400">({period.charAt(0).toUpperCase() + period.slice(1)})</span>
                   </span>
-                  {data?.timezone && (
-                    <>
-                      <span className="w-px h-3 bg-surface-200" />
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full border border-brand-100">
-                        <Globe size={10} /> {data.timezone}
-                      </span>
-                    </>
-                  )}
                 </div>
               </div>
             </div>
@@ -473,109 +532,150 @@ export default function ServiceNowSlaReport() {
 
       {!loading && data && (
         <>
-          {/* ── First Row: Reference Information and Stats ──────────────────────────────── */}
-          <div className="grid lg:grid-cols-2 gap-4">
-            {/* First Column: Reference Information */}
-            <div className="bg-white rounded-xl border-2 border-surface-300 shadow-sm p-5">
-              <h2 className="text-sm font-bold text-surface-800 mb-4 flex items-center gap-2">
-                <Clock size={16} className="text-brand-500" />
-                Report Configuration Reference
+          {/* ── First Row: Config Reference (Compact) + Stats Grid + Priority Summary ──────────────────────────────── */}
+          <div className="grid lg:grid-cols-6 gap-3">
+            {/* First Column: Compact Reference Information */}
+            <div className="bg-white rounded-xl border border-surface-200 shadow-sm p-4">
+              <h2 className="text-xs font-bold text-surface-800 mb-3 flex items-center gap-2">
+                <Clock size={14} className="text-brand-500" />
+                Configuration
               </h2>
-              <div className="grid lg:grid-cols-2 gap-6">
-                {/* Business Hours */}
-                <div className="border border-surface-200 rounded-lg p-3">
-                  <h3 className="text-xs font-semibold text-surface-700 uppercase tracking-wider mb-3">Business Days</h3>
-                  <div className="space-y-1.5">
-                    {data.businessHours && data.businessHours.length > 0 ? (
-                      data.businessHours
-                        .filter(day => day.isBusinessDay)
-                        .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
-                        .map(day => {
-                          const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                          return (
-                            <div key={day.dayOfWeek} className="flex items-center justify-between text-xs py-1 border-b border-surface-100">
-                              <span className="text-surface-600 font-medium">{dayNames[day.dayOfWeek]}</span>
-                              <span className="text-surface-500">{day.startTime} - {day.endTime}</span>
-                            </div>
-                          );
-                        })
-                    ) : (
-                      <p className="text-xs text-surface-400 italic">No business hours configured (24/7)</p>
-                    )}
-                  </div>
-                </div>
-                
-                {/* SLA Thresholds */}
-                <div className="border border-surface-200 rounded-lg p-3">
-                  <h3 className="text-xs font-semibold text-surface-700 uppercase tracking-wider mb-3">SLA Targets (Resolution)</h3>
-                  <div className="space-y-1.5">
-                    {data.slaThresholds && data.slaThresholds.length > 0 ? (
-                      data.slaThresholds
-                        .sort((a, b) => (a.priorityValue || a.priority) - (b.priorityValue || b.priority))
-                        .map(sla => (
-                          <div key={sla.priority} className="flex items-center justify-between text-xs py-1 border-b border-surface-100">
-                            <span className="text-surface-600 font-medium">
-                              {sla.priority} 
-                              {sla.priorityValue && sla.priorityValue !== sla.priority && ` (${sla.priorityValue})`}
-                            </span>
-                            <span className="text-surface-500">{formatMinutes(sla.resolutionMinutes)}</span>
+              
+              {/* Business Hours - Compact */}
+              <div className="mb-3 pb-3 border-b border-surface-100">
+                <h3 className="text-[10px] font-semibold text-surface-700 uppercase tracking-wider mb-2">Business Days</h3>
+                <div className="space-y-0.5">
+                  {data.businessHours && data.businessHours.length > 0 ? (
+                    data.businessHours
+                      .filter(day => day.isBusinessDay)
+                      .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
+                      .map(day => {
+                        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                        return (
+                          <div key={day.dayOfWeek} className="flex items-center justify-between text-[10px] py-0.5">
+                            <span className="text-surface-600 font-medium">{dayNames[day.dayOfWeek]}</span>
+                            <span className="text-surface-500">{day.startTime.slice(0, 5)} - {day.endTime.slice(0, 5)}</span>
                           </div>
-                        ))
-                    ) : (
-                      <p className="text-xs text-surface-400 italic">No SLA thresholds configured</p>
-                    )}
-                  </div>
+                        );
+                      })
+                  ) : (
+                    <p className="text-[10px] text-surface-400 italic">24/7</p>
+                  )}
+                </div>
+              </div>
+              
+              {/* SLA Thresholds - Compact */}
+              <div>
+                <h3 className="text-[10px] font-semibold text-surface-700 uppercase tracking-wider mb-2">SLA Targets</h3>
+                <div className="space-y-0.5">
+                  {data.slaThresholds && data.slaThresholds.length > 0 ? (
+                    data.slaThresholds
+                      .sort((a, b) => (a.priorityValue || a.priority) - (b.priorityValue || b.priority))
+                      .map(sla => (
+                        <div key={sla.priority} className="flex items-center justify-between text-[10px] py-0.5">
+                          <span className="text-surface-600 font-medium">{sla.priority}</span>
+                          <span className="text-surface-500">{formatMinutes(sla.resolutionMinutes)}</span>
+                        </div>
+                      ))
+                  ) : (
+                    <p className="text-[10px] text-surface-400 italic">Not configured</p>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Second Column: Stats Cards */}
-            <div className="grid grid-cols-3 gap-2">
-              <StatCard
-                label="Total Incidents"
-                value={stats.total}
-                icon={FileText}
-                color="text-brand-600"
-                bgColor="bg-brand-50"
-                subtext={`${data?.startDate || ''} — ${data?.endDate || ''}`}
-              />
-              <StatCard
-                label="SLA Met"
-                value={stats.met}
-                icon={CheckCircle2}
-                color="text-emerald-600"
-                bgColor="bg-emerald-50"
-                subtext="Within target"
-              />
-              <StatCard
-                label="SLA Breached"
-                value={stats.breached}
-                icon={XCircle}
-                color="text-rose-600"
-                bgColor="bg-rose-50"
-                subtext="Exceeded target"
-              />
-              <StatCard
-                label="Pending"
-                value={stats.pending}
-                icon={Clock}
-                color="text-surface-500"
-                bgColor="bg-surface-100"
-                subtext="Awaiting resolution"
-              />
-              <StatCard
-                label="Overall Compliance"
-                value={stats.compliance !== null ? `${stats.compliance}%` : '—'}
-                icon={TrendingUp}
-                color={stats.compliance >= 90 ? 'text-emerald-600' : stats.compliance >= 70 ? 'text-amber-600' : 'text-rose-600'}
-                bgColor={stats.compliance >= 90 ? 'bg-emerald-50' : stats.compliance >= 70 ? 'bg-amber-50' : 'bg-rose-50'}
-                subtext="Met / (Met + Breached)"
-              />
+            {/* Second Column: Stats as Table */}
+            <div className="bg-white rounded-xl border border-surface-200 shadow-sm p-4">
+              <h2 className="text-xs font-bold text-surface-800 mb-3">SLA Summary</h2>
+              <table className="w-full text-[10px]">
+                <thead>
+                  <tr className="border-b border-surface-200">
+                    <th className="text-left font-semibold text-surface-700 py-2 px-2">Metric</th>
+                    <th className="text-right font-semibold text-surface-700 py-2 px-2">Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-surface-100 hover:bg-surface-50">
+                    <td className="py-2 px-2 text-surface-600 font-medium">Total Incidents</td>
+                    <td className="text-right py-2 px-2 font-bold text-brand-600">{stats.total}</td>
+                  </tr>
+                  <tr className="border-b border-surface-100 hover:bg-surface-50">
+                    <td className="py-2 px-2 text-surface-600 font-medium">SLA Met</td>
+                    <td className="text-right py-2 px-2 font-bold text-emerald-600">{stats.met}</td>
+                  </tr>
+                  <tr className="border-b border-surface-100 hover:bg-surface-50">
+                    <td className="py-2 px-2 text-surface-600 font-medium">SLA Breached</td>
+                    <td className="text-right py-2 px-2 font-bold text-rose-600">{stats.breached}</td>
+                  </tr>
+                  <tr className="border-b border-surface-100 hover:bg-surface-50">
+                    <td className="py-2 px-2 text-surface-600 font-medium">Pending</td>
+                    <td className="text-right py-2 px-2 font-bold text-surface-500">{stats.pending}</td>
+                  </tr>
+                  <tr className="bg-surface-50 hover:bg-surface-100">
+                    <td className="py-2 px-2 text-surface-700 font-semibold">Overall Compliance</td>
+                    <td className="text-right py-2 px-2 font-bold text-lg" style={{color: stats.compliance >= 90 ? '#059669' : stats.compliance >= 70 ? '#d97706' : '#dc2626'}}>
+                      {stats.compliance !== null ? `${stats.compliance}%` : '—'}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Third Column: Breached Incidents Table */}
+            <div className="lg:col-span-2 bg-white rounded-xl border border-surface-200 shadow-sm p-4">
+              <h2 className="text-xs font-bold text-surface-800 mb-3 flex items-center gap-2">
+                <XCircle size={14} className="text-rose-600" />
+                Incidents - SLA Breached
+              </h2>
+              {data?.incidents && data.incidents.filter(inc => inc.slaStatus === 'breached').length > 0 ? (
+                <div className="overflow-y-auto max-h-[280px]">
+                  <table className="w-full text-[10px]">
+                    <thead className="sticky top-0 bg-surface-50/50 border-b border-surface-200">
+                      <tr>
+                        <th className="text-left font-semibold text-surface-700 py-2 px-2 whitespace-nowrap">INC Number</th>
+                        <th className="text-left font-semibold text-surface-700 py-2 px-2 whitespace-nowrap">Created</th>
+                        <th className="text-left font-semibold text-surface-700 py-2 px-2 whitespace-nowrap">Closed</th>
+                        <th className="text-left font-semibold text-surface-700 py-2 px-2 whitespace-nowrap">Status</th>
+                        <th className="text-right font-semibold text-rose-600 py-2 px-2 whitespace-nowrap">SLA Variance</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-surface-50">
+                      {data.incidents.filter(inc => inc.slaStatus === 'breached').map(inc => (
+                        <tr key={inc.number} className="hover:bg-rose-50/30 transition-colors">
+                          <td className="py-2 px-2 font-bold text-rose-700 whitespace-nowrap">{inc.number}</td>
+                          <td className="py-2 px-2 text-surface-500 whitespace-nowrap text-[9px]">
+                            {inc.createdAt ? formatDate(inc.createdAt) : '—'}
+                          </td>
+                          <td className="py-2 px-2 text-surface-500 whitespace-nowrap text-[9px]">
+                            {inc.closedAt ? formatDate(inc.closedAt) : '—'}
+                          </td>
+                          <td className="py-2 px-2 text-surface-600 truncate" title={STATE_MAP[inc.state] || inc.state}>
+                            {STATE_MAP[inc.state] || inc.state}
+                          </td>
+                          <td className="text-right py-2 px-2 font-semibold text-rose-600 whitespace-nowrap">
+                            {inc.slaVariance !== null && inc.slaVariance !== undefined ? (
+                              <>
+                                {inc.slaVariance >= 0 ? '+' : ''}{formatMinutes(inc.slaVariance)}
+                              </>
+                            ) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-6">
+                  <p className="text-[10px] text-surface-400 italic">No breached incidents</p>
+                </div>
+              )}
+            </div>
+
+            {/* Fourth Column: Priority Summary Table */}
+            <div className="lg:col-span-2">
+              <PrioritySummaryTable summaryByPriority={data.summaryByPriority} />
             </div>
           </div>
-
-          {/* ── Priority Summary Table ──────────────────────────────────────── */}
-          <PrioritySummaryTable summaryByPriority={data.summaryByPriority} />
 
           {/* ── No data ────────────────────────────────────────────────────── */}
           {data.totalIncidents === 0 && (
@@ -588,18 +688,29 @@ export default function ServiceNowSlaReport() {
 
           {/* ── Incident Detail Grid ───────────────────────────────────────── */}
           {data?.incidents && data.incidents.length > 0 && (
-            <DataTable
-              columns={slaColumns}
-              data={data.incidents}
-              loading={loading}
-              pageSize={20}
-              searchable={true}
-              searchPlaceholder="Search incidents..."
-              emptyMessage="No incidents found for this period."
-              compact={true}
-              defaultSort={{ key: 'number', order: 'desc' }}
-              rowKeyField="number"
-            />
+            <div className="space-y-3">
+              <div className="bg-white rounded-xl border border-surface-200 shadow-sm p-4">
+                <h2 className="text-sm font-bold text-surface-800 flex items-center gap-2">
+                  <FileText size={16} className="text-brand-500" />
+                  Resolution SLA Details
+                </h2>
+                <p className="text-xs text-surface-500 mt-1">
+                  Provides the Resolution SLA details for all incidents within the selected period: <span className="font-semibold text-surface-700">{data?.startDate || '...'} to {data?.endDate || '...'}</span>
+                </p>
+              </div>
+              <DataTable
+                columns={slaColumns}
+                data={data.incidents}
+                loading={loading}
+                pageSize={20}
+                searchable={true}
+                searchPlaceholder="Search incidents..."
+                emptyMessage="No incidents found for this period."
+                compact={true}
+                defaultSort={{ key: 'number', order: 'desc' }}
+                rowKeyField="number"
+              />
+            </div>
           )}
         </>
       )}

@@ -323,20 +323,9 @@ export async function getDashboardStats(conn, incidentConfig, tz) {
 
     // SLA resolution compliance by period
     const threshold = resolveSlaThreshold(pRaw, slaByLabel, slaByPriorityValue);
-    
-    // For closed incidents: use actual closure time
     if (createdDate && closedDate && !isNaN(createdDate.getTime()) && !isNaN(closedDate.getTime())) {
       const resMinutes = calcBusinessMinutesBetween(createdDate, closedDate, hoursMap, tz);
       const met = resMinutes <= threshold.resolutionMinutes;
-
-      if (createdDate >= todayStart) { slaRes.today.total++; if (met) slaRes.today.met++; else slaRes.today.notMet++; }
-      if (createdDate >= weekStart)  { slaRes.week.total++;  if (met) slaRes.week.met++;  else slaRes.week.notMet++;  }
-      if (createdDate >= monthStart) { slaRes.month.total++; if (met) slaRes.month.met++; else slaRes.month.notMet++; }
-    }
-    // For open incidents: use current time to calculate live SLA status
-    else if (createdDate && !isNaN(createdDate.getTime()) && !isClosed) {
-      const elapsedMinutes = calcBusinessMinutesBetween(createdDate, now, hoursMap, tz);
-      const met = elapsedMinutes <= threshold.resolutionMinutes;
 
       if (createdDate >= todayStart) { slaRes.today.total++; if (met) slaRes.today.met++; else slaRes.today.notMet++; }
       if (createdDate >= weekStart)  { slaRes.week.total++;  if (met) slaRes.week.met++;  else slaRes.week.notMet++;  }
@@ -856,10 +845,16 @@ export async function getSlaResolutionReport(conn, incidentConfig, tz, filters =
       const isOpen = !['6', '7', '8'].includes(String(state));
       if (isOpen) {
         const elapsedMinutes = calcBusinessMinutesBetween(createdDate, now, hoursMap, tz);
-        slaMet              = elapsedMinutes <= threshold.resolutionMinutes;
         slaVariance         = threshold.resolutionMinutes - elapsedMinutes;
-        slaStatus           = slaMet === true ? 'met' : slaMet === false ? 'breached' : 'pending';
-        log.info(`[SLA] Open incident ${snowVal(inc.number)}: state=${state}, elapsedMinutes=${elapsedMinutes}, target=${threshold.resolutionMinutes}, variance=${slaVariance}, met=${slaMet}`);
+        // Only set slaMet if breached; keep null (pending) if within SLA window
+        if (elapsedMinutes > threshold.resolutionMinutes) {
+          slaMet = false;
+          slaStatus = 'breached';
+        } else {
+          slaMet = null;  // Keep as pending
+          slaStatus = 'pending';
+        }
+        log.info(`[SLA] Open incident ${snowVal(inc.number)}: state=${state}, elapsedMinutes=${elapsedMinutes}, target=${threshold.resolutionMinutes}, variance=${slaVariance}, slaMet=${slaMet}, status=${slaStatus}`);
       }
     }
 

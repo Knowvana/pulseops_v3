@@ -620,8 +620,10 @@ export default function UptimeReportView() {
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs text-surface-400 truncate">{t.summary.pollsExpectedActuals}</p>
-                        <p className={`text-sm font-bold ${match ? 'text-emerald-700' : 'text-red-700'}`}>
-                          {expected.toLocaleString()}/{actual.toLocaleString()}
+                        <p className="text-sm font-bold">
+                          <span className="text-surface-700">{expected.toLocaleString()}</span>
+                          <span className="text-surface-400 mx-1">/</span>
+                          <span className={match ? 'text-emerald-700' : 'text-red-700'}>{actual.toLocaleString()}</span>
                         </p>
                       </div>
                     </div>
@@ -705,9 +707,9 @@ export default function UptimeReportView() {
                           <td className="px-3 py-2.5 text-center"><VerdictBadge verdict={app.slaVerdict} /></td>
                           <td className="px-3 py-2.5 text-center font-medium relative">
                             <div className="absolute left-0 top-0 h-full w-px bg-gradient-to-b from-transparent via-surface-300 to-transparent"></div>
-                            <span className="text-surface-500">{report.expectedPollsElapsed?.toLocaleString()}</span>
+                            <span className="text-surface-700">{report.expectedPollsElapsed?.toLocaleString()}</span>
                             <span className="text-surface-400">/</span>
-                            <span className={report.actualPollsElapsed >= report.expectedPollsElapsed ? 'text-surface-700' : 'text-amber-600'}>{report.actualPollsElapsed?.toLocaleString()}</span>
+                            <span className={report.actualPollsElapsed >= report.expectedPollsElapsed ? 'text-emerald-600' : 'text-red-600'}>{report.actualPollsElapsed?.toLocaleString()}</span>
                           </td>
                           <td className="px-3 py-2.5 text-center">
                             <span className={`font-bold ${(app.pollCoveragePercent || 0) >= 100 ? 'text-emerald-600' : (app.pollCoveragePercent || 0) >= 95 ? 'text-amber-600' : 'text-red-600'}`}>
@@ -810,7 +812,7 @@ export default function UptimeReportView() {
                                       <div className="text-xs text-surface-500 truncate max-w-xs">{app.url}</div>
                                     </div>
                                   </td>
-                                <td className="px-4 py-3 text-center text-surface-600">{globalExpected}</td>
+                                <td className="px-4 py-3 text-center text-surface-700">{globalExpected}</td>
                                 <td className="px-4 py-3 text-center font-bold">
                                   <span className={missed === 0 ? 'text-emerald-600' : 'text-red-600'}>
                                     {actual}

@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PulseOps V3 — Management Presentation</title>
+<style>
+  :root {
+    --brand: #2563eb;
+    --brand-dark: #1d4ed8;
+    --brand-light: #dbeafe;
+    --surface-50: #f8fafc;
+    --surface-100: #f1f5f9;
+    --surface-200: #e2e8f0;
+    --surface-300: #cbd5e1;
+    --surface-600: #475569;
+    --surface-700: #334155;
+    --surface-800: #1e293b;
+    --surface-900: #0f172a;
+    --green: #059669;
+    --green-light: #d1fae5;
+    --amber: #d97706;
+    --amber-light: #fef3c7;
+    --rose: #dc2626;
+    --rose-light: #ffe4e6;
+    --teal: #0d9488;
+    --teal-light: #ccfbf1;
+    --purple: #7c3aed;
+    --purple-light: #ede9fe;
+    --indigo: #4f46e5;
+    --indigo-light: #e0e7ff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--surface-100); color: var(--surface-800); }
+
+  /* Slide container */
+  .slide {
+    width: 1024px; min-height: 576px; margin: 32px auto; background: white;
+    border-radius: 16px; box-shadow: 0 4px 32px rgba(0,0,0,0.08);
+    padding: 48px 56px; page-break-after: always; position: relative; overflow: hidden;
+  }
+  .slide::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+    background: linear-gradient(90deg, var(--brand), var(--teal), var(--green));
+  }
+
+  /* Title slide special */
+  .slide-title {
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    text-align: center; min-height: 576px;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 40%, #0f172a 100%);
+    color: white;
+  }
+  .slide-title::before { background: linear-gradient(90deg, var(--teal), var(--brand), var(--purple)); height: 5px; }
+  .slide-title h1 { color: white; font-size: 44px; letter-spacing: -0.5px; }
+  .slide-title .subtitle { color: #94a3b8; }
+  .slide-title .tag { opacity: 0.9; }
+
+  /* Section divider slide */
+  .slide-section {
+    display: flex; flex-direction: column; justify-content: center; align-items: flex-start;
+    min-height: 576px;
+    background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%);
+    color: white;
+  }
+  .slide-section::before { background: linear-gradient(90deg, white, rgba(255,255,255,0.3)); }
+  .slide-section h1 { color: white; font-size: 40px; margin-bottom: 16px; }
+  .slide-section p { color: rgba(255,255,255,0.8); font-size: 18px; max-width: 600px; }
+  .slide-section .section-num { font-size: 120px; font-weight: 900; color: rgba(255,255,255,0.08); position: absolute; right: 56px; bottom: 40px; }
+
+  /* Typography */
+  h1 { font-size: 32px; font-weight: 800; color: var(--surface-900); margin-bottom: 8px; }
+  h2 { font-size: 24px; font-weight: 700; color: var(--brand); margin-bottom: 20px; }
+  h3 { font-size: 16px; font-weight: 700; color: var(--surface-800); margin-bottom: 8px; }
+  p { font-size: 14px; line-height: 1.7; color: var(--surface-600); margin-bottom: 10px; }
+  .subtitle { font-size: 18px; color: var(--surface-600); font-weight: 400; margin-bottom: 32px; }
+  .tag { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.8px; padding: 4px 12px; border-radius: 99px; margin-right: 6px; }
+  .tag-brand { background: var(--brand-light); color: var(--brand); }
+  .tag-green { background: var(--green-light); color: var(--green); }
+  .tag-amber { background: var(--amber-light); color: var(--amber); }
+  .tag-teal  { background: var(--teal-light); color: var(--teal); }
+  .tag-purple { background: var(--purple-light); color: var(--purple); }
+  .tag-rose { background: var(--rose-light); color: var(--rose); }
+  .tag-dark { background: var(--surface-900); color: white; }
+
+  /* Grid */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 14px; }
+  .grid-5 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 12px; }
+
+  /* Cards */
+  .card {
+    background: var(--surface-50); border: 1px solid var(--surface-200);
+    border-radius: 12px; padding: 18px;
+  }
+  .card-brand { border-left: 4px solid var(--brand); }
+  .card-green { border-left: 4px solid var(--green); }
+  .card-amber { border-left: 4px solid var(--amber); }
+  .card-teal  { border-left: 4px solid var(--teal); }
+  .card-purple { border-left: 4px solid var(--purple); }
+  .card-rose { border-left: 4px solid var(--rose); }
+  .card h3 { font-size: 14px; margin-bottom: 6px; }
+  .card p { font-size: 12px; margin-bottom: 0; }
+
+  /* Highlight card */
+  .highlight-card {
+    background: linear-gradient(135deg, var(--brand-light), white);
+    border: 2px solid var(--brand);
+    border-radius: 14px; padding: 20px; text-align: center;
+  }
+  .highlight-card .big-num { font-size: 42px; font-weight: 900; color: var(--brand); line-height: 1; }
+  .highlight-card .label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--surface-600); margin-top: 6px; }
+
+  /* Stat */
+  .stat { text-align: center; padding: 14px; background: var(--surface-50); border-radius: 12px; border: 1px solid var(--surface-200); }
+  .stat-value { font-size: 32px; font-weight: 900; color: var(--brand); line-height: 1.1; }
+  .stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--surface-600); margin-top: 6px; }
+
+  /* Lists */
+  ul { padding-left: 18px; margin-bottom: 10px; }
+  li { font-size: 13px; line-height: 1.9; color: var(--surface-700); }
+  li strong { color: var(--surface-900); }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { background: var(--surface-100); color: var(--surface-600); font-weight: 700;
+    text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px;
+    padding: 10px 12px; text-align: left; border-bottom: 2px solid var(--surface-200); }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--surface-100); color: var(--surface-700); }
+  tr:hover td { background: var(--surface-50); }
+
+  /* Timeline */
+  .timeline { position: relative; padding-left: 28px; }
+  .timeline::before { content: ''; position: absolute; left: 8px; top: 4px; bottom: 4px; width: 2px; background: var(--surface-200); }
+  .timeline-item { position: relative; margin-bottom: 14px; }
+  .timeline-item::before { content: ''; position: absolute; left: -24px; top: 4px; width: 12px; height: 12px;
+    border-radius: 50%; background: var(--brand); border: 2px solid white; box-shadow: 0 0 0 2px var(--brand-light); }
+  .timeline-item h4 { font-size: 13px; font-weight: 700; color: var(--surface-800); margin-bottom: 2px; }
+  .timeline-item p { font-size: 11px; color: var(--surface-600); margin-bottom: 0; }
+
+  /* Process flow */
+  .flow { display: flex; align-items: center; gap: 8px; }
+  .flow-step { flex: 1; text-align: center; padding: 12px 8px; background: var(--surface-50);
+    border: 1px solid var(--surface-200); border-radius: 10px; font-size: 11px; color: var(--surface-700); }
+  .flow-step strong { display: block; font-size: 12px; color: var(--surface-900); margin-bottom: 2px; }
+  .flow-arrow { font-size: 18px; color: var(--brand); font-weight: 700; flex-shrink: 0; }
+
+  /* Code block */
+  .code-block {
+    background: var(--surface-900); border-radius: 10px; padding: 16px 20px;
+    font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; line-height: 1.8; color: #94a3b8;
+  }
+  .code-block .keyword { color: #60a5fa; }
+  .code-block .string { color: #34d399; }
+  .code-block .comment { color: #fbbf24; }
+
+  /* Value proposition */
+  .value-card {
+    background: white; border-radius: 14px; padding: 20px; text-align: center;
+    border: 2px solid var(--surface-200); transition: all 0.2s;
+  }
+  .value-card:hover { border-color: var(--brand); box-shadow: 0 4px 20px rgba(37,99,235,0.1); }
+  .value-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center;
+    justify-content: center; margin: 0 auto 12px; font-size: 22px; }
+  .value-icon-brand { background: var(--brand-light); }
+  .value-icon-green { background: var(--green-light); }
+  .value-icon-amber { background: var(--amber-light); }
+  .value-icon-teal { background: var(--teal-light); }
+  .value-icon-purple { background: var(--purple-light); }
+
+  /* ROI table */
+  .roi-row { display: flex; align-items: center; padding: 10px 16px; border-radius: 10px; margin-bottom: 8px; }
+  .roi-row:nth-child(odd) { background: var(--surface-50); }
+  .roi-label { flex: 1; font-size: 13px; font-weight: 600; color: var(--surface-800); }
+  .roi-before { width: 120px; text-align: center; font-size: 13px; color: var(--rose); font-weight: 700; }
+  .roi-after { width: 120px; text-align: center; font-size: 13px; color: var(--green); font-weight: 700; }
+  .roi-savings { width: 120px; text-align: center; font-size: 13px; color: var(--brand); font-weight: 800; }
+
+  /* Footer */
+  .slide-footer {
+    position: absolute; bottom: 16px; left: 56px; right: 56px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 10px; color: var(--surface-600); opacity: 0.5;
+  }
+  .slide-num { font-weight: 700; font-size: 11px; }
+
+  /* Print */
+  @media print {
+    body { background: white; }
+    .slide { box-shadow: none; margin: 0; border-radius: 0; page-break-after: always; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 1 — Title Slide -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide slide-title">
+  <div style="margin-bottom:28px;">
+    <span class="tag tag-teal">Enterprise Platform</span>
+    <span class="tag tag-brand">Version 3.0</span>
+    <span class="tag tag-purple">Modular Architecture</span>
+  </div>
+  <h1 style="font-size:52px; margin-bottom:16px; letter-spacing:-1px;">PulseOps V3</h1>
+  <p class="subtitle" style="max-width:640px; font-size:20px; color:#94a3b8; margin-bottom:36px;">
+    Enterprise Operations Intelligence Platform<br>
+    <span style="font-size:15px; color:#64748b;">Modular, Extensible, Zero-Downtime — Built for Scale</span>
+  </p>
+  <div style="display:flex; gap:32px; margin-top:12px; font-size:12px; color:#64748b;">
+    <div><strong style="color:#94a3b8;">Architecture</strong><br>Microkernel + Micro-Frontends</div>
+    <div style="border-left:1px solid #334155; padding-left:32px;"><strong style="color:#94a3b8;">Stack</strong><br>React 19 · Express · PostgreSQL</div>
+    <div style="border-left:1px solid #334155; padding-left:32px;"><strong style="color:#94a3b8;">Deployment</strong><br>Zero-Downtime Hot-Drop</div>
+  </div>
+  <div class="slide-footer" style="color:#475569;"><span>Confidential — Management Presentation</span><span class="slide-num">1</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 2 — Executive Summary -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Executive Summary</h2>
+  <p style="font-size:15px; line-height:1.8; margin-bottom:20px;">
+    PulseOps V3 is a <strong>purpose-built enterprise operations intelligence platform</strong> that unifies
+    system health monitoring, incident management, SLA compliance tracking, and automated operations into
+    a single solution. It replaces fragmented manual processes and Excel-based reporting
+    with <strong>real-time dashboards</strong>, <strong>automated workflows</strong>, and <strong>enterprise-grade reporting</strong>.
+  </p>
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div class="card card-brand">
+      <h3>🏗️ Enterprise Core Platform</h3>
+      <p>Built with enterprise-grade security (JWT, RBAC, rate limiting), centralized structured logging with DB persistence, modular plug-and-play architecture with zero-downtime hot-deployment, and a shared design system for rapid module development.</p>
+    </div>
+    <div class="card card-green">
+      <h3>📦 2 Production-Ready Modules</h3>
+      <p><strong>System HealthCheck</strong> — Real-time URL monitoring, uptime SLA reports, poll verification, and planned downtime integration.<br>
+      <strong>ServiceNow ITSM</strong> — Incident management, automated acknowledgment, intelligent SLA reports with business-hour calculations.</p>
+    </div>
+  </div>
+  <div style="background:linear-gradient(135deg, var(--purple-light), var(--brand-light)); border-radius:12px; padding:16px 24px; margin-bottom:16px;">
+    <h3 style="color:var(--purple); margin-bottom:8px; font-size:14px;">� Future Scope — Work In Progress</h3>
+    <div class="grid-3" style="gap:12px;">
+      <div>
+        <p style="font-size:12px; margin:0;"><strong>Sailpoint IIQ Module</strong><br>Monitor Sailpoint systems, access requests, tasks, RACF request provisioning. Direct PGSQL database integration for data monitoring.</p>
+      </div>
+      <div>
+        <p style="font-size:12px; margin:0;"><strong>Forgerock IGA Module</strong><br>Campaign monitoring, reconciliation tracking, certification workflows. Direct ElasticSearch and PGSQL backend database integration.</p>
+      </div>
+      <div>
+        <p style="font-size:12px; margin:0;"><strong>Database Monitoring</strong><br>Direct integration with PostgreSQL and ElasticSearch databases used by Forgerock IGA and Sailpoint IIQ for real-time data monitoring.</p>
+      </div>
+    </div>
+  </div>
+  <div class="grid-3">
+    <div class="stat"><div class="stat-value" style="color:var(--brand);">Modular</div><div class="stat-label">Plug & Play Architecture</div></div>
+    <div class="stat"><div class="stat-value" style="color:var(--green);">Zero</div><div class="stat-label">Downtime Deployments</div></div>
+    <div class="stat"><div class="stat-value" style="color:var(--teal);">GKE</div><div class="stat-label">Kubernetes Ready</div></div>
+  </div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">2</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 3 — The Problem We Solve -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>The Problem We Solve</h2>
+  <p style="font-size:14px; margin-bottom:16px;">Operations teams manage a <strong>complex ecosystem</strong> of systems — GCP, Kubernetes, Workloads, Dataflow jobs, PGSQL databases, Sailpoint IIQ, Forgerock IGA — with <strong>no unified automated monitoring</strong> available today:</p>
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div>
+      <div class="card card-rose" style="margin-bottom:12px;">
+        <h3>❌ No Unified Monitoring</h3>
+        <p>Operations must monitor GCP infrastructure, Kubernetes clusters, Workloads, Dataflow jobs, PGSQL databases, and identity systems separately. No single platform exists to consolidate all systems in one place.</p>
+      </div>
+      <div class="card card-rose" style="margin-bottom:12px;">
+        <h3>❌ No Automated Incident Acknowledgment</h3>
+        <p>Incidents sit in "New" status until manually acknowledged. There is no automated acknowledgment process today — leading to delayed response times and SLA breaches.</p>
+      </div>
+      <div class="card card-rose">
+        <h3>❌ No Automated SLA Reports</h3>
+        <p>Client requires Uptime SLA Reports and Incident SLA Reports that are not available today. Monthly reports involve days of manual data gathering, calculation, and formatting.</p>
+      </div>
+    </div>
+    <div>
+      <div class="card card-rose" style="margin-bottom:12px;">
+        <h3>❌ No Intelligent SLA Calculation</h3>
+        <p>SLA calculations today do not account for business hours. Incidents resolved outside business hours inflate resolution times unfairly. There is no business-hour-aware SLA engine.</p>
+      </div>
+      <div class="card card-rose" style="margin-bottom:12px;">
+        <h3>❌ No Uptime Monitoring with Downtime Exclusion</h3>
+        <p>Application uptime is measured without considering planned maintenance. Change requests and ServiceNow maintenance windows are not factored in — resulting in inaccurate SLA numbers.</p>
+      </div>
+      <div class="card card-rose">
+        <h3>❌ No Proactive System Health Visibility</h3>
+        <p>Application availability is measured reactively — only after users report outages. No automated minute-by-minute polling or historical uptime trend tracking exists.</p>
+      </div>
+    </div>
+  </div>
+  <div style="background:var(--rose-light); border:1px solid var(--rose); border-radius:10px; padding:12px 16px; text-align:center;">
+    <p style="font-size:13px; color:var(--rose); font-weight:700; margin:0;">
+      ⚠️ Without unified monitoring, operations teams spend <strong>significant manual effort</strong> switching between systems.
+      Late incident response adds <strong>30-40% to resolution time</strong> and risks SLA penalties.
+    </p>
+  </div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">3</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 4 — Our Solution: PulseOps V3 -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Our Solution: PulseOps V3</h2>
+  <p style="font-size:14px; margin-bottom:20px;">A <strong>unified operations intelligence platform</strong> that addresses every gap with automation, intelligence, and extensibility:</p>
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div>
+      <div class="card card-green" style="margin-bottom:12px;">
+        <h3>✅ Unified Monitoring Dashboard</h3>
+        <p>Single pane of glass for all systems — applications, services, incidents, SLA compliance. Real-time SSE updates. No more switching between tools.</p>
+      </div>
+      <div class="card card-green" style="margin-bottom:12px;">
+        <h3>✅ Automated Incident Acknowledgment</h3>
+        <p>Background poller auto-acknowledges new incidents within minutes. Zero manual effort. Configurable frequency, message, and full audit trail.</p>
+      </div>
+      <div class="card card-green">
+        <h3>✅ Automated SLA Reports (Client Deliverables)</h3>
+        <p>One-click Uptime SLA Report, Incident Resolution SLA Report, and Incident Response SLA Report. PDF export ready for client delivery.</p>
+      </div>
+    </div>
+    <div>
+      <div class="card card-green" style="margin-bottom:12px;">
+        <h3>✅ Intelligent Business-Hour SLA Calculation</h3>
+        <p>SLA resolution and response times calculated using <strong>business hours only</strong> — weekends and off-hours excluded. Per-priority thresholds (P1: 4h, P2: 8h, P3: 24h, P4: 72h). Fair, accurate SLA metrics.</p>
+      </div>
+      <div class="card card-green" style="margin-bottom:12px;">
+        <h3>✅ Intelligent Uptime with Planned Downtime Exclusion</h3>
+        <p>Uptime monitoring automatically checks ServiceNow change requests and maintenance windows. Planned downtime is excluded from SLA calculations — ensuring accurate, fair uptime numbers.</p>
+      </div>
+      <div class="card card-green">
+        <h3>✅ Modular & Extensible — Future Ready</h3>
+        <p>Add new monitoring modules (Sailpoint, Forgerock IGA, PGSQL, ElasticSearch) as plug-and-play extensions. No code changes to existing platform. Zero downtime deployment.</p>
+      </div>
+    </div>
+  </div>
+  <div style="background:var(--green-light); border:1px solid var(--green); border-radius:10px; padding:12px 16px; text-align:center;">
+    <p style="font-size:13px; color:var(--green); font-weight:700; margin:0;">
+      🚀 PulseOps V3 transforms operations from <strong>reactive firefighting</strong> to <strong>proactive intelligence-driven management</strong>.
+    </p>
+  </div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">4</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 5 — Value Proposition & ROI -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Value Proposition & Operational Impact</h2>
+  <p style="font-size:13px; margin-bottom:16px;">PulseOps V3 fills <strong>critical operational gaps</strong> that exist today — delivering automation, intelligence, and client-ready reporting:</p>
+  <div style="margin-bottom:16px;">
+    <div style="display:flex; border-bottom:2px solid var(--surface-200); padding-bottom:8px; margin-bottom:8px;">
+      <div class="roi-label" style="font-weight:800; color:var(--surface-600); font-size:11px; text-transform:uppercase; letter-spacing:0.5px;">Capability</div>
+      <div class="roi-before" style="font-weight:800; color:var(--surface-600); font-size:11px; text-transform:uppercase;">Today</div>
+      <div class="roi-after" style="font-weight:800; color:var(--surface-600); font-size:11px; text-transform:uppercase;">With PulseOps</div>
+      <div class="roi-savings" style="font-weight:800; color:var(--surface-600); font-size:11px; text-transform:uppercase;">Impact</div>
+    </div>
+    <div class="roi-row">
+      <div class="roi-label">Incident Acknowledgment</div>
+      <div class="roi-before">Not automated</div>
+      <div class="roi-after">Auto &lt; 1 min</div>
+      <div class="roi-savings">Fully automated</div>
+    </div>
+    <div class="roi-row">
+      <div class="roi-label">Incident SLA Reports</div>
+      <div class="roi-before">Not available</div>
+      <div class="roi-after">1-click generation</div>
+      <div class="roi-savings">Client deliverable</div>
+    </div>
+    <div class="roi-row">
+      <div class="roi-label">System Uptime SLA Report</div>
+      <div class="roi-before">Not available</div>
+      <div class="roi-after">Automated monthly</div>
+      <div class="roi-savings">Client deliverable</div>
+    </div>
+    <div class="roi-row">
+      <div class="roi-label">SLA Calculation Method</div>
+      <div class="roi-before">No business-hour logic</div>
+      <div class="roi-after">Business hours only</div>
+      <div class="roi-savings">Fair & accurate</div>
+    </div>
+    <div class="roi-row">
+      <div class="roi-label">Downtime Detection</div>
+      <div class="roi-before">Reactive (user reports)</div>
+      <div class="roi-after">60-sec auto-polling</div>
+      <div class="roi-savings">Proactive detection</div>
+    </div>
+    <div class="roi-row">
+      <div class="roi-label">Monitoring Consolidation</div>
+      <div class="roi-before">Multiple disconnected systems</div>
+      <div class="roi-after">1 unified platform</div>
+      <div class="roi-savings">Single pane of glass</div>
+    </div>
+  </div>
+  <div class="grid-3">
+    <div class="highlight-card">
+      <div class="big-num" style="color:var(--green);">100%</div>
+      <div class="label">Automated Incident Ack</div>
+    </div>
+    <div class="highlight-card">
+      <div class="big-num" style="color:var(--brand);">500+</div>
+      <div class="label">FTE Hours Saved Per Year</div>
+    </div>
+    <div class="highlight-card">
+      <div class="big-num" style="color:var(--teal);">3</div>
+      <div class="label">New Client Reports Delivered</div>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">5</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 6 — Client Value Delivery -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Client Value Delivery</h2>
+  <p style="font-size:14px; margin-bottom:20px;">PulseOps V3 delivers measurable value across <strong>three key dimensions</strong> for both our organization and the client:</p>
+  <div class="grid-3" style="margin-bottom:20px;">
+    <div style="text-align:center;">
+      <div class="value-icon value-icon-brand" style="margin-bottom:12px; margin-left:auto; margin-right:auto;">⏱️</div>
+      <h3 style="color:var(--brand); margin-bottom:8px;">Automation</h3>
+      <ul style="text-align:left; padding-left:16px;">
+        <li><strong>Auto-acknowledge</strong> incidents (was manual)</li>
+        <li><strong>Auto-generate</strong> SLA reports (was unavailable)</li>
+        <li><strong>Auto-monitor</strong> system uptime (was reactive)</li>
+        <li><strong>Auto-exclude</strong> planned downtime from SLA</li>
+      </ul>
+    </div>
+    <div style="text-align:center;">
+      <div class="value-icon value-icon-green" style="margin-bottom:12px; margin-left:auto; margin-right:auto;">�</div>
+      <h3 style="color:var(--green); margin-bottom:8px;">Client Reports</h3>
+      <ul style="text-align:left; padding-left:16px;">
+        <li><strong>Monthly Uptime SLA Report</strong> — new</li>
+        <li><strong>Incident Resolution SLA Report</strong> — new</li>
+        <li><strong>Incident Response SLA Report</strong> — new</li>
+        <li><strong>Business-hour SLA calculation</strong> — intelligent</li>
+      </ul>
+    </div>
+    <div style="text-align:center;">
+      <div class="value-icon value-icon-purple" style="margin-bottom:12px; margin-left:auto; margin-right:auto;">🏆</div>
+      <h3 style="color:var(--purple); margin-bottom:8px;">Innovation & Efficiency</h3>
+      <ul style="text-align:left; padding-left:16px;">
+        <li><strong>Unified</strong> monitoring for all systems</li>
+        <li><strong>Reduce</strong> manual FTE effort significantly</li>
+        <li><strong>Prevent</strong> SLA breaches proactively</li>
+        <li><strong>Extensible</strong> for future system integrations</li>
+      </ul>
+    </div>
+  </div>
+  <div style="background:linear-gradient(135deg, var(--brand-light), var(--purple-light)); border-radius:12px; padding:16px 24px;">
+    <h3 style="color:var(--brand); margin-bottom:8px; font-size:14px;">🎯 Strategic Value for the Organization</h3>
+    <div class="grid-2" style="gap:12px;">
+      <p style="font-size:12px; margin:0;"><strong>Reusable Asset:</strong> Deploy across multiple client engagements. Each deployment generates value without rebuilding from scratch. Modular design allows client-specific customization.</p>
+      <p style="font-size:12px; margin:0;"><strong>Innovation Showcase:</strong> Demonstrates our ability to build enterprise-grade platforms with cutting-edge architecture — strengthens proposals and client trust.</p>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">6</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 7 — Section Divider: What We Built -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide slide-section">
+  <span class="tag" style="background:rgba(255,255,255,0.2); color:white; margin-bottom:20px;">PART II</span>
+  <h1>What We Built</h1>
+  <p>A deep dive into the platform architecture, core capabilities, and production-ready modules that power PulseOps V3.</p>
+  <div class="section-num">II</div>
+  <div class="slide-footer" style="color:rgba(255,255,255,0.4);"><span>Confidential — Management Presentation</span><span class="slide-num">7</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 8 — Platform Architecture -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Platform Architecture</h2>
+  <p style="font-size:13px; margin-bottom:16px;">PulseOps V3 uses a <strong>Microkernel + Micro-Frontend</strong> architecture — a thin core platform with self-contained, hot-deployable modules.</p>
+  <div class="code-block" style="margin-bottom:16px;">
+<pre style="margin:0; white-space:pre; font-size:12px;">
+<span class="comment">┌──────────────────────────────────────────────────────────────────────┐</span>
+<span class="comment">│                    PulseOps V3 — Platform Architecture               │</span>
+<span class="comment">├──────────────────────────────────────────────────────────────────────┤</span>
+│                                                                      │
+│  <span class="keyword">BROWSER</span>                                                              │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐      │
+│  │  <span class="string">Core Platform</span>   │  │ <span class="comment">HealthCheck Mod</span> │  │ <span class="comment">ServiceNow Mod</span>  │      │
+│  │  Admin Dashboard │  │  Dashboard      │  │  Dashboard      │      │
+│  │  Module Manager  │  │  Uptime Report  │  │  Incidents      │      │
+│  │  Log Manager     │  │  Applications   │  │  SLA Reports    │      │
+│  │  Settings/Auth   │  │  Downtime       │  │  Analytics      │      │
+│  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘      │
+│           │          <span class="keyword">dynamic import()</span>          │                      │
+│  ┌────────┴──────────────────────────────────┴───────────────┐      │
+│  │               <span class="keyword">moduleRegistry.js</span> — Hot-Drop Loader           │      │
+│  └────────────────────────────┬───────────────────────────────┘      │
+│                               │                                      │
+│  <span class="keyword">SERVER</span>   <span class="string">Express.js API</span>        │  <span class="keyword">JWT Auth</span> · <span class="keyword">RBAC</span> · <span class="keyword">Rate Limit</span>    │
+│  ┌────────────────────────────┴───────────────────────────────┐      │
+│  │  <span class="keyword">Core Routes</span>  │  <span class="comment">HC Module Routes</span>  │  <span class="comment">SN Module Routes</span>     │      │
+│  │  Auth/Users   │  Poller/Reports   │  Incidents/SLA       │      │
+│  │  Database     │  Applications     │  Auto-Ack/Sync       │      │
+│  │  Modules      │  SSE Events       │  RITM Reports        │      │
+│  └──────────┬────┴───────────┬───────┴──────────┬────────────┘      │
+│             │                │                  │                    │
+│  <span class="keyword">DATABASE</span>   <span class="string">PostgreSQL</span>                                                  │
+│  ┌──────────┴────────────────┴──────────────────┴────────────┐      │
+│  │  Core Tables (9)  │  HC Tables (6)  │  SN Tables (5)     │      │
+│  └───────────────────────────────────────────────────────────┘      │
+<span class="comment">└──────────────────────────────────────────────────────────────────────┘</span>
+</pre>
+  </div>
+  <div class="grid-3">
+    <div class="card card-brand"><h3>Unified Monorepo</h3><p>Single codebase. One package.json. React + Express + PostgreSQL. No microservice complexity.</p></div>
+    <div class="card card-green"><h3>Hot-Drop Modules</h3><p>Build → drop bundle → enable via UI. No restart. No rebuild. Zero downtime deployment.</p></div>
+    <div class="card card-teal"><h3>K8s Ready</h3><p>Stateless API. DB-only state. Session management via PostgreSQL. Multi-pod safe.</p></div>
+  </div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">8</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 9 — Core Platform Features -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Core Platform Capabilities</h2>
+  <p style="font-size:13px; margin-bottom:16px;">The core platform provides <strong>enterprise-grade infrastructure</strong> that every module inherits automatically:</p>
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div>
+      <h3 style="color:var(--brand); margin-bottom:10px;">🔐 Authentication & Authorization</h3>
+      <ul>
+        <li><strong>JWT-based authentication</strong> with secure HTTP-only cookies</li>
+        <li><strong>Role-Based Access Control</strong> — 5 built-in roles (Super Admin → Viewer)</li>
+        <li><strong>Session management</strong> with PostgreSQL persistence</li>
+        <li><strong>Rate limiting</strong> and <strong>Helmet security</strong> headers</li>
+        <li><strong>Password hashing</strong> with bcrypt</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="color:var(--green); margin-bottom:10px;">📦 Module Management</h3>
+      <ul>
+        <li><strong>Module Manager UI</strong> — discover, install, enable, disable, remove</li>
+        <li><strong>Auto schema provisioning</strong> — tables created from JSON on first enable</li>
+        <li><strong>Lifecycle hooks</strong> — onEnable/onDisable for startup/teardown</li>
+        <li><strong>Dynamic API route loading</strong> — no server restart needed</li>
+        <li><strong>Cache-busted imports</strong> — version-stamped bundles</li>
+      </ul>
+    </div>
+  </div>
+  <div class="grid-2">
+    <div>
+      <h3 style="color:var(--teal); margin-bottom:10px;">📋 Centralized Logging</h3>
+      <ul>
+        <li><strong>Unified log table</strong> — UI + API logs in one place</li>
+        <li><strong>Distributed tracing</strong> — TransactionID, CorrelationID, SessionID</li>
+        <li><strong>Winston + DB persistence</strong> — structured, searchable logs</li>
+        <li><strong>Log viewer UI</strong> — filter by level, module, date range</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="color:var(--purple); margin-bottom:10px;">⚙️ Platform Administration</h3>
+      <ul>
+        <li><strong>Admin Dashboard</strong> — system health, module status, quick actions</li>
+        <li><strong>Database Manager</strong> — schema viewer, connection status</li>
+        <li><strong>Timezone Management</strong> — global timezone configuration</li>
+        <li><strong>Settings panel</strong> — tabbed configuration for all platform settings</li>
+      </ul>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">9</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 10 — Module 1: System HealthCheck -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+    <div style="width:40px; height:40px; border-radius:10px; background:linear-gradient(135deg, var(--teal-light), white); display:flex; align-items:center; justify-content:center; font-size:20px;">💚</div>
+    <div>
+      <h2 style="margin-bottom:0;">Module 1: System HealthCheck</h2>
+      <p style="margin:0; font-size:12px;">Real-time application health monitoring, uptime SLA tracking, and poll verification</p>
+    </div>
+  </div>
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div class="card card-teal">
+      <h3>Real-Time Health Dashboard</h3>
+      <p>Live system health with 2-column layout (Core System + Other Applications). SSE-powered auto-refresh. Health %, response times, critical issues.</p>
+    </div>
+    <div class="card card-teal">
+      <h3>Background URL Poller</h3>
+      <p>Configurable minute-by-minute polling. HTTP status code + response text validation. Tracks response time, status, and error details.</p>
+    </div>
+    <div class="card card-teal">
+      <h3>Monthly Uptime SLA Report</h3>
+      <p>Automated uptime calculations with global SLA compliance. Poll verification, missed poll detection, and planned downtime integration.</p>
+    </div>
+    <div class="card card-teal">
+      <h3>ServiceNow Integration</h3>
+      <p>Fetches planned downtime from ServiceNow Change/ITASK records. Deducts planned maintenance from SLA calculations automatically.</p>
+    </div>
+  </div>
+  <div class="grid-4">
+    <div class="stat"><div class="stat-value" style="color:var(--teal);">34</div><div class="stat-label">Source Files</div></div>
+    <div class="stat"><div class="stat-value" style="color:var(--teal);">6</div><div class="stat-label">Database Tables</div></div>
+    <div class="stat"><div class="stat-value" style="color:var(--teal);">5</div><div class="stat-label">Views</div></div>
+    <div class="stat"><div class="stat-value" style="color:var(--teal);">5</div><div class="stat-label">Config Tabs</div></div>
+  </div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">10</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 11 — HealthCheck Features Deep Dive -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>HealthCheck — Feature Deep Dive</h2>
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div>
+      <h3 style="color:var(--teal);">Dashboard — Real-Time Monitoring</h3>
+      <ul>
+        <li><strong>2-Column Layout:</strong> Core System (uptime-critical) vs Other Applications</li>
+        <li><strong>Health Overview Cards:</strong> Health %, avg response, slow/critical counts</li>
+        <li><strong>Application Grid:</strong> Status, HTTP code, response time, last checked</li>
+        <li><strong>Poller Status:</strong> Running/stopped, interval, last poll, app counts</li>
+        <li><strong>SSE Real-Time Updates:</strong> Dashboard auto-refreshes on poll complete</li>
+        <li><strong>Search & Filter:</strong> Per-section search with status filtering</li>
+      </ul>
+      <h3 style="color:var(--teal); margin-top:12px;">Application Management</h3>
+      <ul>
+        <li><strong>CRUD Operations:</strong> Add, edit, delete monitored URLs</li>
+        <li><strong>Category Assignment:</strong> Group apps by function (Core, Interfaces, etc.)</li>
+        <li><strong>Validation Rules:</strong> Expected HTTP status, text match, timeout</li>
+        <li><strong>Toggle Active/Inactive:</strong> Pause monitoring without deletion</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="color:var(--teal);">Monthly Uptime Report</h3>
+      <ul>
+        <li><strong>Global SLA Compliance:</strong> Simple average of all Core System app uptimes</li>
+        <li><strong>Per-App Uptime Grid:</strong> Expected polls, actual polls, uptime %, SLA verdict</li>
+        <li><strong>Poll Verification:</strong> Expected vs actual polls with coverage percentage</li>
+        <li><strong>Missed Polls Detection:</strong> Identify exact minutes where polls were missed</li>
+        <li><strong>Planned Downtime Integration:</strong> ServiceNow change records deducted from SLA</li>
+        <li><strong>PDF Export:</strong> One-click download for management reporting</li>
+        <li><strong>Prorated Calculations:</strong> Current month adjusts for elapsed time</li>
+      </ul>
+      <h3 style="color:var(--teal); margin-top:12px;">Downtime Analysis</h3>
+      <ul>
+        <li><strong>Unplanned Downtime:</strong> Detailed view of all downtime incidents</li>
+        <li><strong>Planned Downtime:</strong> ServiceNow ITASK/Change integration</li>
+        <li><strong>Timeline View:</strong> Visual downtime timeline per application</li>
+      </ul>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">11</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 12 — Module 2: ServiceNow ITSM -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+    <div style="width:40px; height:40px; border-radius:10px; background:linear-gradient(135deg, var(--brand-light), white); display:flex; align-items:center; justify-content:center; font-size:20px;">🎧</div>
+    <div>
+      <h2 style="margin-bottom:0;">Module 2: ServiceNow ITSM Integration</h2>
+      <p style="margin:0; font-size:12px;">Enterprise incident management, SLA compliance, and automated operations via ServiceNow API</p>
+    </div>
+  </div>
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div class="card card-brand">
+      <h3>Live Incident Dashboard</h3>
+      <p>Real-time stats (total, open, critical), SLA resolution %, auto-ack counts, priority breakdown. Today's incidents + SLA breach view.</p>
+    </div>
+    <div class="card card-brand">
+      <h3>Incident Management</h3>
+      <p>Full CRUD — create, update, resolve, close incidents. Server-side pagination. Assignment group scoping. Priority-based filtering.</p>
+    </div>
+    <div class="card card-brand">
+      <h3>SLA Compliance Reporting</h3>
+      <p>Resolution SLA and Response SLA reports with business-hour calculations. Per-priority thresholds. Date range filters. PDF export.</p>
+    </div>
+    <div class="card card-brand">
+      <h3>Auto-Acknowledge Engine</h3>
+      <p>Background poller transitions New → In Progress automatically. DB-only dedup (K8s safe). Configurable frequency, message, and logging.</p>
+    </div>
+  </div>
+  <div class="grid-5">
+    <div class="stat"><div class="stat-value" style="color:var(--brand);">61</div><div class="stat-label">Source Files</div></div>
+    <div class="stat"><div class="stat-value" style="color:var(--brand);">5</div><div class="stat-label">Database Tables</div></div>
+    <div class="stat"><div class="stat-value" style="color:var(--brand);">8</div><div class="stat-label">Views</div></div>
+    <div class="stat"><div class="stat-value" style="color:var(--brand);">12</div><div class="stat-label">Config Tabs</div></div>
+    <div class="stat"><div class="stat-value" style="color:var(--brand);">30+</div><div class="stat-label">API Endpoints</div></div>
+  </div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">12</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 13 — ServiceNow Features Deep Dive -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>ServiceNow — Feature Deep Dive</h2>
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div>
+      <h3 style="color:var(--brand);">Incident Operations</h3>
+      <ul>
+        <li><strong>Live Incident List:</strong> Real-time from ServiceNow Table API v2</li>
+        <li><strong>Full CRUD:</strong> Create, update, resolve, close — two-step workflow</li>
+        <li><strong>Server-side Pagination:</strong> sysparm_limit/offset for large datasets</li>
+        <li><strong>Assignment Group Filtering:</strong> Scope to specific teams</li>
+        <li><strong>Test Incidents:</strong> Create and close test data from UI</li>
+        <li><strong>DataTable Grid:</strong> Sort, paginate, column reorder, drag-drop, search</li>
+      </ul>
+      <h3 style="color:var(--brand); margin-top:12px;">Auto-Acknowledge Engine</h3>
+      <ul>
+        <li><strong>Background Poller:</strong> Configurable 1–60 min frequency</li>
+        <li><strong>State Transition:</strong> New (1) → In Progress (2) with work note</li>
+        <li><strong>DB-Only Dedup:</strong> Stateless, safe for K8s pod restarts</li>
+        <li><strong>Manual Trigger + History Log:</strong> Full audit trail with search</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="color:var(--brand);">SLA & Analytics</h3>
+      <ul>
+        <li><strong>Resolution SLA Report:</strong> Business-hour-aware close time tracking</li>
+        <li><strong>Response SLA Report:</strong> First response time vs SLA target</li>
+        <li><strong>Per-Priority Thresholds:</strong> P1: 4h, P2: 8h, P3: 24h, P4: 72h</li>
+        <li><strong>Business Hours Config:</strong> Per day-of-week start/end times</li>
+        <li><strong>Date Range Filters:</strong> Daily, weekly, monthly, custom</li>
+        <li><strong>PDF Export:</strong> All reports exportable for management</li>
+      </ul>
+      <h3 style="color:var(--brand); margin-top:12px;">Analytics & Reporting</h3>
+      <ul>
+        <li><strong>Incident Analytics:</strong> By priority, state, category</li>
+        <li><strong>RITM Reports:</strong> Catalog item breakdown and tracking</li>
+        <li><strong>Planned Downtime:</strong> ServiceNow Change/ITASK integration</li>
+        <li><strong>Dashboard Stats:</strong> Created/closed by day, week, month</li>
+      </ul>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">13</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 14 — Section Divider: How It Works -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide slide-section" style="background:linear-gradient(135deg, var(--teal) 0%, #065f46 100%);">
+  <span class="tag" style="background:rgba(255,255,255,0.2); color:white; margin-bottom:20px;">PART III</span>
+  <h1>How It Works</h1>
+  <p>Technical architecture, deployment model, engineering standards, and what makes PulseOps V3 enterprise-ready.</p>
+  <div class="section-num">III</div>
+  <div class="slide-footer" style="color:rgba(255,255,255,0.4);"><span>Confidential — Management Presentation</span><span class="slide-num">14</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 15 — Zero-Downtime Module Deployment -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Zero-Downtime Module Deployment</h2>
+  <p style="font-size:13px; margin-bottom:16px;">Adding new capabilities to PulseOps requires <strong>zero platform rebuilds</strong> and <strong>zero server restarts</strong>:</p>
+  <div class="flow" style="margin-bottom:20px;">
+    <div class="flow-step" style="background:var(--brand-light); border-color:var(--brand);">
+      <strong>1. Build</strong>
+      npm run build:module<br>&lt;name&gt;
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step" style="background:var(--teal-light); border-color:var(--teal);">
+      <strong>2. Drop</strong>
+      Output to<br>dist-modules/
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step" style="background:var(--green-light); border-color:var(--green);">
+      <strong>3. Install</strong>
+      Module Manager<br>→ Available tab
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step" style="background:var(--amber-light); border-color:var(--amber);">
+      <strong>4. Enable</strong>
+      One click →<br>API + UI live
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step" style="background:var(--purple-light); border-color:var(--purple);">
+      <strong>5. Use</strong>
+      Appears in nav<br>immediately
+    </div>
+  </div>
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div>
+      <h3>What Happens Behind the Scenes</h3>
+      <div class="timeline">
+        <div class="timeline-item">
+          <h4>Module Scanner</h4>
+          <p>Scans dist-modules/ directory for available module bundles (manifest.js + constants.json + api/)</p>
+        </div>
+        <div class="timeline-item">
+          <h4>Database Registration</h4>
+          <p>Module metadata is persisted to system_modules table. Schema auto-provisioned from Schema.json.</p>
+        </div>
+        <div class="timeline-item">
+          <h4>Dynamic API Mount</h4>
+          <p>Express router loaded dynamically at /api/{moduleId}/*. JWT auth applied automatically.</p>
+        </div>
+        <div class="timeline-item">
+          <h4>UI Manifest Load</h4>
+          <p>ES module bundle fetched via dynamic import() with cache-busting. Nav items appear instantly.</p>
+        </div>
+        <div class="timeline-item">
+          <h4>Lifecycle Hooks</h4>
+          <p>onEnable() fires — starts background services (pollers, sync). onDisable() stops them cleanly.</p>
+        </div>
+      </div>
+    </div>
+    <div>
+      <h3>Module Contract</h3>
+      <p style="font-size:12px; margin-bottom:12px;">Every module is self-contained and follows a strict contract:</p>
+      <table>
+        <thead><tr><th>File</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><strong>manifest.jsx</strong></td><td>UI entry — navItems, getViews(), getConfigTabs()</td></tr>
+          <tr><td><strong>constants.json</strong></td><td>Module metadata (id, name, version, roles)</td></tr>
+          <tr><td><strong>Schema.json</strong></td><td>Database table definitions (auto-provisioned)</td></tr>
+          <tr><td><strong>api/index.js</strong></td><td>Express router + lifecycle hooks</td></tr>
+          <tr><td><strong>config/*.json</strong></td><td>UI text, errors, messages, URLs</td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top:12px; background:var(--surface-50); border:1px solid var(--surface-200); border-radius:8px; padding:12px;">
+        <p style="font-size:11px; margin:0; color:var(--surface-600);">
+          <strong>Developer Experience:</strong> A module template (<code>_template/</code>) provides scaffolding for new modules.
+          Build, drop, enable — that's it. No core platform changes needed.
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">15</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 16 — Technology Stack -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Technology Stack</h2>
+  <p style="font-size:13px; margin-bottom:16px;">Built with modern, battle-tested, <strong>open-source technologies</strong> — proven at enterprise scale:</p>
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div>
+      <h3 style="margin-bottom:12px;">Frontend</h3>
+      <table>
+        <thead><tr><th>Technology</th><th>Purpose</th><th>Version</th></tr></thead>
+        <tbody>
+          <tr><td><strong>React</strong></td><td>UI framework</td><td>19.2</td></tr>
+          <tr><td><strong>React Router</strong></td><td>Client-side routing</td><td>7.13</td></tr>
+          <tr><td><strong>Tailwind CSS</strong></td><td>Utility-first styling</td><td>3.4</td></tr>
+          <tr><td><strong>Lucide React</strong></td><td>Icon library</td><td>0.575</td></tr>
+          <tr><td><strong>Vite</strong></td><td>Build tool + HMR</td><td>7.3</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h3 style="margin-bottom:12px;">Backend</h3>
+      <table>
+        <thead><tr><th>Technology</th><th>Purpose</th><th>Version</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Express.js</strong></td><td>API server</td><td>4.21</td></tr>
+          <tr><td><strong>PostgreSQL</strong></td><td>Database (pg driver)</td><td>8.19</td></tr>
+          <tr><td><strong>Winston</strong></td><td>Structured logging</td><td>3.19</td></tr>
+          <tr><td><strong>JWT</strong></td><td>Authentication</td><td>9.0</td></tr>
+          <tr><td><strong>Helmet</strong></td><td>Security headers</td><td>8.0</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="grid-3">
+    <div class="card card-brand">
+      <h3>Unified Monorepo</h3>
+      <p>Single package.json for frontend + backend. One npm install. One dev server command. Simplifies CI/CD.</p>
+    </div>
+    <div class="card card-green">
+      <h3>Self-Contained Monitoring</h3>
+      <p>All monitoring, logging, and reporting capabilities built into the platform. No external monitoring tools required.</p>
+    </div>
+    <div class="card card-teal">
+      <h3>Container Ready</h3>
+      <p>Docker Compose included. PostgreSQL in container. Ready for Kubernetes deployment with StatefulSets.</p>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">16</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 17 — Engineering Standards -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Engineering Standards & Quality</h2>
+  <p style="font-size:13px; margin-bottom:16px;">PulseOps V3 is built to <strong>enterprise-grade standards</strong> — every file, every endpoint, every component:</p>
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div>
+      <h3>🛡️ Security</h3>
+      <ul>
+        <li><strong>JWT + HTTP-only cookies</strong> — no token in localStorage</li>
+        <li><strong>bcrypt password hashing</strong> — industry-standard security</li>
+        <li><strong>RBAC</strong> — 5 roles with granular permissions</li>
+        <li><strong>Rate limiting</strong> — per-endpoint throttling</li>
+        <li><strong>Helmet security headers</strong> — XSS, CSRF protection</li>
+        <li><strong>CORS configuration</strong> — origin whitelisting</li>
+        <li><strong>Password redaction</strong> — credentials never exposed in API responses</li>
+      </ul>
+    </div>
+    <div>
+      <h3>🏗️ Code Quality</h3>
+      <ul>
+        <li><strong>Zero hardcoded strings</strong> — all text in JSON config files</li>
+        <li><strong>Comprehensive file headers</strong> — purpose, architecture, dependencies</li>
+        <li><strong>Structured logging</strong> — Winston + DB persistence at all levels</li>
+        <li><strong>Consistent error handling</strong> — standardized error format</li>
+        <li><strong>API documentation</strong> — Swagger/OpenAPI integration</li>
+        <li><strong>Module template</strong> — scaffolding for new modules</li>
+        <li><strong>Reusable components</strong> — shared design system across modules</li>
+      </ul>
+    </div>
+  </div>
+  <div class="grid-2">
+    <div>
+      <h3>📊 Database Architecture</h3>
+      <ul>
+        <li><strong>9 core tables</strong> — users, roles, permissions, sessions, logs, modules, config</li>
+        <li><strong>6 HealthCheck tables</strong> — config, categories, applications, poll results, SLA, downtime</li>
+        <li><strong>5 ServiceNow tables</strong> — config, SLA, business hours, sync history, auto-ack log</li>
+        <li><strong>JSONB flexibility</strong> — key-value stores for extensible configuration</li>
+        <li><strong>Auto-provisioning</strong> — module tables created from Schema.json on enable</li>
+      </ul>
+    </div>
+    <div>
+      <h3>🌐 Scalability</h3>
+      <ul>
+        <li><strong>Stateless API</strong> — no in-memory caches or session state</li>
+        <li><strong>DB-only dedup</strong> — safe for multi-pod Kubernetes deployment</li>
+        <li><strong>Connection pooling</strong> — PostgreSQL pg-pool for high concurrency</li>
+        <li><strong>Server-side pagination</strong> — limit/offset for large datasets</li>
+        <li><strong>Field projection</strong> — only requested columns fetched from SNOW API</li>
+      </ul>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">17</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 18 — Database Schema Overview -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Database Schema — 20 Tables Across 3 Domains</h2>
+  <div class="grid-3" style="margin-bottom:16px;">
+    <div>
+      <h3 style="color:var(--brand); margin-bottom:8px;">Core Platform (9 tables)</h3>
+      <table>
+        <thead><tr><th>Table</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><strong>system_users</strong></td><td>Authentication & profiles</td></tr>
+          <tr><td><strong>system_roles</strong></td><td>Role definitions (RBAC)</td></tr>
+          <tr><td><strong>system_permissions</strong></td><td>Granular access control</td></tr>
+          <tr><td><strong>system_role_permissions</strong></td><td>Role ↔ permission mapping</td></tr>
+          <tr><td><strong>system_user_roles</strong></td><td>User ↔ role assignment</td></tr>
+          <tr><td><strong>system_config</strong></td><td>Key-value config store</td></tr>
+          <tr><td><strong>system_modules</strong></td><td>Module registry & state</td></tr>
+          <tr><td><strong>system_logs</strong></td><td>Unified UI + API logging</td></tr>
+          <tr><td><strong>system_sessions</strong></td><td>Active session tracking</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h3 style="color:var(--teal); margin-bottom:8px;">HealthCheck (6 tables)</h3>
+      <table>
+        <thead><tr><th>Table</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><strong>hc_module_config</strong></td><td>Module configuration</td></tr>
+          <tr><td><strong>hc_categories</strong></td><td>Application grouping</td></tr>
+          <tr><td><strong>hc_applications</strong></td><td>Monitored URLs</td></tr>
+          <tr><td><strong>hc_poll_results</strong></td><td>Poll history & metrics</td></tr>
+          <tr><td><strong>hc_uptime_sla</strong></td><td>SLA tracking data</td></tr>
+          <tr><td><strong>hc_planned_downtime</strong></td><td>Maintenance windows</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h3 style="color:var(--brand); margin-bottom:8px;">ServiceNow (5 tables)</h3>
+      <table>
+        <thead><tr><th>Table</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><strong>sn_module_config</strong></td><td>SNOW connection & config</td></tr>
+          <tr><td><strong>sn_sla_config</strong></td><td>SLA targets per priority</td></tr>
+          <tr><td><strong>sn_business_hours</strong></td><td>Weekly work schedule</td></tr>
+          <tr><td><strong>sn_sync_history</strong></td><td>Sync audit trail</td></tr>
+          <tr><td><strong>sn_auto_ack_log</strong></td><td>Auto-acknowledge log</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div style="background:var(--surface-50); border:1px solid var(--surface-200); border-radius:10px; padding:14px 20px;">
+    <p style="font-size:12px; margin:0;">
+      <strong>Key Design Principles:</strong>
+      &nbsp;🔹 JSONB columns for extensible config &nbsp;
+      🔹 Indexed for query performance &nbsp;
+      🔹 Foreign keys with CASCADE deletes &nbsp;
+      🔹 TIMESTAMPTZ for timezone-safe dates &nbsp;
+      🔹 Auto-provisioned from JSON schema on module enable
+    </p>
+  </div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">18</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 19 — Shared Design System -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Shared Design System & Components</h2>
+  <p style="font-size:13px; margin-bottom:16px;">A <strong>reusable component library</strong> ensures consistency across all modules and accelerates new module development:</p>
+  <div class="grid-3" style="margin-bottom:16px;">
+    <div class="card card-brand">
+      <h3>AppShell</h3>
+      <p>Main application layout — top nav, left sidebar, content area, right logs panel. Responsive and consistent.</p>
+    </div>
+    <div class="card card-green">
+      <h3>ConfigLayout</h3>
+      <p>Tabbed configuration panels. Used by all modules for their settings views. Supports sections and separators.</p>
+    </div>
+    <div class="card card-teal">
+      <h3>DataTable</h3>
+      <p>Enterprise data grid — sort, paginate, column reorder, drag-drop, search. Used across all list views.</p>
+    </div>
+    <div class="card card-purple">
+      <h3>DatabaseManager</h3>
+      <p>Schema viewer, table browser, connection status. Available to every module for data management.</p>
+    </div>
+    <div class="card card-amber">
+      <h3>LogViewer</h3>
+      <p>Unified log viewer with level/module/date filters. Supports both UI and API log types.</p>
+    </div>
+    <div class="card card-rose">
+      <h3>TestConnection</h3>
+      <p>Live connection testing component. Tests API connectivity with real-time status feedback.</p>
+    </div>
+  </div>
+  <div class="grid-4">
+    <div class="card"><h3>ConfirmationModal</h3><p>Standardized confirm/cancel dialogs</p></div>
+    <div class="card"><h3>CrudSummary</h3><p>CRUD operation result display</p></div>
+    <div class="card"><h3>PageLoader</h3><p>Loading state with branded spinner</p></div>
+    <div class="card"><h3>StatsCount</h3><p>Animated metric cards</p></div>
+  </div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">19</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 20 — Section Divider: Future Roadmap -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide slide-section" style="background:linear-gradient(135deg, var(--purple) 0%, #4c1d95 100%);">
+  <span class="tag" style="background:rgba(255,255,255,0.2); color:white; margin-bottom:20px;">PART IV</span>
+  <h1>Roadmap & Vision</h1>
+  <p>Where we are today, where we're going, and how PulseOps V3 scales to meet future operations challenges.</p>
+  <div class="section-num">IV</div>
+  <div class="slide-footer" style="color:rgba(255,255,255,0.4);"><span>Confidential — Management Presentation</span><span class="slide-num">20</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 21 — Future Module Roadmap -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Future Module Roadmap</h2>
+  <p style="font-size:13px; margin-bottom:16px;">The plug-and-play architecture allows us to <strong>add new monitoring capabilities without touching existing code</strong>. The following modules are planned:</p>
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div>
+      <h3 style="color:var(--purple); margin-bottom:10px;">🔮 Next Priority — Identity & Access Monitoring</h3>
+      <div class="card" style="margin-bottom:10px; border-left:4px solid var(--purple);">
+        <h3>Sailpoint IIQ Module</h3>
+        <p>Monitor Sailpoint IIQ systems, access requests, tasks, and RACF request provisioning. Dashboard for request status, task queues, and provisioning health. Direct PGSQL database integration for data monitoring.</p>
+      </div>
+      <div class="card" style="border-left:4px solid var(--purple);">
+        <h3>Forgerock IGA Module</h3>
+        <p>Monitor Forgerock IGA campaigns, reconciliation jobs, and certification workflows. Track campaign status, recon success/failure rates, and certification completion. Direct ElasticSearch and PGSQL backend database integration.</p>
+      </div>
+    </div>
+    <div>
+      <h3 style="color:var(--teal); margin-bottom:10px;">�️ Database & Infrastructure Monitoring</h3>
+      <div class="card" style="margin-bottom:10px; border-left:4px solid var(--teal);">
+        <h3>PostgreSQL Database Monitor</h3>
+        <p>Direct integration with PostgreSQL databases used by Forgerock IGA and Sailpoint IIQ. Monitor data integrity, table sizes, query performance, connection health, and replication status.</p>
+      </div>
+      <div class="card" style="border-left:4px solid var(--teal);">
+        <h3>ElasticSearch Monitor</h3>
+        <p>Connect to ElasticSearch clusters used by Forgerock IGA backend. Monitor index health, cluster status, shard allocation, document counts, and search performance metrics.</p>
+      </div>
+    </div>
+  </div>
+  <div style="background:var(--surface-50); border:1px solid var(--surface-200); border-radius:10px; padding:14px 20px; margin-bottom:12px;">
+    <h3 style="font-size:13px; margin-bottom:8px;">🔗 Integration Architecture</h3>
+    <div class="grid-2" style="gap:12px;">
+      <p style="font-size:11px; margin:0;"><strong>Sailpoint IIQ:</strong> Used for RACF request provisioning. Module will monitor access request lifecycle, task execution, and provisioning status via API and direct PGSQL queries.</p>
+      <p style="font-size:11px; margin:0;"><strong>Forgerock IGA:</strong> Used for certifications. Module will monitor campaign progress, reconciliation jobs, and certification workflows via API and ElasticSearch/PGSQL integration.</p>
+    </div>
+  </div>
+  <div style="background:var(--purple-light); border:1px solid var(--purple); border-radius:10px; padding:12px 16px; text-align:center;">
+    <p style="font-size:13px; color:var(--purple); font-weight:700; margin:0;">
+      ⏱️ Estimated time to build a new module: <strong>2–4 weeks</strong> (module template + shared components + zero platform changes required)
+    </p>
+  </div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">21</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 22 — Deployment Options -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Deployment Architecture — GKE on Google Cloud</h2>
+  <p style="font-size:13px; margin-bottom:16px;">PulseOps V3 is designed for <strong>Kubernetes-native deployment on GKE (Google Kubernetes Engine)</strong>, matching our client's GCP infrastructure:</p>
+  <div class="code-block" style="margin-bottom:16px;">
+<pre style="margin:0; white-space:pre; font-size:11px;">
+<span class="comment">┌──────────────────────────────────────────────────────────────────────────┐</span>
+<span class="comment">│                    GKE Cluster — PulseOps V3 Deployment                  │</span>
+<span class="comment">├──────────────────────────────────────────────────────────────────────────┤</span>
+│                                                                          │
+│  <span class="keyword">GCP Load Balancer</span> (HTTPS) ──▶ <span class="keyword">Ingress Controller</span>                        │
+│                                      │                                   │
+│  ┌───────────────────────────────────┴────────────────────────────┐      │
+│  │              <span class="string">PulseOps Deployment</span> (Stateless Pods)               │      │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐      │      │
+│  │  │  <span class="keyword">Pod 1</span>   │  │  <span class="keyword">Pod 2</span>   │  │  <span class="keyword">Pod 3</span>   │  │  <span class="keyword">Pod N</span>   │      │      │
+│  │  │ Express  │  │ Express  │  │ Express  │  │ Express  │      │      │
+│  │  │ +React   │  │ +React   │  │ +React   │  │ +React   │      │      │
+│  │  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘      │      │
+│  └───────┴──────────────┴──────────────┴──────────────┴───────────┘      │
+│                                  │                                       │
+│  ┌───────────────────────────────┴────────────────────────────┐          │
+│  │  <span class="comment">Cloud SQL (PostgreSQL)</span>   │   <span class="comment">PersistentVolume (dist-modules/)</span> │          │
+│  │  Managed, HA, backups    │   Module bundles shared across pods │          │
+│  └──────────────────────────┴────────────────────────────────┘          │
+<span class="comment">└──────────────────────────────────────────────────────────────────────────┘</span>
+</pre>
+  </div>
+  <div class="grid-2" style="margin-bottom:12px;">
+    <div>
+      <h3 style="margin-bottom:8px;">GKE Pod Architecture</h3>
+      <ul>
+        <li><strong>Stateless Pods:</strong> No in-memory state. All state in Cloud SQL. Safe for scaling and restarts.</li>
+        <li><strong>Horizontal Pod Autoscaler:</strong> Scale pods based on CPU/memory. Each pod serves both UI and API.</li>
+        <li><strong>PersistentVolume:</strong> dist-modules/ directory shared across all pods via GCP Persistent Disk.</li>
+        <li><strong>DB-only dedup:</strong> Auto-ack poller uses DB locking — safe for multi-pod execution.</li>
+        <li><strong>Session management:</strong> JWT sessions stored in PostgreSQL — pod-safe invalidation.</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="margin-bottom:8px;">GCP Services Used</h3>
+      <ul>
+        <li><strong>GKE:</strong> Managed Kubernetes cluster for pod orchestration and auto-scaling.</li>
+        <li><strong>Cloud SQL:</strong> Managed PostgreSQL with HA, automated backups, and failover.</li>
+        <li><strong>Cloud Load Balancer:</strong> HTTPS termination, SSL certificates, health checks.</li>
+        <li><strong>Container Registry:</strong> Docker image storage for PulseOps builds.</li>
+        <li><strong>Cloud Build / CI/CD:</strong> Automated build and deploy pipeline.</li>
+      </ul>
+    </div>
+  </div>
+  <div style="background:var(--brand-light); border:1px solid var(--brand); border-radius:10px; padding:10px 16px; text-align:center;">
+    <p style="font-size:12px; color:var(--brand); font-weight:700; margin:0;">
+      🔄 Zero-Downtime Module Updates: Build module → push to PV → enable via UI → all pods pick up the new module instantly. No rolling restart needed.
+    </p>
+  </div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">22</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 23 — Summary & Key Takeaways -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <h2>Summary & Key Takeaways</h2>
+  <div class="grid-2" style="margin-bottom:20px;">
+    <div>
+      <h3 style="color:var(--brand); margin-bottom:12px;">What We've Built</h3>
+      <ul style="line-height:2.2;">
+        <li><strong>Enterprise Operations Platform</strong> — unified, modular, extensible</li>
+        <li><strong>2 Production Modules</strong> — System HealthCheck + ServiceNow ITSM</li>
+        <li><strong>Enterprise-grade security</strong> — JWT auth, RBAC, rate limiting</li>
+        <li><strong>Centralized structured logging</strong> — Winston + DB persistence</li>
+        <li><strong>Plug-and-play architecture</strong> — zero-downtime hot-deployment</li>
+        <li><strong>GKE-ready</strong> — stateless pods, Cloud SQL, PersistentVolume</li>
+        <li><strong>4 future modules planned</strong> — Sailpoint, Forgerock, PGSQL, ES</li>
+      </ul>
+    </div>
+    <div>
+      <h3 style="color:var(--green); margin-bottom:12px;">Value Delivered</h3>
+      <ul style="line-height:2.2;">
+        <li><strong>Automated incident acknowledgment</strong> — was fully manual</li>
+        <li><strong>3 new client reports</strong> — Uptime SLA, Resolution SLA, Response SLA</li>
+        <li><strong>Intelligent business-hour SLA</strong> — fair, accurate calculations</li>
+        <li><strong>Planned downtime exclusion</strong> — ServiceNow integration</li>
+        <li><strong>60-second downtime detection</strong> — was reactive</li>
+        <li><strong>500+ FTE hours saved</strong> per year on manual tasks</li>
+        <li><strong>Single pane of glass</strong> — unified monitoring for all systems</li>
+      </ul>
+    </div>
+  </div>
+  <div style="background:linear-gradient(135deg, var(--surface-900), #1a1a2e); border-radius:14px; padding:24px; text-align:center;">
+    <h3 style="color:white; font-size:18px; margin-bottom:8px;">🚀 PulseOps V3 is not just a tool — it's a platform.</h3>
+    <p style="color:#94a3b8; font-size:14px; margin:0; max-width:700px; margin-left:auto; margin-right:auto;">
+      Every new module we build makes the platform more valuable. Sailpoint IIQ, Forgerock IGA, PGSQL, and ElasticSearch modules are next.
+      The modular architecture ensures we <strong style="color:white;">build once, deploy on GKE, and add capabilities without risk</strong>.
+    </p>
+  </div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">23</span></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 24 — Thank You / Q&A -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="slide slide-title" style="min-height:576px;">
+  <div style="margin-bottom:28px;">
+    <span class="tag tag-teal">Enterprise Platform</span>
+    <span class="tag tag-brand">Live Demo Ready</span>
+  </div>
+  <h1 style="font-size:48px; margin-bottom:16px;">Thank You</h1>
+  <p class="subtitle" style="max-width:600px; font-size:20px; color:#94a3b8; margin-bottom:32px;">
+    Questions & Discussion
+  </p>
+  <div style="margin-top:16px; font-size:14px; color:#64748b; max-width:500px;">
+    <div style="display:flex; gap:24px; justify-content:center; flex-wrap:wrap;">
+      <div><strong style="color:#94a3b8;">Platform</strong><br>PulseOps V3</div>
+      <div><strong style="color:#94a3b8;">Version</strong><br>3.0.0</div>
+      <div><strong style="color:#94a3b8;">Modules</strong><br>HealthCheck · ServiceNow</div>
+    </div>
+  </div>
+  <div style="margin-top:32px; font-size:12px; color:#475569;">
+    <em>A live working demo is available for walkthrough.</em>
+  </div>
+  <div class="slide-footer" style="color:#475569;"><span>Confidential — Management Presentation</span><span class="slide-num">24</span></div>
+</div>
+
+</body>
+</html>

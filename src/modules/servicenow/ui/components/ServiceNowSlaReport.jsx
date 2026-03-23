@@ -328,34 +328,27 @@ export default function ServiceNowSlaReport() {
       render: (v) => <span className="text-xs font-semibold text-surface-700">{formatMinutes(v)}</span> },
     { key: 'targetMinutes', label: 'SLA Target', sortable: true, align: 'right',
       render: (v) => <span className="text-xs text-surface-500">{formatMinutes(v)}</span> },
-    { key: '_variance', label: 'Variance', sortable: true, align: 'right',
-      render: (_, row) => {
-        const variance = (row.targetMinutes != null && row.resolutionMinutes != null)
-          ? row.targetMinutes - row.resolutionMinutes : null;
-        return variance !== null
+    { key: 'slaVariance', label: 'Variance', sortable: true, align: 'right',
+      render: (variance) => {
+        return variance !== null && variance !== undefined
           ? <span className={`text-xs font-semibold ${variance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
               {variance >= 0 ? '+' : ''}{formatMinutes(variance)}
             </span>
           : <span className="text-xs text-surface-400">—</span>;
       } },
-    { key: 'slaMet', label: 'SLA Status', sortable: true, align: 'center',
-      render: (v) => v === true
-        ? <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200"><CheckCircle2 size={10} /> Met</span>
-        : v === false
-          ? <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200"><XCircle size={10} /> Breached</span>
-          : <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-surface-400 bg-surface-50 px-2 py-0.5 rounded-full border border-surface-200"><Clock size={10} /> Pending</span>
+    { key: 'slaStatus', label: 'SLA Status', sortable: true, align: 'center',
+      render: (status) => {
+        if (status === 'met') {
+          return <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200"><CheckCircle2 size={10} /> Met</span>;
+        }
+        if (status === 'breached') {
+          return <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200"><XCircle size={10} /> Breached</span>;
+        }
+        return <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200"><Clock size={10} /> In Progress</span>;
+      }
     },
   ], []);
 
-  // Add computed _variance field for sorting
-  const incidentsWithVariance = useMemo(() => {
-    if (!data?.incidents) return [];
-    return data.incidents.map(inc => ({
-      ...inc,
-      _variance: (inc.targetMinutes != null && inc.resolutionMinutes != null)
-        ? inc.targetMinutes - inc.resolutionMinutes : null,
-    }));
-  }, [data]);
 
   // ── Render ─────────────────────────────────────────────────────────────
   return (
@@ -594,10 +587,10 @@ export default function ServiceNowSlaReport() {
           )}
 
           {/* ── Incident Detail Grid ───────────────────────────────────────── */}
-          {incidentsWithVariance.length > 0 && (
+          {data?.incidents && data.incidents.length > 0 && (
             <DataTable
               columns={slaColumns}
-              data={incidentsWithVariance}
+              data={data.incidents}
               loading={loading}
               pageSize={20}
               searchable={true}

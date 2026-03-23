@@ -323,9 +323,20 @@ export async function getDashboardStats(conn, incidentConfig, tz) {
 
     // SLA resolution compliance by period
     const threshold = resolveSlaThreshold(pRaw, slaByLabel, slaByPriorityValue);
+    
+    // For closed incidents: use actual closure time
     if (createdDate && closedDate && !isNaN(createdDate.getTime()) && !isNaN(closedDate.getTime())) {
       const resMinutes = calcBusinessMinutesBetween(createdDate, closedDate, hoursMap, tz);
       const met = resMinutes <= threshold.resolutionMinutes;
+
+      if (createdDate >= todayStart) { slaRes.today.total++; if (met) slaRes.today.met++; else slaRes.today.notMet++; }
+      if (createdDate >= weekStart)  { slaRes.week.total++;  if (met) slaRes.week.met++;  else slaRes.week.notMet++;  }
+      if (createdDate >= monthStart) { slaRes.month.total++; if (met) slaRes.month.met++; else slaRes.month.notMet++; }
+    }
+    // For open incidents: use current time to calculate live SLA status
+    else if (createdDate && !isNaN(createdDate.getTime()) && !isClosed) {
+      const elapsedMinutes = calcBusinessMinutesBetween(createdDate, now, hoursMap, tz);
+      const met = elapsedMinutes <= threshold.resolutionMinutes;
 
       if (createdDate >= todayStart) { slaRes.today.total++; if (met) slaRes.today.met++; else slaRes.today.notMet++; }
       if (createdDate >= weekStart)  { slaRes.week.total++;  if (met) slaRes.week.met++;  else slaRes.week.notMet++;  }
@@ -495,7 +506,7 @@ export async function getDashboardIncidents(conn, incidentConfig, tz) {
     const closedAtRaw  = snowVal(inc[incidentConfig.closedColumn  || 'closed_at']) || snowVal(inc.resolved_at);
     const createdDate  = parseSnowDateUTC(createdAtRaw);
     const closedDate   = parseSnowDateUTC(closedAtRaw);
-
+    
     // ── Resolution SLA ──────────────────────────────────────────────────
     let resolutionMinutes = null, resSlaMet = null, expectedClosure = null, slaVariance = null;
 
@@ -503,14 +514,24 @@ export async function getDashboardIncidents(conn, incidentConfig, tz) {
       const exp = addBusinessMinutes(createdDate, threshold.resolutionMinutes, hoursMap, tz);
       if (exp) expectedClosure = exp.toISOString();
     }
+    
+    // For closed incidents: use actual closure time
     if (createdDate && closedDate && !isNaN(createdDate.getTime()) && !isNaN(closedDate.getTime())) {
       resolutionMinutes = calcBusinessMinutesBetween(createdDate, closedDate, hoursMap, tz);
       resSlaMet = resolutionMinutes <= threshold.resolutionMinutes;
       slaVariance = threshold.resolutionMinutes - resolutionMinutes;
-    } else if (createdDate && !['6', '7', '8'].includes(String(state))) {
-      resolutionMinutes = calcBusinessMinutesBetween(createdDate, now, hoursMap, tz);
-      resSlaMet = resolutionMinutes <= threshold.resolutionMinutes;
-      slaVariance = threshold.resolutionMinutes - resolutionMinutes;
+      log.info(`[SLA] Closed incident ${snowVal(inc.number)}: resMinutes=${resolutionMinutes}, target=${threshold.resolutionMinutes}, variance=${slaVariance}, met=${resSlaMet}`);
+    } 
+    // For open incidents: use current time to calculate live SLA status
+    else if (createdDate && !isNaN(createdDate.getTime())) {
+      const isOpen = !['6', '7', '8'].includes(String(state));
+      log.info(`[SLA] Incident ${snowVal(inc.number)}: state=${state}, isOpen=${isOpen}, createdDate=${createdDate?.toISOString()}, closedDate=${closedDate?.toISOString()}`);
+      if (isOpen) {
+        resolutionMinutes = calcBusinessMinutesBetween(createdDate, now, hoursMap, tz);
+        resSlaMet = resolutionMinutes <= threshold.resolutionMinutes;
+        slaVariance = threshold.resolutionMinutes - resolutionMinutes;
+        log.info(`[SLA] Open incident ${snowVal(inc.number)}: state=${state}, resMinutes=${resolutionMinutes}, target=${threshold.resolutionMinutes}, variance=${slaVariance}, met=${resSlaMet}`);
+      }
     }
 
     let resolutionSlaStatus = 'pending';
@@ -802,25 +823,44 @@ export async function getSlaResolutionReport(conn, incidentConfig, tz, filters =
     slaConfigCount: Object.keys(slaByLabel).length,
   });
 
+  const now = new Date();
   const incidentSlaData = incidents.map(inc => {
     const priorityRaw    = snowVal(inc[incidentConfig.priorityColumn || 'priority']);
     const normalised     = normalizePriority(priorityRaw);
     const threshold      = resolveSlaThreshold(priorityRaw, slaByLabel, slaByPriorityValue);
+    const state          = snowVal(inc.state);
+    
+    log.info(`[SLA] Incident ${snowVal(inc.number)}: priorityRaw=${priorityRaw}, normalised=${normalised}, threshold.resolutionMinutes=${threshold.resolutionMinutes}`);
 
     const createdAtRaw   = snowVal(inc[incidentConfig.createdColumn]);
     const closedAtRaw    = snowVal(inc[incidentConfig.closedColumn]) || snowVal(inc.resolved_at);
     const createdDate    = parseSnowDateUTC(createdAtRaw);
     const closedDate     = parseSnowDateUTC(closedAtRaw);
 
-    let resolutionMinutes = null, slaMet = null, expectedClosure = null;
+    let resolutionMinutes = null, slaMet = null, slaVariance = null, slaStatus = 'pending', expectedClosure = null;
 
     if (createdDate && !isNaN(createdDate.getTime())) {
       const exp = addBusinessMinutes(createdDate, threshold.resolutionMinutes, hoursMap, tz);
       if (exp) expectedClosure = exp.toISOString();
     }
+    
+    // For closed incidents: use actual closure time
     if (createdDate && closedDate && !isNaN(createdDate.getTime()) && !isNaN(closedDate.getTime())) {
       resolutionMinutes = calcBusinessMinutesBetween(createdDate, closedDate, hoursMap, tz);
       slaMet            = resolutionMinutes <= threshold.resolutionMinutes;
+      slaVariance       = threshold.resolutionMinutes - resolutionMinutes;
+      slaStatus         = slaMet === true ? 'met' : slaMet === false ? 'breached' : 'pending';
+    }
+    // For open incidents: use current time to calculate live SLA status (but don't set resolutionMinutes)
+    else if (createdDate && !isNaN(createdDate.getTime())) {
+      const isOpen = !['6', '7', '8'].includes(String(state));
+      if (isOpen) {
+        const elapsedMinutes = calcBusinessMinutesBetween(createdDate, now, hoursMap, tz);
+        slaMet              = elapsedMinutes <= threshold.resolutionMinutes;
+        slaVariance         = threshold.resolutionMinutes - elapsedMinutes;
+        slaStatus           = slaMet === true ? 'met' : slaMet === false ? 'breached' : 'pending';
+        log.info(`[SLA] Open incident ${snowVal(inc.number)}: state=${state}, elapsedMinutes=${elapsedMinutes}, target=${threshold.resolutionMinutes}, variance=${slaVariance}, met=${slaMet}`);
+      }
     }
 
     return {
@@ -831,7 +871,7 @@ export async function getSlaResolutionReport(conn, incidentConfig, tz, filters =
       assignedTo:       snowVal(inc.assigned_to),
       createdAt:        createdDate ? createdDate.toISOString() : createdAtRaw,
       closedAt:         closedDate  ? closedDate.toISOString()  : closedAtRaw,
-      resolutionMinutes, targetMinutes: threshold.resolutionMinutes, slaMet, expectedClosure,
+      resolutionMinutes, targetMinutes: threshold.resolutionMinutes, slaMet, slaVariance, slaStatus, expectedClosure,
     };
   });
 

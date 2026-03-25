@@ -172,3 +172,6 @@ kubectl delete deployment -n prod-iga --all
 kubectl delete statefulset -n prod-iga --all
 kubectl apply -f k8s-manifests/sample-workloads.yaml
 kubectl get pods -n prod-iga
+
+
+npm run build:module google_gke

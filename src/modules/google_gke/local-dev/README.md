@@ -150,12 +150,64 @@ chmod +x teardown-local-gke.sh
 ./teardown-local-gke.sh
 ```
 
-## How This Maps to Production GKE
+## Unified Cluster Configuration (Local & Production)
+
+**SAME UI, SAME CONFIG, ZERO CODE CHANGES**
+
+The cluster configuration is unified for both local and production environments:
+
+### Configuration File: `ClusterConfig.json`
+
+Stores only standard Kubernetes connection parameters:
+```json
+{
+  "connection": {
+    "authMode": "auto",
+    "kubeconfigPath": "~/.kube/config",
+    "gcpProjectId": "",
+    "gcpRegion": "",
+    "clusterName": ""
+  },
+  "connectionStatus": {
+    "isConfigured": false,
+    "testStatus": null,
+    "lastTested": null,
+    "clusterInfo": { "name": null, "version": null, "nodeCount": 0 }
+  }
+}
+```
+
+### How It Works
+
+**Local Development (Kind + Podman):**
+1. Kind creates kubeconfig at `~/.kube/config`
+2. KubernetesClient.js auto-detects: NOT in-cluster → reads kubeconfig
+3. Connects to local Kind cluster
+
+**Production GKE:**
+1. PulseOps runs as a pod inside GKE
+2. KubernetesClient.js auto-detects: IN-CLUSTER (KUBERNETES_SERVICE_HOST env var)
+3. Uses service account token (auto-injected by K8s)
+
+**Same code path, different authentication method!**
+
+### UI Configuration Steps (Both Environments)
+
+1. **Settings → Cluster Configuration**
+2. **Auth Mode:** Select "Auto-detect" (recommended)
+3. **Kubeconfig Path:** Leave as `~/.kube/config` (local) or empty (production)
+4. **GCP Project ID:** Fill in (optional, for reference)
+5. **GCP Region:** Fill in (optional, for reference)
+6. **Cluster Name:** Fill in (optional, for reference)
+7. **Test Connection:** Click to verify connectivity
+8. **Save Configuration**
+
+### Environment Mapping
 
 | Local (Kind + Podman) | Production (GCP GKE) |
 |----------------------|---------------------|
 | Kind cluster | GKE cluster |
-| kubeconfig auth | Service Account (Workload Identity) |
+| kubeconfig auth (auto-detected) | Service Account auth (auto-detected) |
 | K8s Jobs with labels | Real Dataflow API |
 | Pub/Sub emulator | Real Cloud Pub/Sub |
 | Mailpit | SendGrid / Mailgun |

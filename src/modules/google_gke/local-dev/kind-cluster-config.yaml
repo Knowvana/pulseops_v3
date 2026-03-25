@@ -53,14 +53,20 @@
 # CLUSTER TOPOLOGY:
 # =============================================================================
 #
-# This config creates a 3-node cluster:
-#   - 1 control-plane node (K8s API server, scheduler, controller manager, etcd)
-#   - 2 worker nodes (where pods/workloads run)
+# MINIMUM REQUIRED: 1 node (control-plane only)
+#   - The control-plane node can also run workloads in Kind
+#   - This is sufficient for development and testing
 #
-# This simulates a real GKE cluster where:
-#   - Control plane is managed by Google (you don't see it)
-#   - Worker nodes run your applications
-#   - DaemonSets run on every worker node
+# OPTIONAL: Add worker nodes for multi-node testing
+#   - Uncomment the worker nodes below to test:
+#     • Pod distribution across nodes
+#     • DaemonSets (run on every node)
+#     • Node affinity/anti-affinity rules
+#     • High availability scenarios
+#
+# This config creates a 1-node cluster by default:
+#   - 1 control-plane node (K8s API server, scheduler, controller manager, etcd)
+#     → Can also run application pods (unlike real GKE where control plane is hidden)
 #
 # =============================================================================
 kind: Cluster
@@ -96,13 +102,11 @@ nodes:
         hostPort: 30001
         protocol: TCP
 
-  # ── Worker Node 1 ──────────────────────────────────────────────────────────
-  # Runs application workloads (Deployments, StatefulSets, etc.)
-  - role: worker
-
-  # ── Worker Node 2 ──────────────────────────────────────────────────────────
-  # Second worker node for pod distribution and DaemonSet testing
-  - role: worker
+  # ── Worker Nodes (OPTIONAL) ────────────────────────────────────────────────
+  # Uncomment these to add worker nodes for multi-node testing:
+  #
+  # - role: worker  # Worker Node 1 — runs application workloads
+  # - role: worker  # Worker Node 2 — for pod distribution and DaemonSet testing
 
 # ── Networking ─────────────────────────────────────────────────────────────────
 # Default CNI (Container Network Interface) is kindnet.

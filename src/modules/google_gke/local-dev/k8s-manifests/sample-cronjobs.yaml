@@ -1,0 +1,178 @@
+# =============================================================================
+# Google GKE Module — Sample CronJobs for Local Development
+#
+# PURPOSE: Creates sample Kubernetes CronJobs that simulate the scheduled tasks
+# running on the prod1-cluster. These CronJobs run real containers
+# on real schedules, so the module's CronJob monitoring works identically
+# to production.
+#
+# WHAT THESE SIMULATE:
+#   - bigtable-backup:        BigTable backup (daily)
+#   - elasticsearch-backup:   Elasticsearch backup (daily)
+#   - daily-report-vdr-dqc:   Daily VDR/DQC report generation (daily)
+#
+# WHY BUSYBOX/ALPINE?
+#   These use lightweight containers that just echo messages and sleep briefly.
+#   The K8s CronJob API returns the same metadata regardless of what the
+#   container actually does (schedule, lastScheduleTime, active jobs, etc.).
+#   The module monitors the K8s resource state, not the container internals.
+#
+# USAGE:
+#   kubectl apply -f namespace.yaml
+#   kubectl apply -f sample-cronjobs.yaml
+#   kubectl get cronjobs -n accessio
+#   kubectl get jobs -n accessio
+#
+# =============================================================================
+
+# ─── CronJob: BigTable Backup ──────────────────────────────────────────────
+# Simulates BigTable backup
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bigtable-backup
+  namespace: prod-iga
+  labels:
+    app: bigtable-backup
+    component: batch
+    pulseops.io/module: google_gke
+spec:
+  # Daily at 1:00 AM
+  schedule: "0 1 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 600
+      template:
+        metadata:
+          labels:
+            app: bigtable-backup
+            job-type: cronjob
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: bigtable-backup
+              image: busybox:1.36
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  echo "[$(date)] Starting BigTable backup"
+                  echo "Backing up BigTable instances..."
+                  sleep 8
+                  echo "Backup size: 45.2 GB"
+                  echo "Uploading to Cloud Storage: gs://prod1-backups/bigtable-$(date +%Y%m%d).backup"
+                  sleep 3
+                  echo "[$(date)] BigTable backup completed successfully"
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "128Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "512Mi"
+
+---
+# ─── CronJob: Elasticsearch Backup ─────────────────────────────────────────
+# Simulates Elasticsearch backup
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: elasticsearch-backup
+  namespace: prod-iga
+  labels:
+    app: elasticsearch-backup
+    component: batch
+    pulseops.io/module: google_gke
+spec:
+  # Daily at 2:00 AM
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 600
+      template:
+        metadata:
+          labels:
+            app: elasticsearch-backup
+            job-type: cronjob
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: elasticsearch-backup
+              image: busybox:1.36
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  echo "[$(date)] Starting Elasticsearch backup"
+                  echo "Creating snapshot of all indices..."
+                  sleep 10
+                  echo "Snapshot size: 28.7 GB"
+                  echo "Uploading to Cloud Storage: gs://prod1-backups/elasticsearch-$(date +%Y%m%d).snapshot"
+                  sleep 3
+                  echo "[$(date)] Elasticsearch backup completed successfully"
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "128Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "512Mi"
+
+---
+# ─── CronJob: Daily Report VDR/DQC ────────────────────────────────────────
+# Simulates daily VDR (Vendor Data Review) and DQC (Data Quality Check) report generation
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: daily-report-vdr-dqc
+  namespace: prod-iga
+  labels:
+    app: daily-report-vdr-dqc
+    component: batch
+    pulseops.io/module: google_gke
+spec:
+  # Daily at 6:00 AM
+  schedule: "0 6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 600
+      template:
+        metadata:
+          labels:
+            app: daily-report-vdr-dqc
+            job-type: cronjob
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: daily-report-vdr-dqc
+              image: busybox:1.36
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  echo "[$(date)] Starting daily VDR/DQC report generation"
+                  echo "Querying vendor data from BigTable..."
+                  sleep 5
+                  echo "Running data quality checks on 12,456 records..."
+                  sleep 10
+                  echo "Generating VDR report with 98.7% quality score"
+                  echo "Generating DQC report with 3 data quality issues found"
+                  sleep 3
+                  echo "Reports generated: vdr_report_$(date +%Y%m%d).pdf, dqc_report_$(date +%Y%m%d).pdf"
+                  echo "[$(date)] Daily VDR/DQC report generation completed successfully"
+              resources:
+                requests:
+                  cpu: "200m"
+                  memory: "256Mi"
+                limits:
+                  cpu: "1000m"
+                  memory: "1Gi"

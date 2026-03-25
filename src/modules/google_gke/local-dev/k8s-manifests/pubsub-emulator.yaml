@@ -1,0 +1,99 @@
+# =============================================================================
+# Google GKE Module — Pub/Sub Emulator for Local Development
+#
+# PURPOSE: Deploys the Google Cloud Pub/Sub emulator as a pod in the local
+# Kind cluster. The emulator provides the EXACT same gRPC/REST API as real
+# Pub/Sub, so the @google-cloud/pubsub npm package works without modification.
+#
+# HOW IT WORKS:
+#   1. The emulator runs as a Deployment in the 'accessio' namespace
+#   2. A Service exposes it at pubsub-emulator:8085
+#   3. Set PUBSUB_EMULATOR_HOST=pubsub-emulator:8085 in PulseOps
+#   4. @google-cloud/pubsub auto-detects the env var → connects to emulator
+#   5. All Pub/Sub operations (create topic, publish, subscribe) work normally
+#   6. In production (GKE), the env var is NOT set → library uses real Pub/Sub
+#
+# ZERO CODE CHANGES:
+#   The @google-cloud/pubsub library has built-in emulator support:
+#   - If PUBSUB_EMULATOR_HOST is set → connect to emulator
+#   - If PUBSUB_EMULATOR_HOST is NOT set → connect to real GCP Pub/Sub
+#   Same code, same API calls, different backend.
+#
+# INIT CONTAINER:
+#   The init container creates sample topics and subscriptions that simulate
+#   Accessio's Pub/Sub configuration, so the module has data to display
+#   immediately after setup.
+#
+# USAGE:
+#   kubectl apply -f namespace.yaml
+#   kubectl apply -f pubsub-emulator.yaml
+#   kubectl get pods -n accessio -l app=pubsub-emulator
+#
+# =============================================================================
+
+# ─── Deployment: Pub/Sub Emulator ────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pubsub-emulator
+  namespace: accessio
+  labels:
+    app: pubsub-emulator
+    component: emulator
+    pulseops.io/module: google_gke
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pubsub-emulator
+  template:
+    metadata:
+      labels:
+        app: pubsub-emulator
+        component: emulator
+    spec:
+      containers:
+        - name: pubsub-emulator
+          # Google's official Cloud SDK image includes all emulators
+          image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+          command:
+            - gcloud
+            - beta
+            - emulators
+            - pubsub
+            - start
+            - --host-port=0.0.0.0:8085
+            - --project=local-dev-project
+          ports:
+            - containerPort: 8085
+              name: grpc
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            tcpSocket:
+              port: 8085
+            initialDelaySeconds: 10
+            periodSeconds: 5
+
+---
+# ─── Service: Pub/Sub Emulator ───────────────────────────────────────────────
+# Exposes the emulator within the cluster at pubsub-emulator:8085
+apiVersion: v1
+kind: Service
+metadata:
+  name: pubsub-emulator
+  namespace: accessio
+  labels:
+    app: pubsub-emulator
+spec:
+  selector:
+    app: pubsub-emulator
+  ports:
+    - port: 8085
+      targetPort: 8085
+      name: grpc

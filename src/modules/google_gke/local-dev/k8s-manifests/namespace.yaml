@@ -1,0 +1,31 @@
+# =============================================================================
+# Google GKE Module — Kubernetes Namespace
+#
+# PURPOSE: Creates the 'accessio' namespace where all sample Accessio workloads
+# are deployed. In production GKE, this namespace already exists.
+# Locally, we create it to simulate the same environment.
+#
+# WHAT IS A NAMESPACE?
+#   A namespace is a virtual cluster within a Kubernetes cluster.
+#   It provides isolation between different applications or teams.
+#   Think of it like a folder that groups related resources.
+#
+#   Common namespaces:
+#     - default     → Where resources go if no namespace is specified
+#     - kube-system → Kubernetes system components (don't touch)
+#     - accessio    → Our application workloads (what we create here)
+#
+# USAGE:
+#   kubectl apply -f namespace.yaml
+#   kubectl get namespaces
+#
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prod-iga
+  labels:
+    app.kubernetes.io/managed-by: pulseops
+    pulseops.io/module: google_gke
+    purpose: prod1-cluster-workloads
+    environment: production-simulation

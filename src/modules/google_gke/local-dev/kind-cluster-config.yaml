@@ -1,0 +1,116 @@
+# =============================================================================
+# Google GKE Module — Kind Cluster Configuration
+#
+# PURPOSE: Defines a local Kubernetes cluster using Kind (Kubernetes in Docker)
+# that simulates a GCP GKE environment for development and testing.
+#
+# =============================================================================
+# WHAT IS KIND?
+# =============================================================================
+#
+# Kind = "Kubernetes IN Docker"
+# - Runs a full Kubernetes cluster inside Docker (or Podman) containers
+# - Each Kubernetes "node" is a Docker container
+# - Provides the EXACT same Kubernetes API as GKE
+# - Perfect for local development — no cloud costs, no VPN needed
+#
+# =============================================================================
+# HOW TO USE THIS FILE:
+# =============================================================================
+#
+# Prerequisites:
+#   1. Install Podman:      https://podman.io/getting-started/installation
+#   2. Install Kind:        https://kind.sigs.k8s.io/docs/user/quick-start/
+#   3. Install kubectl:     https://kubernetes.io/docs/tasks/tools/
+#
+# Create the cluster:
+#   kind create cluster --config kind-cluster-config.yaml --name pulseops-gke
+#
+# Verify:
+#   kubectl cluster-info --context kind-pulseops-gke
+#   kubectl get nodes
+#
+# Delete (when done):
+#   kind delete cluster --name pulseops-gke
+#
+# =============================================================================
+# USING PODMAN INSTEAD OF DOCKER:
+# =============================================================================
+#
+# Kind works with Podman by setting an environment variable:
+#
+#   Windows (PowerShell):
+#     $env:KIND_EXPERIMENTAL_PROVIDER = "podman"
+#     kind create cluster --config kind-cluster-config.yaml --name pulseops-gke
+#
+#   Linux/macOS:
+#     KIND_EXPERIMENTAL_PROVIDER=podman kind create cluster \
+#       --config kind-cluster-config.yaml --name pulseops-gke
+#
+# Podman must be running (podman machine start) before creating the cluster.
+#
+# =============================================================================
+# CLUSTER TOPOLOGY:
+# =============================================================================
+#
+# This config creates a 3-node cluster:
+#   - 1 control-plane node (K8s API server, scheduler, controller manager, etcd)
+#   - 2 worker nodes (where pods/workloads run)
+#
+# This simulates a real GKE cluster where:
+#   - Control plane is managed by Google (you don't see it)
+#   - Worker nodes run your applications
+#   - DaemonSets run on every worker node
+#
+# =============================================================================
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: prod1-cluster
+nodes:
+  # ── Control Plane Node ─────────────────────────────────────────────────────
+  # Runs: kube-apiserver, kube-scheduler, kube-controller-manager, etcd
+  # In GKE, this is managed by Google and invisible to you.
+  # Locally, Kind runs it as a container so you can access the full K8s API.
+  - role: control-plane
+    # Port mappings expose services on your host machine:
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      # Map container port 80 → host port 8080 (for Ingress/Nginx)
+      - containerPort: 80
+        hostPort: 8080
+        protocol: TCP
+      # Map container port 443 → host port 8443 (for HTTPS Ingress)
+      - containerPort: 443
+        hostPort: 8443
+        protocol: TCP
+      # Map NodePort range for direct service access
+      - containerPort: 30000
+        hostPort: 30000
+        protocol: TCP
+      - containerPort: 30001
+        hostPort: 30001
+        protocol: TCP
+
+  # ── Worker Node 1 ──────────────────────────────────────────────────────────
+  # Runs application workloads (Deployments, StatefulSets, etc.)
+  - role: worker
+
+  # ── Worker Node 2 ──────────────────────────────────────────────────────────
+  # Second worker node for pod distribution and DaemonSet testing
+  - role: worker
+
+# ── Networking ─────────────────────────────────────────────────────────────────
+# Default CNI (Container Network Interface) is kindnet.
+# Pods can communicate across nodes, just like in GKE.
+networking:
+  # Pod subnet — CIDR range for pod IP addresses
+  podSubnet: "10.244.0.0/16"
+  # Service subnet — CIDR range for ClusterIP services
+  serviceSubnet: "10.96.0.0/16"
+  # Disable default CNI to use a custom one (optional, for Calico)
+  # disableDefaultCNI: true

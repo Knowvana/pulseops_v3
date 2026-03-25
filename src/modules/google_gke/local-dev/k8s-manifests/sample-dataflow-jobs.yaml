@@ -1,0 +1,123 @@
+# =============================================================================
+# Google GKE Module — Sample Dataflow Job Simulations for Local Development
+#
+# PURPOSE: Creates Kubernetes Jobs that simulate Google Cloud Dataflow pipelines
+# for the prod1-cluster. Since Dataflow doesn't exist locally, we use K8s Jobs
+# with special labels that the DataflowService.js recognizes as Dataflow simulations.
+#
+# HOW THE SIMULATION WORKS:
+#   1. K8s Jobs are labeled with: pulseops.io/type=dataflow
+#   2. DataflowService.js detects local mode (no GCP credentials)
+#   3. Instead of calling Dataflow API, it queries K8s Jobs with that label
+#   4. Job metadata is mapped to Dataflow-like format:
+#      - Job name → Dataflow pipeline name
+#      - Job status → Dataflow job state (RUNNING/DONE/FAILED)
+#      - Job duration → Pipeline execution time
+#
+#   This means: same UI, same data format, zero code changes when switching
+#   from local K8s Jobs to real Dataflow API in production.
+#
+# USAGE:
+#   kubectl apply -f namespace.yaml
+#   kubectl apply -f sample-dataflow-jobs.yaml
+#   kubectl get jobs -n prod-iga -l pulseops.io/type=dataflow
+#
+# NOTE: Unlike CronJobs, these are one-time Jobs. To re-simulate, delete
+# and re-apply them, or use the provided setup script.
+#
+# =============================================================================
+
+# ─── Job: Identity Data ETL Pipeline (Batch) ────────────────────────────────
+# Simulates a Dataflow batch pipeline for identity data ETL
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: identity-data-etl-pipeline
+  namespace: prod-iga
+  labels:
+    app: identity-data-etl-pipeline
+    pulseops.io/type: dataflow
+    pulseops.io/pipeline-type: BATCH
+    pulseops.io/module: google_gke
+spec:
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: identity-data-etl-pipeline
+        pulseops.io/type: dataflow
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: pipeline
+          image: busybox:1.36
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "[$(date)] Pipeline: identity-data-etl-pipeline [BATCH]"
+              echo "Reading from IdentityIQ source..."
+              sleep 5
+              echo "Processing 28,456 identity records"
+              echo "Applying transformation: extract → transform → validate"
+              sleep 12
+              echo "Writing to BigTable sink..."
+              sleep 5
+              echo "Elements processed: 28,456"
+              echo "Pipeline completed successfully"
+              echo "[$(date)] Pipeline finished"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+---
+# ─── Job: Access Request Processing Pipeline (Batch) ────────────────────────
+# Simulates a Dataflow batch pipeline for access request processing
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: access-request-processing-pipeline
+  namespace: prod-iga
+  labels:
+    app: access-request-processing-pipeline
+    pulseops.io/type: dataflow
+    pulseops.io/pipeline-type: BATCH
+    pulseops.io/module: google_gke
+spec:
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: access-request-processing-pipeline
+        pulseops.io/type: dataflow
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: pipeline
+          image: busybox:1.36
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "[$(date)] Pipeline: access-request-processing-pipeline [BATCH]"
+              echo "Reading access requests from Pub/Sub..."
+              sleep 5
+              echo "Processing 5,234 access requests"
+              echo "Applying business rules: validation → enrichment → routing"
+              sleep 10
+              echo "Writing processed requests to BigTable..."
+              sleep 3
+              echo "Elements processed: 5,234"
+              echo "Pipeline completed successfully"
+              echo "[$(date)] Pipeline finished"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

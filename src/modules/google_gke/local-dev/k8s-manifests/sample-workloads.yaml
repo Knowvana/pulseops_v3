@@ -1,0 +1,398 @@
+# =============================================================================
+# Google GKE Module — Sample Workloads for Local Development
+#
+# PURPOSE: Deploys sample workloads that simulate the client's prod1-cluster
+# components running on GKE. These use lightweight containers (nginx, busybox,
+# alpine) to mimic real workloads without requiring actual application images.
+#
+# WORKLOADS CREATED:
+#   Deployments:
+#     - identityiq-ui     (2 replicas — IdentityIQ UI)
+#     - identityiq-task   (2 replicas — IdentityIQ Task Service)
+#     - web               (3 replicas — Web frontend)
+#     - openidm           (2 replicas — OpenIDM)
+#     - ig                (2 replicas — Identity Gateway)
+#     - iga-api           (3 replicas — IGA API)
+#     - cloudsql-proxy    (1 replica — Cloud SQL Proxy)
+#
+#   StatefulSets:
+#     - elasticsearch-master (3 replicas — Elasticsearch cluster)
+#
+# WHY NGINX/ALPINE?
+#   We use lightweight images because:
+#   - No license fees or proprietary image access needed
+#   - Fast to pull (small images)
+#   - Provides real pods that respond to health checks
+#   - K8s API returns the same metadata (replicas, status, events)
+#   - The GKE module doesn't care what's INSIDE the container — it monitors
+#     the Kubernetes resource state (replicas, ready, restarts, etc.)
+#
+# USAGE:
+#   kubectl apply -f namespace.yaml
+#   kubectl apply -f sample-workloads.yaml
+#   kubectl get deployments -n accessio
+#   kubectl get statefulsets -n accessio
+#   kubectl get pods -n accessio
+#
+# =============================================================================
+
+# ─── Deployment: IdentityIQ UI ─────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: identityiq-ui
+  namespace: prod-iga
+  labels:
+    app: identityiq-ui
+    component: identity
+    tier: frontend
+    pulseops.io/module: google_gke
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: identityiq-ui
+  template:
+    metadata:
+      labels:
+        app: identityiq-ui
+        component: identity
+        tier: frontend
+    spec:
+      containers:
+        - name: identityiq-ui
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 15
+
+---
+# ─── Deployment: IdentityIQ Task Service ────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: identityiq-task
+  namespace: prod-iga
+  labels:
+    app: identityiq-task
+    component: identity
+    tier: backend
+    pulseops.io/module: google_gke
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: identityiq-task
+  template:
+    metadata:
+      labels:
+        app: identityiq-task
+        component: identity
+        tier: backend
+    spec:
+      containers:
+        - name: identityiq-task
+          image: nginx:alpine
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+---
+# ─── Deployment: Web Frontend ───────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: prod-iga
+  labels:
+    app: web
+    component: frontend
+    tier: frontend
+    pulseops.io/module: google_gke
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+        component: frontend
+        tier: frontend
+    spec:
+      containers:
+        - name: web
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+# ─── Deployment: OpenIDM ────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openidm
+  namespace: prod-iga
+  labels:
+    app: openidm
+    component: identity
+    tier: backend
+    pulseops.io/module: google_gke
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openidm
+  template:
+    metadata:
+      labels:
+        app: openidm
+        component: identity
+        tier: backend
+    spec:
+      containers:
+        - name: openidm
+          image: nginx:alpine
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+---
+# ─── Deployment: Identity Gateway (IG) ──────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ig
+  namespace: prod-iga
+  labels:
+    app: ig
+    component: gateway
+    tier: backend
+    pulseops.io/module: google_gke
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ig
+  template:
+    metadata:
+      labels:
+        app: ig
+        component: gateway
+        tier: backend
+    spec:
+      containers:
+        - name: ig
+          image: nginx:alpine
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+---
+# ─── Deployment: IGA API ────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iga-api
+  namespace: prod-iga
+  labels:
+    app: iga-api
+    component: api
+    tier: backend
+    pulseops.io/module: google_gke
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iga-api
+  template:
+    metadata:
+      labels:
+        app: iga-api
+        component: api
+        tier: backend
+    spec:
+      containers:
+        - name: iga-api
+          image: nginx:alpine
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+---
+# ─── Deployment: Cloud SQL Proxy ────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudsql-proxy
+  namespace: prod-iga
+  labels:
+    app: cloudsql-proxy
+    component: database
+    tier: backend
+    pulseops.io/module: google_gke
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudsql-proxy
+  template:
+    metadata:
+      labels:
+        app: cloudsql-proxy
+        component: database
+        tier: backend
+    spec:
+      containers:
+        - name: cloudsql-proxy
+          image: nginx:alpine
+          ports:
+            - containerPort: 5432
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+
+---
+# ─── StatefulSet: Elasticsearch Master ───────────────────────────────────────
+# 3-node Elasticsearch cluster for search and analytics
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: elasticsearch-master
+  namespace: prod-iga
+  labels:
+    app: elasticsearch-master
+    component: search
+    tier: data
+    pulseops.io/module: google_gke
+spec:
+  serviceName: elasticsearch-master
+  replicas: 1
+  selector:
+    matchLabels:
+      app: elasticsearch-master
+  template:
+    metadata:
+      labels:
+        app: elasticsearch-master
+        component: search
+        tier: data
+    spec:
+      containers:
+        - name: elasticsearch-master
+          image: nginx:alpine
+          ports:
+            - containerPort: 9200
+            - containerPort: 9300
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+
+---
+# ─── Headless Service for Elasticsearch StatefulSet ──────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch-master
+  namespace: prod-iga
+  labels:
+    app: elasticsearch-master
+spec:
+  clusterIP: None
+  selector:
+    app: elasticsearch-master
+  ports:
+    - name: http
+      port: 9200
+      targetPort: 9200
+    - name: transport
+      port: 9300
+      targetPort: 9300

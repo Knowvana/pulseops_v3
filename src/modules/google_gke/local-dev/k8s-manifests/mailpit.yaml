@@ -1,0 +1,121 @@
+# =============================================================================
+# Google GKE Module — Mailpit (Email Testing) for Local Development
+#
+# PURPOSE: Deploys Mailpit as a pod in the local Kind cluster to simulate
+# email delivery monitoring. Mailpit is a lightweight SMTP testing tool
+# that captures all emails sent to it without actually delivering them.
+#
+# WHAT IS MAILPIT?
+#   - Lightweight email testing tool (Go binary, ~10MB)
+#   - SMTP server on port 1025 (catches all emails)
+#   - Web UI on port 8025 (view captured emails in browser)
+#   - REST API on port 8025/api/v1 (query emails programmatically)
+#   - Perfect replacement for the old MailHog
+#
+# HOW IT WORKS WITH THE MODULE:
+#   1. Accessio applications send emails via SMTP to mailpit:1025
+#   2. Mailpit captures the email (doesn't deliver to real recipients)
+#   3. EmailService.js queries Mailpit API to get email status:
+#      GET http://mailpit-service:8025/api/v1/messages → list emails
+#      GET http://mailpit-service:8025/api/v1/message/{id} → email details
+#   4. Module displays email delivery stats in the dashboard
+#
+# ZERO CODE CHANGES:
+#   EmailService.js uses config.provider to determine the backend:
+#   - Local:  provider='mailpit' → queries Mailpit REST API
+#   - Prod:   provider='sendgrid' → queries SendGrid API
+#   Same normalized response format from both.
+#
+# USAGE:
+#   kubectl apply -f namespace.yaml
+#   kubectl apply -f mailpit.yaml
+#   kubectl get pods -n accessio -l app=mailpit
+#
+#   Access Mailpit Web UI (via NodePort):
+#     http://localhost:30001
+#
+# =============================================================================
+
+# ─── Deployment: Mailpit ─────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+  namespace: accessio
+  labels:
+    app: mailpit
+    component: email-testing
+    pulseops.io/module: google_gke
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mailpit
+  template:
+    metadata:
+      labels:
+        app: mailpit
+        component: email-testing
+    spec:
+      containers:
+        - name: mailpit
+          image: axllent/mailpit:latest
+          ports:
+            - containerPort: 1025
+              name: smtp
+            - containerPort: 8025
+              name: http
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          readinessProbe:
+            httpGet:
+              path: /api/v1/info
+              port: 8025
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+---
+# ─── Service: Mailpit (ClusterIP for internal access) ───────────────────────
+# Other pods connect via: mailpit-service:1025 (SMTP) and mailpit-service:8025 (API)
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit-service
+  namespace: accessio
+  labels:
+    app: mailpit
+spec:
+  selector:
+    app: mailpit
+  ports:
+    - name: smtp
+      port: 1025
+      targetPort: 1025
+    - name: http
+      port: 8025
+      targetPort: 8025
+
+---
+# ─── Service: Mailpit Web UI (NodePort for browser access) ──────────────────
+# Access Mailpit Web UI from your browser at http://localhost:30001
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit-nodeport
+  namespace: accessio
+  labels:
+    app: mailpit
+spec:
+  type: NodePort
+  selector:
+    app: mailpit
+  ports:
+    - name: http
+      port: 8025
+      targetPort: 8025
+      nodePort: 30001

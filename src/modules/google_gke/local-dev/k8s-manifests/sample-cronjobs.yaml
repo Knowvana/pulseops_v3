@@ -45,7 +45,6 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 0
-      ttlSecondsAfterFinished: 600
       template:
         metadata:
           labels:
@@ -96,7 +95,6 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 0
-      ttlSecondsAfterFinished: 600
       template:
         metadata:
           labels:
@@ -145,7 +143,6 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 0
-      ttlSecondsAfterFinished: 600
       template:
         metadata:
           labels:
@@ -176,4 +173,57 @@ spec:
                   memory: "256Mi"
                 limits:
                   cpu: "1000m"
+                  memory: "1Gi"
+
+---
+# ─── CronJob: Weekly Database Cleanup ────────────────────────────────────────
+# Simulates weekly database maintenance and cleanup
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: weekly-db-cleanup
+  namespace: prod-iga
+  labels:
+    app: weekly-db-cleanup
+    component: batch
+    pulseops.io/module: google_gke
+spec:
+  # Every Sunday at 2:00 AM
+  schedule: "0 2 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: weekly-db-cleanup
+            job-type: cronjob
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: weekly-db-cleanup
+              image: busybox:1.36
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  echo "[$(date)] Starting weekly database cleanup"
+                  echo "Analyzing database tables..."
+                  sleep 3
+                  echo "Running VACUUM and ANALYZE..."
+                  sleep 2
+                  echo "Removing old log entries (older than 30 days)..."
+                  sleep 2
+                  echo "Compacting indexes..."
+                  sleep 1
+                  echo "[$(date)] Database cleanup completed successfully"
+              resources:
+                requests:
+                  cpu: "150m"
+                  memory: "256Mi"
+                limits:
+                  cpu: "800m"
                   memory: "1Gi"

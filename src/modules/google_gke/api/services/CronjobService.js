@@ -31,7 +31,7 @@ const log = createGkeLogger('CronjobService');
 function parseCronIntervalSeconds(schedule) {
   if (!schedule) return null;
   try {
-    const cron = CronExpressionParser.parseExpression(schedule);
+    const cron = CronExpressionParser.parse(schedule);
     const next1 = cron.next().getTime();
     const next2 = cron.next().getTime();
     const intervalSec = Math.round((next2 - next1) / 1000);
@@ -48,7 +48,28 @@ function parseCronIntervalSeconds(schedule) {
 function describeCron(schedule) {
   if (!schedule) return '—';
   try {
-    return cronstrue.toString(schedule, { use24HourTimeFormat: false, verbose: false });
+    // Use 24-hour format and throwExceptionOnParseError to catch issues early
+    const description = cronstrue.toString(schedule, { 
+      use24HourTimeFormat: true, 
+      verbose: false,
+      throwExceptionOnParseError: true
+    });
+    
+    // Add "Weekly" label for weekly schedules (day of week specified, hour and minute specified)
+    const parts = schedule.trim().split(/\s+/);
+    if (parts.length === 5) {
+      const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+      // If day of week is specified (0-6) and not *, it's a weekly schedule
+      if (dayOfWeek !== '*' && dayOfMonth === '*') {
+        return `Weekly, ${description}`;
+      }
+      // If it's daily (day of week is *, but hour and minute are specific)
+      if (dayOfWeek === '*' && dayOfMonth === '*' && hour !== '*' && minute !== '*') {
+        return `Daily, ${description}`;
+      }
+    }
+    
+    return description;
   } catch (err) {
     log.debug('describeCron — cronstrue failed, returning raw expression', { schedule, error: err.message });
     return schedule;
@@ -95,7 +116,19 @@ function formatJob(job) {
   else if (job.status?.conditions?.some(c => c.type === 'Failed' && c.status === 'True')) status = 'Failed';
 
   const startTime = job.status?.startTime || job.metadata?.creationTimestamp;
-  const completionTime = job.status?.completionTime;
+  let completionTime = job.status?.completionTime;
+  
+  // If job is completed but completionTime not set, calculate it
+  if (!completionTime && status !== 'Running' && startTime) {
+    // For completed jobs without completionTime, use the timestamp of the completion condition
+    const completionCondition = job.status?.conditions?.find(c => 
+      (c.type === 'Complete' && c.status === 'True') || 
+      (c.type === 'Failed' && c.status === 'True')
+    );
+    completionTime = completionCondition?.lastTransitionTime || new Date().toISOString();
+  }
+  
+  const durationSeconds = startTime ? Math.floor((new Date(completionTime || Date.now()) - new Date(startTime)) / 1000) : 0;
 
   return {
     name: job.metadata?.name,
@@ -104,7 +137,7 @@ function formatJob(job) {
     startTime,
     completionTime,
     duration: formatDuration(startTime, completionTime),
-    durationSeconds: startTime ? Math.floor((new Date(completionTime || Date.now()) - new Date(startTime)) / 1000) : 0,
+    durationSeconds,
     succeeded,
     failed,
     active,
@@ -191,12 +224,24 @@ function formatCronjob(cj, jobs) {
   const lastStatus = lastJob?.status || '—';
   const lastDuration = lastJob?.duration || '—';
 
-  // Next run estimate (based on lastScheduleTime + interval)
+  // Calculate interval in seconds (used for next run estimate and alert detection)
   const intervalSec = parseCronIntervalSeconds(schedule);
+
+  // Next run estimate (using cron parser for accurate calculation)
   let nextRunEstimate = null;
-  if (lastScheduleTime && intervalSec) {
-    const next = new Date(new Date(lastScheduleTime).getTime() + intervalSec * 1000);
-    nextRunEstimate = next.toISOString();
+  if (!suspended && schedule) {
+    try {
+      const cron = CronExpressionParser.parse(schedule, { currentDate: new Date() });
+      const nextRun = cron.next();
+      nextRunEstimate = nextRun.toISOString();
+    } catch (err) {
+      // Fallback: use lastScheduleTime + interval if available
+      if (lastScheduleTime && intervalSec) {
+        const next = new Date(new Date(lastScheduleTime).getTime() + intervalSec * 1000);
+        nextRunEstimate = next.toISOString();
+      }
+      log.debug('nextRunEstimate fallback used', { schedule, error: err.message });
+    }
   }
 
   // Alert detection

@@ -1,0 +1,23 @@
+{
+  "_description": "Google GKE module — all frontend UI success and info messages. Never hardcode success text in React components.",
+  "cluster": {
+    "configSaved": "Cluster configuration saved successfully.",
+    "testSuccess": "Cluster connection test successful.",
+    "testFailed": "Cluster connection test failed. Check your configuration."
+  },
+  "config": {
+    "pollerSaved": "Poller configuration saved.",
+    "generalSaved": "General settings saved.",
+    "alertsSaved": "Alert configuration saved.",
+    "emailSaved": "Email monitoring configuration saved."
+  },
+  "poller": {
+    "started": "Cluster poller started.",
+    "stopped": "Cluster poller stopped.",
+    "pollComplete": "Manual poll completed."
+  },
+  "data": {
+    "defaultsLoaded": "Default data loaded successfully.",
+    "dataReset": "Module data reset successfully."
+  }
+}

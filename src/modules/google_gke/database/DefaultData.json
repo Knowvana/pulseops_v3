@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "moduleId": "google_gke",
+    "version": "1.0.0",
+    "description": "Google GKE Module — default seed data for gke_module_config table. Provides initial configuration values when the module is first installed. Cluster credentials are stored in api/config/ClusterConfig.json (not in DB)."
+  },
+  "gke_module_config": [
+    {
+      "config_key": "poller",
+      "config_value": {
+        "enabled": false,
+        "intervalSeconds": 30
+      },
+      "description": "Background health poller settings"
+    },
+    {
+      "config_key": "monitored_workloads",
+      "config_value": {
+        "namespaces": ["prod-iga"],
+        "workloads": [
+          { "name": "identityiq-ui", "type": "Deployment", "namespace": "prod-iga" },
+          { "name": "identityiq-task", "type": "Deployment", "namespace": "prod-iga" },
+          { "name": "web", "type": "Deployment", "namespace": "prod-iga" },
+          { "name": "openidm", "type": "Deployment", "namespace": "prod-iga" },
+          { "name": "ig", "type": "Deployment", "namespace": "prod-iga" },
+          { "name": "iga-api", "type": "Deployment", "namespace": "prod-iga" },
+          { "name": "cloudsql-proxy", "type": "Deployment", "namespace": "prod-iga" },
+          { "name": "elasticsearch-master", "type": "StatefulSet", "namespace": "prod-iga" }
+        ]
+      },
+      "description": "List of workloads to monitor"
+    },
+    {
+      "config_key": "alert_thresholds",
+      "config_value": {
+        "podCrashRestarts": 3,
+        "unhealthyWorkloadDurationSeconds": 300,
+        "cronjobFailureRate": 0.1
+      },
+      "description": "Alert threshold configuration"
+    }
+  ]
+}

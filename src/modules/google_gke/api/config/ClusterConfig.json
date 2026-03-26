@@ -1,0 +1,29 @@
+{
+  "connection": {
+    "apiServerUrl": "https://127.0.0.1:51393",
+    "serviceAccountToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImdwOWYxQVU0Vkh5Y3FOSFhUblBveDkxVDBMcE90ejhZbnhYX3MyNklsNzAifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJkZWZhdWx0Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZWNyZXQubmFtZSI6InB1bHNlb3BzLXRva2VuIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQubmFtZSI6InB1bHNlb3BzIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQudWlkIjoiNjA4YTNiNWEtMjBhYS00OTNlLTk3YzktZmJhOTc5ZDc5ZTU2Iiwic3ViIjoic3lzdGVtOnNlcnZpY2VhY2NvdW50OmRlZmF1bHQ6cHVsc2VvcHMifQ.W8kt_NdgkWtZaYGSmEAa7rNIDTFgAuPOYrALXEHoo3L80a0EuSSMXIqfYioCTF9NYmKj-pVfcN97hgfbqQu8ZR_PR6xrbvVNMH9r-wmEJPy5v_JiVjYa7Bfi9eVyhvK_CLSY-49PKxdRi46azd8LvhC74o6obmROjkGb6PuKtAF26t2QmR9bPHsKutEI6QykdaoF-B3IvDdjn7jmd8VxbO28HZkfY1TdIbBSuUXguGHILmzBaEQskkpM5kQa7Tl2Ms8NykcUKJbQ2CiZhXyJkwQd688wJU9JzlsDYhLn7XSWFIMTPK0j72qOugMRIH3F6JgQWkHOqKuFD_D8PXQhKg",
+    "projectId": "local-dev",
+    "region": "local",
+    "clusterName": "prod1-cluster"
+  },
+  "connectionStatus": {
+    "isConfigured": true,
+    "testStatus": "success",
+    "lastTested": "2026-03-25T16:40:26.098Z",
+    "clusterInfo": {
+      "name": "prod1-cluster",
+      "version": "v1.35.0",
+      "platform": "linux/amd64",
+      "nodeCount": 1,
+      "nodesReady": 1,
+      "namespaceCount": 6,
+      "podCount": 17,
+      "podsRunning": 17
+    }
+  },
+  "_meta": {
+    "moduleId": "google_gke",
+    "version": "1.0.0",
+    "description": "Unified Kubernetes cluster configuration for both production GKE and local development. Stores explicit connection parameters (URL + token) that work identically in both environments. No environment-specific authentication logic needed."
+  }
+}

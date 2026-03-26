@@ -1,0 +1,49 @@
+{
+  "_description": "Google GKE module — all frontend UI error messages. Never hardcode error text in React components. Import this file and reference keys.",
+  "common": {
+    "fetchError": "Failed to load data. Please try again.",
+    "saveError": "Failed to save. Please try again.",
+    "networkError": "Network error. Check your connection.",
+    "unexpectedError": "An unexpected error occurred.",
+    "clusterNotConfigured": "Cluster is not configured. Go to Settings → Cluster Configuration."
+  },
+  "cluster": {
+    "testFailed": "Cluster connection test failed.",
+    "configSaveFailed": "Failed to save cluster configuration."
+  },
+  "workloads": {
+    "fetchFailed": "Failed to fetch workloads.",
+    "podsFetchFailed": "Failed to fetch pods.",
+    "logsFetchFailed": "Failed to fetch logs.",
+    "eventsFetchFailed": "Failed to fetch events."
+  },
+  "dataflow": {
+    "fetchFailed": "Failed to fetch Dataflow jobs.",
+    "logsFetchFailed": "Failed to fetch job logs.",
+    "metricsFetchFailed": "Failed to fetch job metrics."
+  },
+  "cronjobs": {
+    "fetchFailed": "Failed to fetch CronJobs.",
+    "historyFetchFailed": "Failed to fetch execution history.",
+    "logsFetchFailed": "Failed to fetch CronJob logs."
+  },
+  "pubsub": {
+    "topicsFetchFailed": "Failed to fetch Pub/Sub topics.",
+    "subscriptionsFetchFailed": "Failed to fetch subscriptions.",
+    "metricsFetchFailed": "Failed to fetch Pub/Sub metrics."
+  },
+  "email": {
+    "statusFetchFailed": "Failed to fetch email status.",
+    "historyFetchFailed": "Failed to fetch email history.",
+    "configSaveFailed": "Failed to save email configuration."
+  },
+  "logs": {
+    "searchFailed": "Failed to search logs.",
+    "streamFailed": "Failed to start log stream."
+  },
+  "poller": {
+    "startFailed": "Failed to start poller.",
+    "stopFailed": "Failed to stop poller.",
+    "pollFailed": "Manual poll failed."
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "_description": "Google GKE module UI API endpoints. Self-contained — no dependency on platform urls.json. These are the FULL paths the frontend uses to call the backend API (includes /api/google_gke prefix).",
+  "api": {
+    "status":                    "/api/google_gke/status",
+
+    "configCluster":             "/api/google_gke/config/cluster",
+    "configClusterTest":         "/api/google_gke/config/cluster/test",
+    "configPoller":              "/api/google_gke/config/poller",
+    "configGeneral":             "/api/google_gke/config/general",
+    "configAlerts":              "/api/google_gke/config/alerts",
+
+    "workloads":                 "/api/google_gke/workloads",
+    "workloadById":              "/api/google_gke/workloads/{id}",
+    "workloadPods":              "/api/google_gke/workloads/pods",
+    "workloadPodLogs":           "/api/google_gke/workloads/pods/{ns}/{name}/logs",
+    "workloadEvents":            "/api/google_gke/workloads/{id}/events",
+    "configRefreshInterval":     "/api/google_gke/config/refresh-interval",
+    "namespaces":                "/api/google_gke/namespaces",
+
+    "dataflowJobs":              "/api/google_gke/dataflow/jobs",
+    "dataflowJobById":           "/api/google_gke/dataflow/jobs/{id}",
+    "dataflowJobLogs":           "/api/google_gke/dataflow/jobs/{id}/logs",
+    "dataflowJobMetrics":        "/api/google_gke/dataflow/jobs/{id}/metrics",
+
+    "cronjobs":                  "/api/google_gke/cronjobs",
+    "cronjobDashboard":          "/api/google_gke/cronjobs/dashboard",
+    "cronjobHistory":            "/api/google_gke/cronjobs/{ns}/{name}/history",
+    "cronjobLogs":               "/api/google_gke/cronjobs/{ns}/{name}/logs",
+
+    "pubsubTopics":              "/api/google_gke/pubsub/topics",
+    "pubsubSubscriptions":       "/api/google_gke/pubsub/subscriptions",
+    "pubsubMetrics":             "/api/google_gke/pubsub/metrics",
+    "pubsubDeadLetters":         "/api/google_gke/pubsub/dead-letters",
+
+    "emailStatus":               "/api/google_gke/email/status",
+    "emailHistory":              "/api/google_gke/email/history",
+    "emailConfig":               "/api/google_gke/email/config",
+
+    "logsSearch":                "/api/google_gke/logs/search",
+    "logsStream":                "/api/google_gke/logs/stream",
+    "logsAlerts":                "/api/google_gke/logs/alerts",
+
+    "dashboard":                 "/api/google_gke/dashboard",
+    "dashboardSummary":          "/api/google_gke/dashboard/summary",
+    "dashboardAlerts":           "/api/google_gke/dashboard/alerts",
+    "reportHealth":              "/api/google_gke/reports/health",
+    "reportUptime":              "/api/google_gke/reports/uptime",
+
+    "pollerStatus":              "/api/google_gke/poller/status",
+    "pollerStart":               "/api/google_gke/poller/start",
+    "pollerStop":                "/api/google_gke/poller/stop",
+    "pollerPollNow":             "/api/google_gke/poller/poll-now",
+
+    "schemaInfo":                "/api/google_gke/schema/info",
+    "schemaStatus":              "/api/google_gke/schema/status",
+    "loadDefaults":              "/api/google_gke/data/defaults",
+    "resetData":                 "/api/google_gke/data/reset"
+  }
+}

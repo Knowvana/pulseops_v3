@@ -1,0 +1,50 @@
+{
+  "_description": "Google GKE module — all backend API success and informational messages. All message strings must originate from this file. Never hardcode success text in route handlers.",
+
+  "config": {
+    "clusterConfigSaved":          "Cluster configuration saved successfully.",
+    "clusterTestSuccess":          "Cluster connection test successful. Connected to {clusterName}.",
+    "clusterTestFailed":           "Cluster connection test failed. Check your configuration.",
+    "pollerConfigSaved":           "Poller configuration saved successfully.",
+    "generalSettingsSaved":        "General settings saved successfully.",
+    "alertConfigSaved":            "Alert configuration saved successfully."
+  },
+
+  "workloads": {
+    "fetched":                     "Fetched {count} workload(s) from {namespace} namespace.",
+    "podsFetched":                 "Fetched {count} pod(s) for workload {name}."
+  },
+
+  "dataflow": {
+    "fetched":                     "Fetched {count} Dataflow job(s).",
+    "jobDetailsFetched":           "Dataflow job details retrieved."
+  },
+
+  "cronjobs": {
+    "fetched":                     "Fetched {count} CronJob(s).",
+    "historyFetched":              "Fetched {count} execution(s) for CronJob {name}."
+  },
+
+  "pubsub": {
+    "topicsFetched":               "Fetched {count} Pub/Sub topic(s).",
+    "subscriptionsFetched":        "Fetched {count} Pub/Sub subscription(s).",
+    "metricsFetched":              "Pub/Sub metrics retrieved."
+  },
+
+  "email": {
+    "statusFetched":               "Email monitoring status retrieved.",
+    "configSaved":                 "Email monitoring configuration saved."
+  },
+
+  "poller": {
+    "started":                     "Cluster poller started. Polling every {interval} seconds.",
+    "stopped":                     "Cluster poller stopped.",
+    "pollComplete":                "Poll cycle complete. {healthy} healthy, {unhealthy} unhealthy out of {total} component(s).",
+    "manualPollComplete":          "Manual poll complete. {healthy} healthy, {unhealthy} unhealthy."
+  },
+
+  "data": {
+    "loaded":                      "Default data loaded successfully. Seeded {tables} table(s), inserted {rows} row(s).",
+    "reset":                       "Module data deleted. Dropped {dropped} table(s) ({rows} row(s)), {skipped} not found, {errors} error(s)."
+  }
+}

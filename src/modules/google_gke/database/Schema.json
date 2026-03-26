@@ -1,0 +1,24 @@
+{
+  "_meta": {
+    "moduleId": "google_gke",
+    "version": "1.0.0",
+    "description": "Google GKE Module — minimal database schema. Only stores module configuration. All workload, CronJob, Dataflow, Pub/Sub, and email data is queried live from GKE/GCP APIs. Cluster credentials are stored in api/config/ClusterConfig.json (not in DB)."
+  },
+  "tables": [
+    {
+      "name": "gke_module_config",
+      "description": "Consolidated module configuration — key-value store with JSONB values. Stores: poller settings (enabled, interval), monitored workloads list, alert thresholds, email provider config, log alert rules. Same pattern as HealthCheck module's hc_module_config.",
+      "columns": [
+        { "name": "id",           "type": "SERIAL PRIMARY KEY" },
+        { "name": "config_key",   "type": "VARCHAR(100) UNIQUE NOT NULL" },
+        { "name": "config_value", "type": "JSONB NOT NULL DEFAULT '{}'::jsonb" },
+        { "name": "description",  "type": "TEXT" },
+        { "name": "created_at",   "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "updated_at",   "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_gke_module_config_key", "columns": ["config_key"], "unique": true }
+      ]
+    }
+  ]
+}

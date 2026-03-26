@@ -1,0 +1,68 @@
+{
+  "_description": "Google GKE module — all internal API route paths. Zero hardcoding in route files. Every route handler must reference this file via the config loader. Routes are relative to the module mount point /api/google_gke/.",
+
+  "routes": {
+    "_comment_config": "── Cluster & Module Configuration ─────────────────────────────",
+    "configCluster":                "/config/cluster",
+    "configClusterTest":            "/config/cluster/test",
+    "configPoller":                 "/config/poller",
+    "configGeneral":                "/config/general",
+    "configAlerts":                 "/config/alerts",
+
+    "_comment_workloads": "── GKE Workloads (Deployments, StatefulSets, DaemonSets, Pods) ─",
+    "workloads":                    "/workloads",
+    "workloadById":                 "/workloads/:id",
+    "workloadPods":                 "/workloads/pods",
+    "workloadPodLogs":              "/workloads/pods/:ns/:name/logs",
+    "workloadEvents":               "/workloads/:id/events",
+    "configRefreshInterval":        "/config/refresh-interval",
+    "namespaces":                   "/namespaces",
+
+    "_comment_dataflow": "── Dataflow Jobs ──────────────────────────────────────────────",
+    "dataflowJobs":                 "/dataflow/jobs",
+    "dataflowJobById":              "/dataflow/jobs/:id",
+    "dataflowJobLogs":              "/dataflow/jobs/:id/logs",
+    "dataflowJobMetrics":           "/dataflow/jobs/:id/metrics",
+
+    "_comment_cronjobs": "── Kubernetes CronJobs ────────────────────────────────────────",
+    "cronjobs":                     "/cronjobs",
+    "cronjobDashboard":             "/cronjobs/dashboard",
+    "cronjobHistory":               "/cronjobs/:ns/:name/history",
+    "cronjobLogs":                  "/cronjobs/:ns/:name/logs",
+
+    "_comment_pubsub": "── Google Pub/Sub ─────────────────────────────────────────────",
+    "pubsubTopics":                 "/pubsub/topics",
+    "pubsubSubscriptions":          "/pubsub/subscriptions",
+    "pubsubMetrics":                "/pubsub/metrics",
+    "pubsubDeadLetters":            "/pubsub/dead-letters",
+
+    "_comment_email": "── Email Monitoring ───────────────────────────────────────────",
+    "emailStatus":                  "/email/status",
+    "emailHistory":                 "/email/history",
+    "emailConfig":                  "/email/config",
+
+    "_comment_logs": "── Log-Based Monitoring ───────────────────────────────────────",
+    "logsSearch":                   "/logs/search",
+    "logsStream":                   "/logs/stream",
+    "logsAlerts":                   "/logs/alerts",
+
+    "_comment_dashboard": "── Dashboard & Reports ────────────────────────────────────────",
+    "dashboard":                    "/dashboard",
+    "dashboardSummary":             "/dashboard/summary",
+    "dashboardAlerts":              "/dashboard/alerts",
+    "reportHealth":                 "/reports/health",
+    "reportUptime":                 "/reports/uptime",
+
+    "_comment_poller": "── Cluster Poller ─────────────────────────────────────────────",
+    "pollerStatus":                 "/poller/status",
+    "pollerStart":                  "/poller/start",
+    "pollerStop":                   "/poller/stop",
+    "pollerPollNow":                "/poller/poll-now",
+
+    "_comment_data": "── Data Management ────────────────────────────────────────────",
+    "schemaInfo":                   "/schema/info",
+    "schemaStatus":                 "/schema/status",
+    "dataDefaults":                 "/data/defaults",
+    "dataReset":                    "/data/reset"
+  }
+}

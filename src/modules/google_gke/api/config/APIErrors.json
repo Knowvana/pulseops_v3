@@ -1,0 +1,85 @@
+{
+  "_description": "Google GKE module — all backend API error messages. All error strings must originate from this file. Never hardcode error text in route handlers or services. Use {message} placeholder for dynamic error details.",
+
+  "config": {
+    "clusterConfigLoadFailed":     "Failed to load cluster configuration: {message}",
+    "clusterConfigSaveFailed":     "Failed to save cluster configuration: {message}",
+    "clusterTestFailed":           "Failed to test cluster connection: {message}",
+    "clusterNotConfigured":        "Cluster connection is not configured. Go to Settings → Cluster Configuration.",
+    "pollerConfigLoadFailed":      "Failed to load poller configuration: {message}",
+    "pollerConfigSaveFailed":      "Failed to save poller configuration: {message}",
+    "generalSettingsLoadFailed":   "Failed to load general settings: {message}",
+    "generalSettingsSaveFailed":   "Failed to save general settings: {message}",
+    "alertConfigLoadFailed":       "Failed to load alert configuration: {message}",
+    "alertConfigSaveFailed":       "Failed to save alert configuration: {message}"
+  },
+
+  "workloads": {
+    "fetchFailed":                 "Failed to fetch workloads: {message}",
+    "fetchByIdFailed":             "Failed to fetch workload details: {message}",
+    "podsFetchFailed":             "Failed to fetch pods for workload: {message}",
+    "logsFetchFailed":             "Failed to fetch workload logs: {message}",
+    "eventsFetchFailed":           "Failed to fetch workload events: {message}",
+    "notFound":                    "Workload not found.",
+    "namespacesFetchFailed":       "Failed to fetch namespaces: {message}"
+  },
+
+  "dataflow": {
+    "fetchFailed":                 "Failed to fetch Dataflow jobs: {message}",
+    "fetchByIdFailed":             "Failed to fetch Dataflow job details: {message}",
+    "logsFetchFailed":             "Failed to fetch Dataflow job logs: {message}",
+    "metricsFetchFailed":          "Failed to fetch Dataflow job metrics: {message}",
+    "notFound":                    "Dataflow job not found."
+  },
+
+  "cronjobs": {
+    "fetchFailed":                 "Failed to fetch CronJobs: {message}",
+    "fetchByIdFailed":             "Failed to fetch CronJob details: {message}",
+    "historyFetchFailed":          "Failed to fetch CronJob execution history: {message}",
+    "logsFetchFailed":             "Failed to fetch CronJob logs: {message}",
+    "dashboardFailed":             "Failed to load CronJob dashboard: {message}",
+    "notFound":                    "CronJob not found."
+  },
+
+  "pubsub": {
+    "topicsFetchFailed":           "Failed to fetch Pub/Sub topics: {message}",
+    "subscriptionsFetchFailed":    "Failed to fetch Pub/Sub subscriptions: {message}",
+    "metricsFetchFailed":          "Failed to fetch Pub/Sub metrics: {message}",
+    "deadLettersFetchFailed":      "Failed to fetch Pub/Sub dead letter messages: {message}"
+  },
+
+  "email": {
+    "statusFetchFailed":           "Failed to fetch email monitoring status: {message}",
+    "historyFetchFailed":          "Failed to fetch email history: {message}",
+    "configSaveFailed":            "Failed to save email monitoring configuration: {message}"
+  },
+
+  "logs": {
+    "searchFailed":                "Failed to search logs: {message}",
+    "streamFailed":                "Failed to stream logs: {message}",
+    "alertsFetchFailed":           "Failed to fetch log-based alerts: {message}"
+  },
+
+  "dashboard": {
+    "summaryFailed":               "Failed to load dashboard summary: {message}",
+    "alertsFailed":                "Failed to load dashboard alerts: {message}"
+  },
+
+  "reports": {
+    "healthFailed":                "Failed to generate health report: {message}",
+    "uptimeFailed":                "Failed to generate uptime report: {message}"
+  },
+
+  "poller": {
+    "startFailed":                 "Failed to start cluster poller: {message}",
+    "stopFailed":                  "Failed to stop cluster poller: {message}",
+    "pollFailed":                  "Cluster poll failed: {message}",
+    "statusFailed":                "Failed to get poller status: {message}"
+  },
+
+  "data": {
+    "schemaInfoFailed":            "Failed to load schema info: {message}",
+    "loadDefaultsFailed":          "Failed to load default data: {message}",
+    "resetFailed":                 "Failed to reset module data: {message}"
+  }
+}

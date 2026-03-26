@@ -1,0 +1,29 @@
+{
+  "id": "google_gke",
+  "name": "Google GKE",
+  "shortName": "GKE",
+  "version": "1.0.0",
+  "description": "Google GKE Infrastructure Monitoring — monitors GKE workloads, Dataflow jobs, CronJobs, Pub/Sub, email delivery, and log-based alerting for Accessio platform components (ForgeRock IGA, Sailpoint, PostgreSQL, Elasticsearch).",
+  "roles": ["super_admin", "admin", "user"],
+  "isCore": false,
+  "order": 5,
+  "defaultView": "dashboard",
+  "configDefaultTab": "gke_cluster_config",
+  "moduleDetails": {
+    "features": [
+      "GKE workload health monitoring (Deployments, StatefulSets, DaemonSets, Pods)",
+      "Kubernetes CronJob execution tracking with success/failure rates",
+      "Google Cloud Dataflow job monitoring (batch and streaming pipelines)",
+      "Pub/Sub topic and subscription metrics with backlog alerting",
+      "Email delivery monitoring with provider-agnostic abstraction",
+      "Log-based monitoring with pattern matching and alerting",
+      "Configurable background cluster poller with per-component toggles",
+      "Alert system with threshold-based and log-based triggers",
+      "Zero-code-change architecture: local Kind/Podman ↔ production GKE",
+      "Accessio-specific monitoring for ForgeRock IGA, Sailpoint, PostgreSQL, Elasticsearch"
+    ],
+    "author": "PulseOps Team",
+    "license": "Proprietary",
+    "dependencies": []
+  }
+}

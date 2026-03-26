@@ -141,6 +141,14 @@ if (fs.existsSync(apiDir) && fs.existsSync(path.join(apiDir, 'index.js'))) {
   cacheBustImports(outApiDir, buildTimestamp);
   console.log(`[build-module] Cache-busted all API imports (stamp: ${buildTimestamp})`);
 
+  // ── Rewrite bare npm package imports to absolute file:// paths ────────────
+  // Node.js ESM cannot resolve bare specifiers from dist-modules/ when files
+  // are loaded via pathToFileURL with cache-busting query strings.
+  const rewriteCount = rewriteNpmImports(outApiDir);
+  if (rewriteCount > 0) {
+    console.log(`[build-module] Rewrote ${rewriteCount} npm import(s) to absolute paths`);
+  }
+
   console.log(`[build-module] API directory copied to output.`);
 } else {
   console.log(`[build-module] No API directory found — UI-only module.`);
@@ -209,6 +217,53 @@ function cacheBustImports(dir, stamp) {
       }
     }
   }
+}
+
+// ── Utility: Rewrite bare npm package imports to absolute file:// paths ──────
+// Node.js ESM cannot resolve bare specifiers (e.g. '@kubernetes/client-node')
+// when the importing file is loaded from dist-modules/ via pathToFileURL with
+// cache-busting query strings. This rewrites those imports to absolute paths
+// that Node.js can resolve directly.
+function rewriteNpmImports(dir) {
+  let count = 0;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      count += rewriteNpmImports(fullPath);
+    } else if (entry.name.endsWith('.js')) {
+      let content = fs.readFileSync(fullPath, 'utf-8');
+      const updated = content.replace(
+        /from\s+['"]([^.'"#][^'"]*?)['"]/g,
+        (match, specifier) => {
+          if (specifier.startsWith('node:')) return match;
+          if (specifier.startsWith('file:')) return match;
+          try {
+            const pkgParts = specifier.startsWith('@') ? specifier.split('/').slice(0, 2) : [specifier.split('/')[0]];
+            const pkgJsonPath = path.join(ROOT, 'node_modules', ...pkgParts, 'package.json');
+            if (!fs.existsSync(pkgJsonPath)) return match;
+            const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8'));
+            const mainFile = pkgJson.exports?.['.']?.import
+              || pkgJson.exports?.['.']?.default
+              || pkgJson.exports?.['.']
+              || pkgJson.module
+              || pkgJson.main
+              || 'index.js';
+            const resolved = path.join(ROOT, 'node_modules', ...pkgParts, mainFile);
+            if (!fs.existsSync(resolved)) return match;
+            const fileUrl = 'file:///' + resolved.replace(/\\/g, '/');
+            count++;
+            return `from '${fileUrl}'`;
+          } catch {
+            return match;
+          }
+        }
+      );
+      if (updated !== content) {
+        fs.writeFileSync(fullPath, updated, 'utf-8');
+      }
+    }
+  }
+  return count;
 }
 
 // ── Utility: Recursive directory copy ────────────────────────────────────────

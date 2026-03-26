@@ -268,14 +268,6 @@
       "downloadLogs": "Download",
       "close": "Close"
     },
-    "teamBreakdown": {
-      "title": "Health by Team",
-      "team": "Team",
-      "total": "Total",
-      "healthy": "Healthy",
-      "warning": "Warning",
-      "critical": "Critical"
-    },
     "filters": {
       "namespace": "Namespace",
       "health": "Health",

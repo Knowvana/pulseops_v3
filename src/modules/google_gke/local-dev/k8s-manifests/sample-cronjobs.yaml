@@ -76,7 +76,7 @@ spec:
 
 ---
 # ─── CronJob: Elasticsearch Backup ─────────────────────────────────────────
-# Simulates Elasticsearch backup
+# Simulates Elasticsearch backup (TESTING: runs every minute and fails)
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -87,8 +87,8 @@ metadata:
     component: batch
     pulseops.io/module: google_gke
 spec:
-  # Daily at 2:00 AM
-  schedule: "0 2 * * *"
+  # Every minute (for testing failure scenarios)
+  schedule: "* * * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 1
@@ -101,7 +101,7 @@ spec:
             app: elasticsearch-backup
             job-type: cronjob
         spec:
-          restartPolicy: OnFailure
+          restartPolicy: Never
           containers:
             - name: elasticsearch-backup
               image: busybox:1.36
@@ -111,11 +111,9 @@ spec:
                 - |
                   echo "[$(date)] Starting Elasticsearch backup"
                   echo "Creating snapshot of all indices..."
-                  sleep 10
-                  echo "Snapshot size: 28.7 GB"
-                  echo "Uploading to Cloud Storage: gs://prod1-backups/elasticsearch-$(date +%Y%m%d).snapshot"
-                  sleep 3
-                  echo "[$(date)] Elasticsearch backup completed successfully"
+                  sleep 2
+                  echo "ERROR: Snapshot creation failed - connection timeout"
+                  exit 1
               resources:
                 requests:
                   cpu: "100m"

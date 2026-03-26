@@ -6,19 +6,18 @@
 //   - Real-time alert detection (failures, missed schedules, high failure rate)
 //   - Success rate analytics with visual gauges per CronJob
 //   - Execution timeline across ALL CronJobs (unified view)
-//   - Team-based health breakdown
 //   - SLA tracking with owner attribution
 //   - Expandable execution history per CronJob
 //   - Job log viewer with error highlighting
 //   - Auto-refresh with configurable interval
+//   - Timezone-aware time display (from ServiceNow module)
 //
 // SECTIONS:
-//   1. Summary stat cards (total, running, healthy, warning, critical, success %)
-//   2. Active Alerts panel (severity-coded, grouped by type)
+//   1. Active Alerts panel (top — severity-coded, with error/status details)
+//   2. Summary table (2-column layout: metrics in col1, col2 reserved)
 //   3. CronJob DataTable with health badges, success bars, alert indicators
 //   4. Expandable row → execution history + job log viewer
 //   5. Execution Timeline (recent jobs across all CronJobs)
-//   6. Team Health Breakdown table
 //
 // API ENDPOINTS:
 //   GET /api/google_gke/cronjobs/dashboard        → Full dashboard data
@@ -26,20 +25,58 @@
 //   GET /api/google_gke/cronjobs/:ns/:name/logs   → Job logs
 //
 // TEXT: uiText.json → cronjobs section
+// LOGGING: INFO=minimum (lifecycle), DEBUG=maximum (data, render, state)
 // ============================================================================
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Clock, RefreshCw, AlertTriangle, CheckCircle2, XCircle, AlertCircle,
   ChevronDown, ChevronRight, FileText, Download, Play, Pause, Timer,
-  Shield, Users, TrendingUp, Activity, Bell, Eye, Grid3X3, BarChart3,
+  Shield, TrendingUp, Activity, Bell, Eye, Grid3X3,
 } from 'lucide-react';
+import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
 import uiText from '../config/uiText.json';
 import urls from '../config/urls.json';
 import DataTable from './DataTable';
 
+const log = createLogger('CronjobsView');
 const T = uiText.cronjobs;
 const U = urls.api;
+
+// ── Timezone helpers ──────────────────────────────────────────────────────────
+function getTimezoneAbbreviation(iana) {
+  try {
+    return new Intl.DateTimeFormat('en', { timeZone: iana, timeZoneName: 'short' })
+      .formatToParts(new Date())
+      .find(p => p.type === 'timeZoneName')?.value || '';
+  } catch { return ''; }
+}
+
+function formatInTimezone(date, iana) {
+  try {
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: iana,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: true,
+    }).format(date instanceof Date ? date : new Date(date));
+  } catch { return new Date(date).toLocaleString(); }
+}
+
+function formatTimeOnly(date, iana) {
+  try {
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: iana,
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: true,
+    }).format(date instanceof Date ? date : new Date(date));
+  } catch { return new Date(date).toLocaleTimeString(); }
+}
+
+function tzLabel(tz) {
+  if (!tz) return '';
+  return ` ${tz.abbr} (${tz.iana})`;
+}
 
 // ── Health badge component ──────────────────────────────────────────────────
 function HealthBadge({ health }) {
@@ -95,22 +132,25 @@ function SeverityIcon({ severity }) {
   return <AlertCircle size={14} className="text-blue-400" />;
 }
 
-// ── Stat Card ───────────────────────────────────────────────────────────────
-function StatCard({ icon: Icon, iconBg, iconColor, label, value, subValue, subColor }) {
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 flex items-center gap-3 hover:shadow-md transition-shadow">
-      <div className={`w-9 h-9 rounded-lg ${iconBg} flex items-center justify-center flex-shrink-0`}>
-        <Icon size={16} className={iconColor} />
-      </div>
-      <div className="min-w-0">
-        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider truncate">{label}</p>
-        <p className="text-lg font-bold text-gray-900 leading-tight">{value ?? '—'}</p>
-        {subValue !== undefined && (
-          <p className={`text-[10px] font-medium ${subColor || 'text-gray-400'}`}>{subValue}</p>
-        )}
-      </div>
-    </div>
-  );
+// ── Alert type label helper ──────────────────────────────────────────────────
+function alertTypeLabel(type) {
+  const map = {
+    failure: 'EXECUTION FAILED',
+    missed_schedule: 'MISSED SCHEDULE',
+    high_failure_rate: 'HIGH FAILURE RATE',
+    long_running: 'LONG RUNNING',
+  };
+  return map[type] || type.replace(/_/g, ' ').toUpperCase();
+}
+
+function alertTypeColor(type) {
+  const map = {
+    failure: 'bg-red-100 text-red-600',
+    missed_schedule: 'bg-amber-100 text-amber-600',
+    high_failure_rate: 'bg-orange-100 text-orange-600',
+    long_running: 'bg-blue-100 text-blue-600',
+  };
+  return map[type] || 'bg-gray-100 text-gray-600';
 }
 
 // ── Job Logs Dialog ─────────────────────────────────────────────────────────
@@ -208,22 +248,61 @@ export default function CronjobsView({ user, onNavigate }) {
   const [historyData, setHistoryData] = useState({});
   const [historyLoading, setHistoryLoading] = useState({});
   const [logsDialog, setLogsDialog] = useState({ open: false, ns: null, name: null, jobName: null });
-  // Removed activeTab - no tabs, single page layout
   const [nsFilter, setNsFilter] = useState('');
   const [healthFilter, setHealthFilter] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
+  const [timezone, setTimezone] = useState(null);
   const timerRef = useRef(null);
+
+  // ── Load timezone from ServiceNow module ──────────────────────────────
+  useEffect(() => {
+    (async () => {
+      try {
+        log.debug('Fetching timezone config from ServiceNow module');
+        const res = await ApiClient.get('/api/servicenow/config/timezone');
+        if (res?.success && res.data?.effectiveTimezone) {
+          const iana = res.data.effectiveTimezone;
+          const abbr = getTimezoneAbbreviation(iana);
+          setTimezone({ iana, abbr });
+          log.info('Timezone loaded', { iana, abbr });
+        } else {
+          log.debug('ServiceNow timezone not available, using browser default');
+        }
+      } catch (err) {
+        log.debug('Could not fetch timezone from ServiceNow', { error: err.message });
+      }
+    })();
+  }, []);
+
+  // ── Timezone-aware formatters ─────────────────────────────────────────
+  const fmtDateTime = useCallback((val) => {
+    if (!val) return '—';
+    return timezone ? formatInTimezone(val, timezone.iana) : new Date(val).toLocaleString();
+  }, [timezone]);
+
+  const fmtTimeOnly = useCallback((val) => {
+    if (!val) return '—';
+    return timezone ? formatTimeOnly(val, timezone.iana) : new Date(val).toLocaleTimeString();
+  }, [timezone]);
 
   // ── Fetch dashboard data ────────────────────────────────────────────────
   const fetchDashboard = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+    if (!silent) { setLoading(true); log.info('Fetching CronJob dashboard'); }
+    else { log.debug('Silent refresh: fetching CronJob dashboard'); }
     setError(null);
     try {
       const res = await ApiClient.get(U.cronjobDashboard);
       setDashboard(res.data);
       setLastRefreshed(new Date());
+      log.debug('Dashboard data received', {
+        cronjobs: res.data?.cronjobs?.length,
+        alerts: res.data?.alerts?.length,
+        executions: res.data?.recentExecutions?.length,
+      });
     } catch (err) {
-      setError(err?.message || 'Failed to load CronJob dashboard');
+      const msg = err?.message || 'Failed to load CronJob dashboard';
+      setError(msg);
+      log.error('Dashboard fetch failed', { error: msg });
     }
     setLoading(false);
   }, []);
@@ -234,6 +313,7 @@ export default function CronjobsView({ user, onNavigate }) {
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     if (autoRefresh && refreshInterval > 0) {
+      log.debug('Auto-refresh enabled', { intervalSec: refreshInterval });
       timerRef.current = setInterval(() => fetchDashboard(true), refreshInterval * 1000);
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
@@ -263,7 +343,6 @@ export default function CronjobsView({ user, onNavigate }) {
   const alerts = dashboard?.alerts || [];
   const cronjobs = dashboard?.cronjobs || [];
   const recentExecs = dashboard?.recentExecutions || [];
-  const byTeam = dashboard?.byTeam || {};
 
   // Unique filter options
   const namespaces = useMemo(() => [...new Set(cronjobs.map(c => c.namespace))].sort(), [cronjobs]);
@@ -310,8 +389,7 @@ export default function CronjobsView({ user, onNavigate }) {
     { key: 'lastScheduleAge', label: T.grid.lastRun, width: 90 },
     { key: 'nextRunEstimate', label: T.grid.nextRun, width: 110, render: (_v, row) => {
       if (!row.nextRunEstimate) return <span className="text-[11px] text-gray-400">—</span>;
-      const nextDate = new Date(row.nextRunEstimate);
-      return <span className="text-[11px] text-gray-600">{nextDate.toLocaleString()}</span>;
+      return <span className="text-[11px] text-gray-600">{fmtDateTime(row.nextRunEstimate)}</span>;
     }},
     { key: 'lastDuration', label: T.grid.lastDuration, width: 90 },
     { key: 'successRate', label: T.grid.successRate, width: 160, render: (_v, row) => <SuccessGauge rate={row.successRate} runs={row.totalRuns} /> },
@@ -342,7 +420,7 @@ export default function CronjobsView({ user, onNavigate }) {
         </button>
       </div>
     )},
-  ], [expandedRow, toggleRow]);
+  ], [expandedRow, toggleRow, fmtDateTime]);
 
   // ── Expanded row renderer ───────────────────────────────────────────────
   const renderExpandedRow = useCallback((row) => {
@@ -383,8 +461,8 @@ export default function CronjobsView({ user, onNavigate }) {
                     <tr key={i} className="border-t border-slate-200/60 hover:bg-white/60">
                       <td className="py-1.5 pr-3 font-mono text-[10px] text-gray-600">{job.name}</td>
                       <td className="py-1.5 pr-3"><StatusBadge status={job.status} /></td>
-                      <td className="py-1.5 pr-3 text-gray-500">{job.startTime ? new Date(job.startTime).toLocaleString() : '—'}</td>
-                      <td className="py-1.5 pr-3 text-gray-500">{job.completionTime ? new Date(job.completionTime).toLocaleString() : '—'}</td>
+                      <td className="py-1.5 pr-3 text-gray-500">{fmtDateTime(job.startTime)}</td>
+                      <td className="py-1.5 pr-3 text-gray-500">{fmtDateTime(job.completionTime)}</td>
                       <td className="py-1.5 pr-3 font-medium text-gray-700">{job.duration}</td>
                       <td className="py-1.5">
                         <button onClick={() => setLogsDialog({ open: true, ns: row.namespace, name: row.name, jobName: job.name })}
@@ -401,7 +479,7 @@ export default function CronjobsView({ user, onNavigate }) {
         </td>
       </tr>
     );
-  }, [expandedRow, historyData, historyLoading, columns.length, fetchHistory]);
+  }, [expandedRow, historyData, historyLoading, columns.length, fetchHistory, fmtDateTime]);
 
   // ── Loading / Error states ──────────────────────────────────────────────
   if (loading && !dashboard) {
@@ -433,7 +511,7 @@ export default function CronjobsView({ user, onNavigate }) {
         </div>
         <div className="flex items-center gap-2">
           {lastRefreshed && (
-            <span className="text-[10px] text-gray-400">{T.lastRefreshed}: {lastRefreshed.toLocaleTimeString()}</span>
+            <span className="text-[10px] text-gray-400">{T.lastRefreshed}: {fmtTimeOnly(lastRefreshed)}{tzLabel(timezone)}</span>
           )}
           <label className="flex items-center gap-1 text-[10px] text-gray-400 cursor-pointer select-none">
             <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} className="w-3 h-3" />
@@ -452,27 +530,7 @@ export default function CronjobsView({ user, onNavigate }) {
         </div>
       </div>
 
-      {/* ── Summary Cards ─────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-        <StatCard icon={Clock} iconBg="bg-indigo-50" iconColor="text-indigo-500" label={T.summary.total} value={summary.total} />
-        <StatCard icon={Play} iconBg="bg-blue-50" iconColor="text-blue-500" label={T.summary.active} value={summary.active}
-          subValue={summary.suspended > 0 ? `${summary.suspended} suspended` : undefined} subColor="text-slate-400" />
-        <StatCard icon={CheckCircle2} iconBg="bg-emerald-50" iconColor="text-emerald-500" label={T.summary.healthy} value={summary.healthy} />
-        <StatCard icon={AlertTriangle} iconBg="bg-amber-50" iconColor="text-amber-500" label={T.summary.warning} value={summary.warning}
-          subValue={summary.critical > 0 ? `${summary.critical} critical` : undefined} subColor="text-red-500" />
-        <StatCard icon={TrendingUp} iconBg="bg-violet-50" iconColor="text-violet-500" label={T.summary.overallSuccessRate}
-          value={summary.overallSuccessRate !== null ? `${summary.overallSuccessRate}%` : '—'}
-          subValue={`${summary.totalSucceeded ?? 0}/${summary.totalRuns ?? 0} passed`} subColor="text-gray-400" />
-      </div>
-
-      {/* ── Execution Stats Row ───────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard icon={Activity} iconBg="bg-sky-50" iconColor="text-sky-500" label={T.summary.totalRuns} value={summary.totalRuns} />
-        <StatCard icon={CheckCircle2} iconBg="bg-emerald-50" iconColor="text-emerald-500" label={T.summary.totalSucceeded} value={summary.totalSucceeded} />
-        <StatCard icon={XCircle} iconBg="bg-red-50" iconColor="text-red-500" label={T.summary.totalFailed} value={summary.totalFailed} />
-      </div>
-
-      {/* ── Alerts Panel ──────────────────────────────────────────── */}
+      {/* ── Active Alerts (TOP — most important section) ───────────── */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -483,7 +541,7 @@ export default function CronjobsView({ user, onNavigate }) {
             )}
           </div>
         </div>
-        <div className="max-h-[250px] overflow-y-auto">
+        <div className="max-h-[300px] overflow-y-auto">
           {alerts.length === 0 ? (
             <div className="flex items-center gap-2 px-4 py-6 text-xs text-gray-400">
               <CheckCircle2 size={14} className="text-emerald-400" /> {T.alerts.noAlerts}
@@ -495,8 +553,9 @@ export default function CronjobsView({ user, onNavigate }) {
                   <th className="text-left px-4 py-1.5">{T.alerts.severity}</th>
                   <th className="text-left px-3 py-1.5">{T.alerts.cronjob}</th>
                   <th className="text-left px-3 py-1.5">Type</th>
+                  <th className="text-left px-3 py-1.5">Status</th>
                   <th className="text-left px-3 py-1.5">{T.alerts.message}</th>
-                  <th className="text-left px-3 py-1.5">{T.alerts.time}</th>
+                  <th className="text-left px-3 py-1.5">{T.alerts.time}{timezone ? ` (${timezone.abbr})` : ''}</th>
                 </tr>
               </thead>
               <tbody>
@@ -507,15 +566,18 @@ export default function CronjobsView({ user, onNavigate }) {
                     <td className="px-4 py-2"><SeverityIcon severity={a.severity} /></td>
                     <td className="px-3 py-2 font-medium text-gray-700">{a.cronjobName}</td>
                     <td className="px-3 py-2">
-                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
-                        a.type === 'failure' ? 'bg-red-100 text-red-600' :
-                        a.type === 'missed_schedule' ? 'bg-amber-100 text-amber-600' :
-                        a.type === 'high_failure_rate' ? 'bg-orange-100 text-orange-600' :
-                        'bg-blue-100 text-blue-600'
-                      }`}>{a.type.replace(/_/g, ' ')}</span>
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold ${alertTypeColor(a.type)}`}>
+                        {alertTypeLabel(a.type)}
+                      </span>
                     </td>
-                    <td className="px-3 py-2 text-gray-600">{a.message}</td>
-                    <td className="px-3 py-2 text-gray-400">{a.timestamp ? new Date(a.timestamp).toLocaleTimeString() : '—'}</td>
+                    <td className="px-3 py-2">
+                      {a.status ? <StatusBadge status={a.status} /> : <span className="text-gray-400">—</span>}
+                    </td>
+                    <td className="px-3 py-2 text-gray-600 max-w-[400px]">
+                      <span>{a.message}</span>
+                      {a.jobName && <span className="text-[9px] text-gray-400 ml-1">({a.jobName})</span>}
+                    </td>
+                    <td className="px-3 py-2 text-gray-400 whitespace-nowrap">{fmtTimeOnly(a.timestamp)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -524,39 +586,60 @@ export default function CronjobsView({ user, onNavigate }) {
         </div>
       </div>
 
-      {/* ── Team Health + CronJob Health side-by-side ──────────────── */}
+      {/* ── Summary Table (2 columns: metrics | reserved) ──────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Team Breakdown */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-            <Users size={14} className="text-gray-400" />
-            <h3 className="text-xs font-bold text-gray-700">{T.teamBreakdown.title}</h3>
+            <Activity size={14} className="text-gray-400" />
+            <h3 className="text-xs font-bold text-gray-700">CronJob Summary</h3>
           </div>
           <table className="w-full text-xs">
             <thead>
               <tr className="text-[10px] text-gray-400 uppercase tracking-wider bg-gray-50/50">
-                <th className="text-left px-4 py-1.5">{T.teamBreakdown.team}</th>
-                <th className="text-center px-3 py-1.5">{T.teamBreakdown.total}</th>
-                <th className="text-center px-3 py-1.5">{T.teamBreakdown.healthy}</th>
-                <th className="text-center px-3 py-1.5">{T.teamBreakdown.warning}</th>
-                <th className="text-center px-3 py-1.5">{T.teamBreakdown.critical}</th>
+                <th className="text-left px-4 py-1.5">Metric</th>
+                <th className="text-center px-3 py-1.5">CronJobs</th>
+                <th className="text-center px-3 py-1.5">Executions</th>
               </tr>
             </thead>
             <tbody>
-              {Object.entries(byTeam).map(([team, stats]) => (
-                <tr key={team} className="border-t border-gray-50 hover:bg-gray-50/50">
-                  <td className="px-4 py-2 font-medium text-gray-700 capitalize">{team.replace(/-/g, ' ')}</td>
-                  <td className="px-3 py-2 text-center font-bold text-gray-600">{stats.total}</td>
-                  <td className="px-3 py-2 text-center font-bold text-emerald-600">{stats.healthy}</td>
-                  <td className="px-3 py-2 text-center font-bold text-amber-600">{stats.warning || '—'}</td>
-                  <td className="px-3 py-2 text-center font-bold text-red-600">{stats.critical || '—'}</td>
-                </tr>
-              ))}
+              <tr className="border-t border-gray-50">
+                <td className="px-4 py-2 font-medium text-gray-700">Total</td>
+                <td className="px-3 py-2 text-center font-bold text-gray-900">{summary.total ?? '—'}</td>
+                <td className="px-3 py-2 text-center font-bold text-gray-900">{summary.totalRuns ?? '—'}</td>
+              </tr>
+              <tr className="border-t border-gray-50">
+                <td className="px-4 py-2 font-medium text-emerald-700">Healthy / Succeeded</td>
+                <td className="px-3 py-2 text-center font-bold text-emerald-600">{summary.healthy ?? '—'}</td>
+                <td className="px-3 py-2 text-center font-bold text-emerald-600">{summary.totalSucceeded ?? '—'}</td>
+              </tr>
+              <tr className="border-t border-gray-50">
+                <td className="px-4 py-2 font-medium text-amber-700">Warning</td>
+                <td className="px-3 py-2 text-center font-bold text-amber-600">{summary.warning ?? '—'}</td>
+                <td className="px-3 py-2 text-center text-gray-400">—</td>
+              </tr>
+              <tr className="border-t border-gray-50">
+                <td className="px-4 py-2 font-medium text-red-700">Critical / Failed</td>
+                <td className="px-3 py-2 text-center font-bold text-red-600">{summary.critical ?? '—'}</td>
+                <td className="px-3 py-2 text-center font-bold text-red-600">{summary.totalFailed ?? '—'}</td>
+              </tr>
+              <tr className="border-t border-gray-50">
+                <td className="px-4 py-2 font-medium text-blue-700">Running</td>
+                <td className="px-3 py-2 text-center font-bold text-blue-600">{summary.active ?? '—'}</td>
+                <td className="px-3 py-2 text-center text-gray-400">—</td>
+              </tr>
+              <tr className="border-t border-gray-50">
+                <td className="px-4 py-2 font-medium text-violet-700">Success Rate</td>
+                <td colSpan={2} className="px-3 py-2 text-center font-bold text-violet-600">
+                  {summary.overallSuccessRate !== null && summary.overallSuccessRate !== undefined
+                    ? `${summary.overallSuccessRate}% (${summary.totalSucceeded ?? 0}/${summary.totalRuns ?? 0} passed)`
+                    : '—'}
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
 
-        {/* CronJob Health Summary */}
+        {/* Reserved column for future use */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
             <Shield size={14} className="text-gray-400" />
@@ -661,7 +744,7 @@ export default function CronjobsView({ user, onNavigate }) {
                   <td className="px-4 py-2"><StatusBadge status={exec.status} /></td>
                   <td className="px-3 py-2 font-medium text-gray-700">{exec.cronjobName}</td>
                   <td className="px-3 py-2 font-mono text-[10px] text-gray-500">{exec.name}</td>
-                  <td className="px-3 py-2 text-gray-500">{exec.startTime ? new Date(exec.startTime).toLocaleString() : '—'}</td>
+                  <td className="px-3 py-2 text-gray-500">{fmtDateTime(exec.startTime)}</td>
                   <td className="px-3 py-2 font-medium text-gray-700">{exec.duration}</td>
                   <td className="px-3 py-2 text-gray-400 font-mono text-[10px]">{exec.schedule}</td>
                   <td className="px-3 py-2">

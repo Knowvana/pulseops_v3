@@ -21,56 +21,79 @@
 // PATTERN SOURCE: Follows WorkloadService.js ESM pattern
 // ============================================================================
 import { createGkeLogger } from '../lib/moduleLogger.js';
+import { CronExpressionParser } from 'cron-parser';
 
 const log = createGkeLogger('CronjobService');
 
-// ── Cron schedule parser ────────────────────────────────────────────────────
-// Parses a cron expression and returns the interval in seconds (approximate)
+// ── Cron schedule parser (using cron-parser library) ────────────────────────
+// Uses cron-parser to compute exact interval between next two occurrences.
 function parseCronIntervalSeconds(schedule) {
   if (!schedule) return null;
-  const parts = schedule.trim().split(/\s+/);
-  if (parts.length < 5) return null;
-  const [minute, hour, dom, month, dow] = parts;
-
-  // Every N minutes: */N * * * *
-  if (minute.startsWith('*/') && hour === '*' && dom === '*') {
-    return parseInt(minute.slice(2), 10) * 60;
+  try {
+    const cron = CronExpressionParser.parseExpression(schedule);
+    const next1 = cron.next().getTime();
+    const next2 = cron.next().getTime();
+    const intervalSec = Math.round((next2 - next1) / 1000);
+    log.debug('parseCronIntervalSeconds', { schedule, intervalSec });
+    return intervalSec;
+  } catch (err) {
+    log.debug('parseCronIntervalSeconds — failed to parse, using fallback', { schedule, error: err.message });
+    return 86400; // fallback: assume daily
   }
-  // Every hour at minute M: M * * * *
-  if (/^\d+$/.test(minute) && hour === '*' && dom === '*') {
-    return 3600;
-  }
-  // Every N hours: 0 */N * * *
-  if (hour.startsWith('*/') && dom === '*') {
-    return parseInt(hour.slice(2), 10) * 3600;
-  }
-  // Daily at specific time: M H * * *
-  if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && dom === '*' && month === '*') {
-    if (dow === '*') return 86400; // daily
-    return 604800; // weekly
-  }
-  // Monthly: M H D * *
-  if (/^\d+$/.test(dom) && month === '*') return 2592000;
-  return 86400; // fallback: assume daily
 }
 
-// ── Human-readable cron description ─────────────────────────────────────────
+// ── Human-readable cron description (using cron-parser library) ─────────────
+// Generates a human-readable label from any valid cron expression.
 function describeCron(schedule) {
   if (!schedule) return '—';
-  const parts = schedule.trim().split(/\s+/);
-  if (parts.length < 5) return schedule;
-  const [minute, hour, dom, month, dow] = parts;
+  try {
+    const parts = schedule.trim().split(/\s+/);
+    if (parts.length < 5) return schedule;
+    const [minute, hour, dom, month, dow] = parts;
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-  if (minute.startsWith('*/') && hour === '*') return `Every ${minute.slice(2)} min`;
-  if (hour.startsWith('*/') && minute === '0') return `Every ${hour.slice(2)} hrs`;
-  if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && dom === '*' && month === '*' && dow === '*') {
-    return `Daily at ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+    // Every N minutes: */N * * * *
+    if (minute.startsWith('*/') && hour === '*' && dom === '*' && month === '*' && dow === '*') {
+      return `Every ${minute.slice(2)} min`;
+    }
+    // Every N hours: 0 */N * * *
+    if (hour.startsWith('*/') && /^\d+$/.test(minute) && dom === '*' && month === '*' && dow === '*') {
+      return `Every ${hour.slice(2)} hrs`;
+    }
+    // Hourly at minute M: M * * * *
+    if (/^\d+$/.test(minute) && hour === '*' && dom === '*' && month === '*' && dow === '*') {
+      return `Hourly at :${minute.padStart(2, '0')}`;
+    }
+    // Daily at H:M: M H * * *
+    if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && dom === '*' && month === '*' && dow === '*') {
+      return `Daily at ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+    }
+    // Weekly: M H * * D
+    if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && dom === '*' && month === '*' && /^\d+$/.test(dow)) {
+      return `${dayNames[parseInt(dow, 10)] || dow} at ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+    }
+    // Multiple days of week: M H * * D,D,D
+    if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && dom === '*' && month === '*' && /^[\d,]+$/.test(dow)) {
+      const days = dow.split(',').map(d => dayNames[parseInt(d, 10)] || d).join(', ');
+      return `${days} at ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+    }
+    // Monthly: M H D * *
+    if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && /^\d+$/.test(dom) && month === '*' && dow === '*') {
+      return `Monthly on day ${dom} at ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
+    }
+
+    // Fallback: use cron-parser to get next run and derive description
+    const cron = CronExpressionParser.parseExpression(schedule);
+    const next = cron.next().toDate();
+    const diffMs = next.getTime() - Date.now();
+    const diffMin = Math.round(diffMs / 60000);
+    if (diffMin < 60) return `Next in ${diffMin}m`;
+    if (diffMin < 1440) return `Next in ${Math.round(diffMin / 60)}h`;
+    return `Next in ${Math.round(diffMin / 1440)}d`;
+  } catch (err) {
+    log.debug('describeCron — fallback to raw expression', { schedule, error: err.message });
+    return schedule;
   }
-  if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && dom === '*' && month === '*' && /^\d+$/.test(dow)) {
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    return `${days[parseInt(dow, 10)] || dow} at ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
-  }
-  return schedule;
 }
 
 // ── Duration formatter ──────────────────────────────────────────────────────
@@ -104,8 +127,10 @@ function formatJob(job) {
   const failed = job.status?.failed ?? 0;
   const active = job.status?.active ?? 0;
   let status = 'Unknown';
-  if (succeeded > 0) status = 'Succeeded';
-  else if (failed > 0) status = 'Failed';
+  // Prioritize: Failed > Succeeded > Running > conditions check
+  // If ANY pods failed, mark as Failed (even if others are still running)
+  if (failed > 0) status = 'Failed';
+  else if (succeeded > 0) status = 'Succeeded';
   else if (active > 0) status = 'Running';
   else if (job.status?.conditions?.some(c => c.type === 'Complete' && c.status === 'True')) status = 'Succeeded';
   else if (job.status?.conditions?.some(c => c.type === 'Failed' && c.status === 'True')) status = 'Failed';
@@ -192,26 +217,39 @@ function formatCronjob(cj, jobs) {
   // Alert detection
   const alerts = [];
 
-  // 1. Failed last run
+  // 1. Failed last run — include error details and job status
   if (lastStatus === 'Failed') {
+    const failedJob = formattedJobs.find(j => j.status === 'Failed');
+    const failMsg = failedJob
+      ? `Last execution failed — Job: ${failedJob.name}, failed pods: ${failedJob.failed}, started: ${failedJob.startTime ? new Date(failedJob.startTime).toISOString() : 'unknown'}`
+      : `Last execution failed`;
     alerts.push({
       type: 'failure',
       severity: 'critical',
-      message: `Last execution failed`,
+      message: failMsg,
+      status: 'Failed',
+      jobName: failedJob?.name || null,
+      failedCount: failedJob?.failed || 0,
       timestamp: lastJob?.startTime,
     });
+    log.debug('Alert: failure detected', { cronjob: name, jobName: failedJob?.name });
   }
 
   // 2. Missed schedule: lastScheduleTime is older than 2× interval
   if (lastScheduleTime && intervalSec && !suspended) {
     const expectedLatest = new Date(Date.now() - intervalSec * 2000);
     if (new Date(lastScheduleTime) < expectedLatest) {
+      const lastRunAge = formatAge(lastScheduleTime);
       alerts.push({
         type: 'missed_schedule',
         severity: 'warning',
-        message: `Schedule may be missed — last run ${formatAge(lastScheduleTime)}`,
+        message: `Schedule may be missed — last run ${lastRunAge}, expected every ${describeCron(schedule)}`,
+        status: lastStatus,
+        lastScheduleTime,
+        expectedIntervalSec: intervalSec,
         timestamp: new Date().toISOString(),
       });
+      log.debug('Alert: missed schedule', { cronjob: name, lastScheduleTime, intervalSec });
     }
   }
 
@@ -221,8 +259,13 @@ function formatCronjob(cj, jobs) {
       type: 'high_failure_rate',
       severity: 'warning',
       message: `Success rate is ${successRate}% (${failedRuns}/${totalRuns} failed)`,
+      status: lastStatus,
+      successRate,
+      failedRuns,
+      totalRuns,
       timestamp: new Date().toISOString(),
     });
+    log.debug('Alert: high failure rate', { cronjob: name, successRate, failedRuns, totalRuns });
   }
 
   // 4. Long running active job
@@ -231,8 +274,12 @@ function formatCronjob(cj, jobs) {
       type: 'long_running',
       severity: 'info',
       message: `Active job running for ${lastJob.duration}`,
+      status: 'Running',
+      jobName: lastJob?.name,
+      durationSeconds: lastJob?.durationSeconds,
       timestamp: new Date().toISOString(),
     });
+    log.debug('Alert: long running job', { cronjob: name, duration: lastJob.duration });
   }
 
   // Overall health
@@ -357,16 +404,7 @@ export async function getCronjobDashboard(batchApi, coreApi) {
   }
   allRecentJobs.sort((a, b) => new Date(b.startTime || 0) - new Date(a.startTime || 0));
 
-  // By-team breakdown
-  const byTeam = {};
-  for (const cj of cronjobs) {
-    const team = cj.labels?.team || 'unknown';
-    if (!byTeam[team]) byTeam[team] = { total: 0, healthy: 0, warning: 0, critical: 0 };
-    byTeam[team].total++;
-    if (cj.health === 'Healthy') byTeam[team].healthy++;
-    else if (cj.health === 'Warning') byTeam[team].warning++;
-    else if (cj.health === 'Critical') byTeam[team].critical++;
-  }
+  log.info('getCronjobDashboard', { total, healthy, warning, critical, alertCount: allAlerts.length });
 
   return {
     summary: {
@@ -385,7 +423,6 @@ export async function getCronjobDashboard(batchApi, coreApi) {
     alertCount: allAlerts.length,
     cronjobs,
     recentExecutions: allRecentJobs.slice(0, 50),
-    byTeam,
   };
 }
 

@@ -22,6 +22,7 @@
 // ============================================================================
 import { createGkeLogger } from '../lib/moduleLogger.js';
 import { CronExpressionParser } from 'cron-parser';
+import cronstrue from 'cronstrue';
 
 const log = createGkeLogger('CronjobService');
 
@@ -42,56 +43,14 @@ function parseCronIntervalSeconds(schedule) {
   }
 }
 
-// ── Human-readable cron description (using cron-parser library) ─────────────
+// ── Human-readable cron description (using cronstrue library) ────────────────
 // Generates a human-readable label from any valid cron expression.
 function describeCron(schedule) {
   if (!schedule) return '—';
   try {
-    const parts = schedule.trim().split(/\s+/);
-    if (parts.length < 5) return schedule;
-    const [minute, hour, dom, month, dow] = parts;
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-    // Every N minutes: */N * * * *
-    if (minute.startsWith('*/') && hour === '*' && dom === '*' && month === '*' && dow === '*') {
-      return `Every ${minute.slice(2)} min`;
-    }
-    // Every N hours: 0 */N * * *
-    if (hour.startsWith('*/') && /^\d+$/.test(minute) && dom === '*' && month === '*' && dow === '*') {
-      return `Every ${hour.slice(2)} hrs`;
-    }
-    // Hourly at minute M: M * * * *
-    if (/^\d+$/.test(minute) && hour === '*' && dom === '*' && month === '*' && dow === '*') {
-      return `Hourly at :${minute.padStart(2, '0')}`;
-    }
-    // Daily at H:M: M H * * *
-    if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && dom === '*' && month === '*' && dow === '*') {
-      return `Daily at ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
-    }
-    // Weekly: M H * * D
-    if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && dom === '*' && month === '*' && /^\d+$/.test(dow)) {
-      return `${dayNames[parseInt(dow, 10)] || dow} at ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
-    }
-    // Multiple days of week: M H * * D,D,D
-    if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && dom === '*' && month === '*' && /^[\d,]+$/.test(dow)) {
-      const days = dow.split(',').map(d => dayNames[parseInt(d, 10)] || d).join(', ');
-      return `${days} at ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
-    }
-    // Monthly: M H D * *
-    if (/^\d+$/.test(minute) && /^\d+$/.test(hour) && /^\d+$/.test(dom) && month === '*' && dow === '*') {
-      return `Monthly on day ${dom} at ${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
-    }
-
-    // Fallback: use cron-parser to get next run and derive description
-    const cron = CronExpressionParser.parseExpression(schedule);
-    const next = cron.next().toDate();
-    const diffMs = next.getTime() - Date.now();
-    const diffMin = Math.round(diffMs / 60000);
-    if (diffMin < 60) return `Next in ${diffMin}m`;
-    if (diffMin < 1440) return `Next in ${Math.round(diffMin / 60)}h`;
-    return `Next in ${Math.round(diffMin / 1440)}d`;
+    return cronstrue.toString(schedule, { use24HourTimeFormat: false, verbose: false });
   } catch (err) {
-    log.debug('describeCron — fallback to raw expression', { schedule, error: err.message });
+    log.debug('describeCron — cronstrue failed, returning raw expression', { schedule, error: err.message });
     return schedule;
   }
 }
@@ -165,8 +124,34 @@ function formatCronjob(cj, jobs) {
   const namespace = cj.metadata?.namespace;
   const schedule = cj.spec?.schedule || '—';
   const lastScheduleTime = cj.status?.lastScheduleTime;
-  const activeJobs = (cj.status?.active || []).length;
   const suspended = cj.spec?.suspend === true;
+
+  // Count truly running jobs by cross-checking CronJob.status.active refs
+  // against actual Job status. K8s keeps refs in status.active even when
+  // the Job's pods have all failed — we must verify each one.
+  const activeRefs = cj.status?.active || [];
+  let activeJobs = 0;
+  for (const ref of activeRefs) {
+    const refName = ref.name;
+    const matchingJob = jobs.find(j =>
+      j.metadata?.name === refName && j.metadata?.namespace === namespace
+    );
+    if (matchingJob) {
+      const jActive = matchingJob.status?.active ?? 0;
+      const jFailed = matchingJob.status?.failed ?? 0;
+      const jSucceeded = matchingJob.status?.succeeded ?? 0;
+      const isFailed = matchingJob.status?.conditions?.some(c => c.type === 'Failed' && c.status === 'True');
+      const isComplete = matchingJob.status?.conditions?.some(c => c.type === 'Complete' && c.status === 'True');
+      // Only count as truly running if it has active pods and isn't terminated
+      if (jActive > 0 && !isFailed && !isComplete) {
+        activeJobs += jActive;
+      } else if (jFailed === 0 && jSucceeded === 0 && !isFailed && !isComplete && jActive === 0) {
+        // Job just created, not yet started — don't count
+      }
+    } else {
+      // Job ref exists but Job not found — likely cleaned up, skip
+    }
+  }
 
   // Annotations (owner, description, SLA)
   const annotations = cj.metadata?.annotations || {};
@@ -217,12 +202,10 @@ function formatCronjob(cj, jobs) {
   // Alert detection
   const alerts = [];
 
-  // 1. Failed last run — include error details and job status
-  if (lastStatus === 'Failed') {
-    const failedJob = formattedJobs.find(j => j.status === 'Failed');
-    const failMsg = failedJob
-      ? `Last execution failed — Job: ${failedJob.name}, failed pods: ${failedJob.failed}, started: ${failedJob.startTime ? new Date(failedJob.startTime).toISOString() : 'unknown'}`
-      : `Last execution failed`;
+  // 1. Failed jobs — create alert for EACH failed job
+  const failedJobs = formattedJobs.filter(j => j.status === 'Failed');
+  for (const failedJob of failedJobs) {
+    const failMsg = `Execution failed — Job: ${failedJob.name}, failed pods: ${failedJob.failed}, started: ${failedJob.startTime ? new Date(failedJob.startTime).toISOString() : 'unknown'}`;
     alerts.push({
       type: 'failure',
       severity: 'critical',
@@ -230,7 +213,7 @@ function formatCronjob(cj, jobs) {
       status: 'Failed',
       jobName: failedJob?.name || null,
       failedCount: failedJob?.failed || 0,
-      timestamp: lastJob?.startTime,
+      timestamp: failedJob?.startTime,
     });
     log.debug('Alert: failure detected', { cronjob: name, jobName: failedJob?.name });
   }
@@ -365,6 +348,7 @@ export async function getCronjobDashboard(batchApi, coreApi) {
   const total = cronjobs.length;
   const suspended = cronjobs.filter(c => c.suspended).length;
   const active = cronjobs.filter(c => c.activeJobs > 0).length;
+  const running = cronjobs.reduce((s, c) => s + c.activeJobs, 0);
   const healthy = cronjobs.filter(c => c.health === 'Healthy').length;
   const warning = cronjobs.filter(c => c.health === 'Warning').length;
   const critical = cronjobs.filter(c => c.health === 'Critical').length;
@@ -411,6 +395,7 @@ export async function getCronjobDashboard(batchApi, coreApi) {
       total,
       suspended,
       active,
+      running,
       healthy,
       warning,
       critical,

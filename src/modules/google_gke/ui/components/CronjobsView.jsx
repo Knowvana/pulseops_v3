@@ -31,7 +31,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   Clock, RefreshCw, AlertTriangle, CheckCircle2, XCircle, AlertCircle,
   ChevronDown, ChevronRight, FileText, Download, Play, Pause, Timer,
-  Shield, TrendingUp, Activity, Bell, Eye, Grid3X3,
+  Shield, TrendingUp, Activity, Bell, Eye, Grid3X3, BarChart3,
 } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
@@ -292,13 +292,19 @@ export default function CronjobsView({ user, onNavigate }) {
     setError(null);
     try {
       const res = await ApiClient.get(U.cronjobDashboard);
-      setDashboard(res.data);
-      setLastRefreshed(new Date());
-      log.debug('Dashboard data received', {
-        cronjobs: res.data?.cronjobs?.length,
-        alerts: res.data?.alerts?.length,
-        executions: res.data?.recentExecutions?.length,
-      });
+      if (res?.success && res.data) {
+        setDashboard(res.data);
+        setLastRefreshed(new Date());
+        log.debug('Dashboard data received', {
+          cronjobs: res.data?.cronjobs?.length,
+          alerts: res.data?.alerts?.length,
+          executions: res.data?.recentExecutions?.length,
+        });
+      } else {
+        const msg = res?.error?.message || 'Failed to load CronJob dashboard';
+        setError(msg);
+        log.error('Dashboard fetch failed', { error: msg });
+      }
     } catch (err) {
       const msg = err?.message || 'Failed to load CronJob dashboard';
       setError(msg);
@@ -379,10 +385,11 @@ export default function CronjobsView({ user, onNavigate }) {
       </div>
     )},
     { key: 'namespace', label: T.grid.namespace, width: 100 },
-    { key: 'scheduleDescription', label: T.grid.scheduleDesc, width: 110, render: (_v, row) => (
+    { key: 'scheduleDescription', label: T.grid.scheduleDesc, width: 140, render: (_v, row) => (
       <div>
         <span className="text-[11px] font-medium text-gray-700">{row.scheduleDescription}</span>
         <p className="text-[9px] text-gray-400 font-mono">{row.schedule}</p>
+        <p className="text-[8px] text-gray-300">UTC → {timezone ? `${timezone.abbr}/${timezone.iana}` : 'TZ pending'}</p>
       </div>
     )},
     { key: 'lastStatus', label: T.grid.lastStatus, width: 100, render: (_v, row) => <StatusBadge status={row.lastStatus} /> },
@@ -450,8 +457,8 @@ export default function CronjobsView({ user, onNavigate }) {
                   <tr className="text-[10px] text-gray-400 uppercase tracking-wider">
                     <th className="text-left py-1 pr-3">{T.history.jobName}</th>
                     <th className="text-left py-1 pr-3">{T.history.status}</th>
-                    <th className="text-left py-1 pr-3">{T.history.startTime}</th>
-                    <th className="text-left py-1 pr-3">{T.history.completionTime}</th>
+                    <th className="text-left py-1 pr-3">{T.history.startTime}{timezone ? ` (${timezone.abbr}/${timezone.iana})` : ''}</th>
+                    <th className="text-left py-1 pr-3">{T.history.completionTime}{timezone ? ` (${timezone.abbr}/${timezone.iana})` : ''}</th>
                     <th className="text-left py-1 pr-3">{T.history.duration}</th>
                     <th className="text-left py-1">{T.history.viewLogs}</th>
                   </tr>
@@ -541,7 +548,7 @@ export default function CronjobsView({ user, onNavigate }) {
             )}
           </div>
         </div>
-        <div className="max-h-[300px] overflow-y-auto">
+        <div className="max-h-[500px] overflow-y-auto">
           {alerts.length === 0 ? (
             <div className="flex items-center gap-2 px-4 py-6 text-xs text-gray-400">
               <CheckCircle2 size={14} className="text-emerald-400" /> {T.alerts.noAlerts}
@@ -555,7 +562,7 @@ export default function CronjobsView({ user, onNavigate }) {
                   <th className="text-left px-3 py-1.5">Type</th>
                   <th className="text-left px-3 py-1.5">Status</th>
                   <th className="text-left px-3 py-1.5">{T.alerts.message}</th>
-                  <th className="text-left px-3 py-1.5">{T.alerts.time}{timezone ? ` (${timezone.abbr})` : ''}</th>
+                  <th className="text-left px-3 py-1.5">{T.alerts.time}{timezone ? ` (${timezone.abbr}/${timezone.iana})` : ''}</th>
                 </tr>
               </thead>
               <tbody>
@@ -586,86 +593,73 @@ export default function CronjobsView({ user, onNavigate }) {
         </div>
       </div>
 
-      {/* ── Summary Table (2 columns: metrics | reserved) ──────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* ── Summary Cards (20/80 split: Summary with metrics | Reserved) ──────────── */}
+      <div className="grid gap-4" style={{ gridTemplateColumns: '20% 80%' }}>
+        {/* First Column (40%): CronJob Summary with Key Metrics */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+          <div className="px-4 py-2 border-b border-gray-100 flex items-center gap-2">
             <Activity size={14} className="text-gray-400" />
-            <h3 className="text-xs font-bold text-gray-700">CronJob Summary</h3>
+            <h3 className="text-sm font-bold text-gray-700">Summary</h3>
           </div>
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="text-[10px] text-gray-400 uppercase tracking-wider bg-gray-50/50">
-                <th className="text-left px-4 py-1.5">Metric</th>
-                <th className="text-center px-3 py-1.5">CronJobs</th>
-                <th className="text-center px-3 py-1.5">Executions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-t border-gray-50">
-                <td className="px-4 py-2 font-medium text-gray-700">Total</td>
-                <td className="px-3 py-2 text-center font-bold text-gray-900">{summary.total ?? '—'}</td>
-                <td className="px-3 py-2 text-center font-bold text-gray-900">{summary.totalRuns ?? '—'}</td>
-              </tr>
-              <tr className="border-t border-gray-50">
-                <td className="px-4 py-2 font-medium text-emerald-700">Healthy / Succeeded</td>
-                <td className="px-3 py-2 text-center font-bold text-emerald-600">{summary.healthy ?? '—'}</td>
-                <td className="px-3 py-2 text-center font-bold text-emerald-600">{summary.totalSucceeded ?? '—'}</td>
-              </tr>
-              <tr className="border-t border-gray-50">
-                <td className="px-4 py-2 font-medium text-amber-700">Warning</td>
-                <td className="px-3 py-2 text-center font-bold text-amber-600">{summary.warning ?? '—'}</td>
-                <td className="px-3 py-2 text-center text-gray-400">—</td>
-              </tr>
-              <tr className="border-t border-gray-50">
-                <td className="px-4 py-2 font-medium text-red-700">Critical / Failed</td>
-                <td className="px-3 py-2 text-center font-bold text-red-600">{summary.critical ?? '—'}</td>
-                <td className="px-3 py-2 text-center font-bold text-red-600">{summary.totalFailed ?? '—'}</td>
-              </tr>
-              <tr className="border-t border-gray-50">
-                <td className="px-4 py-2 font-medium text-blue-700">Running</td>
-                <td className="px-3 py-2 text-center font-bold text-blue-600">{summary.active ?? '—'}</td>
-                <td className="px-3 py-2 text-center text-gray-400">—</td>
-              </tr>
-              <tr className="border-t border-gray-50">
-                <td className="px-4 py-2 font-medium text-violet-700">Success Rate</td>
-                <td colSpan={2} className="px-3 py-2 text-center font-bold text-violet-600">
-                  {summary.overallSuccessRate !== null && summary.overallSuccessRate !== undefined
-                    ? `${summary.overallSuccessRate}% (${summary.totalSucceeded ?? 0}/${summary.totalRuns ?? 0} passed)`
-                    : '—'}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          {(() => {
+            const totalCronjobs = summary.total ?? 0;
+            const totalRuns = summary.totalRuns ?? 0;
+            const succeeded = summary.totalSucceeded ?? 0;
+            const failed = summary.totalFailed ?? 0;
+            const running = summary.running ?? 0;
+            
+            // Calculate percentages for progress bars
+            const succeededPct = totalCronjobs > 0 ? Math.round((succeeded / totalCronjobs) * 100) : 0;
+            const failedPct = totalCronjobs > 0 ? Math.round((failed / totalCronjobs) * 100) : 0;
+            const runningPct = totalCronjobs > 0 ? Math.round((running / totalCronjobs) * 100) : 0;
+            
+            return (
+              <div className="px-4 py-3 space-y-3">
+                {/* Total CronJobs Row */}
+                <div className="flex items-center justify-between gap-2 pb-2 border-b border-gray-100">
+                  <div className="text-[12px] font-bold text-gray-700">Total</div>
+                  <div className="text-right text-[14px] font-bold text-gray-900">{totalCronjobs}</div>
+                </div>
+
+                {/* Success Row */}
+                <div className="flex items-center justify-between gap-2 pb-2 border-b border-emerald-100/50">
+                  <div className="text-[11px] font-medium text-emerald-600 w-16">Success</div>
+                  <div className="flex-1 h-2.5 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500" style={{ width: `${succeededPct}%` }} />
+                  </div>
+                  <div className="text-right text-[12px] font-bold text-emerald-700 w-8">{succeeded}</div>
+                </div>
+
+                {/* Failed Row */}
+                <div className="flex items-center justify-between gap-2 pb-2 border-b border-red-100/50">
+                  <div className="text-[11px] font-medium text-red-600 w-16">Failed</div>
+                  <div className="flex-1 h-2.5 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-red-400 to-red-500" style={{ width: `${failedPct}%` }} />
+                  </div>
+                  <div className="text-right text-[12px] font-bold text-red-700 w-8">{failed}</div>
+                </div>
+
+                {/* Running Row */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[11px] font-medium text-blue-600 w-16">Running</div>
+                  <div className="flex-1 h-2.5 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-blue-400 to-blue-500" style={{ width: `${runningPct}%` }} />
+                  </div>
+                  <div className="text-right text-[12px] font-bold text-blue-700 w-8">{running}</div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
-        {/* Reserved column for future use */}
+        {/* Second Column (60%): Reserved for Future Use */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+          <div className="px-4 py-2 border-b border-gray-100 flex items-center gap-2">
             <Shield size={14} className="text-gray-400" />
-            <h3 className="text-xs font-bold text-gray-700">CronJob Success Rates</h3>
+            <h3 className="text-sm font-bold text-gray-700">Reserved</h3>
           </div>
-          <div className="max-h-[250px] overflow-y-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-[10px] text-gray-400 uppercase tracking-wider bg-gray-50/50">
-                  <th className="text-left px-4 py-1.5">CronJob</th>
-                  <th className="text-left px-3 py-1.5">Success Rate</th>
-                  <th className="text-center px-3 py-1.5">Last</th>
-                  <th className="text-center px-3 py-1.5">Health</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cronjobs.map(cj => (
-                  <tr key={cj.id} className="border-t border-gray-50 hover:bg-gray-50/50">
-                    <td className="px-4 py-2 font-medium text-gray-700">{cj.name}</td>
-                    <td className="px-3 py-2"><SuccessGauge rate={cj.successRate} runs={cj.totalRuns} /></td>
-                    <td className="px-3 py-2 text-center"><StatusBadge status={cj.lastStatus} /></td>
-                    <td className="px-3 py-2 text-center"><HealthBadge health={cj.health} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="px-4 py-12 text-center text-gray-400 text-sm">
+            Reserved for future analytics
           </div>
         </div>
       </div>
@@ -728,7 +722,7 @@ export default function CronjobsView({ user, onNavigate }) {
                 <th className="text-left px-4 py-2">{T.timeline.status}</th>
                 <th className="text-left px-3 py-2">{T.timeline.cronjob}</th>
                 <th className="text-left px-3 py-2">{T.timeline.jobName}</th>
-                <th className="text-left px-3 py-2">{T.timeline.startTime}</th>
+                <th className="text-left px-3 py-2">{T.timeline.startTime}{timezone ? ` (${timezone.abbr}/${timezone.iana})` : ''}</th>
                 <th className="text-left px-3 py-2">{T.timeline.duration}</th>
                 <th className="text-left px-3 py-2">{T.timeline.schedule}</th>
                 <th className="text-left px-3 py-2">Logs</th>

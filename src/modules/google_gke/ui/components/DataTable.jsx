@@ -325,12 +325,12 @@ export default function DataTable({
                 })}
               </tr>
             </thead>
-            <tbody className="divide-y divide-surface-50">
+            <tbody>
               {pagedData.map((row, rowIdx) => (
                 <React.Fragment key={row[rowKeyField] || rowIdx}>
                   <tr
                     onClick={() => onRowClick?.(row)}
-                    className={`hover:bg-surface-50/60 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
+                    className={`hover:bg-surface-50/60 transition-colors border-b border-gradient-to-r from-transparent via-gray-100/50 to-transparent ${onRowClick ? 'cursor-pointer' : ''}`}
                   >
                     {columns.map(col => {
                       const align = col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left';

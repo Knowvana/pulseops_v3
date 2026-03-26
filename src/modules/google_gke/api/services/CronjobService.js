@@ -288,7 +288,7 @@ function formatCronjob(cj, jobs) {
  * Get all CronJobs across all namespaces with their child Jobs, stats, and alerts.
  */
 export async function getAllCronjobs(batchApi, coreApi) {
-  log.debug('getAllCronjobs', 'Fetching all CronJobs and Jobs');
+  log.debug('getAllCronjobs', { message: 'Fetching all CronJobs and Jobs' });
 
   const [cronjobsRes, jobsRes] = await Promise.all([
     batchApi.listCronJobForAllNamespaces(),
@@ -310,7 +310,7 @@ export async function getAllCronjobs(batchApi, coreApi) {
  * Includes aggregate stats, alerts, health breakdown, execution timeline.
  */
 export async function getCronjobDashboard(batchApi, coreApi) {
-  log.debug('getCronjobDashboard', 'Building dashboard');
+  log.debug('getCronjobDashboard', { message: 'Building dashboard' });
 
   const cronjobs = await getAllCronjobs(batchApi, coreApi);
 
@@ -393,10 +393,19 @@ export async function getCronjobDashboard(batchApi, coreApi) {
  * Get execution history for a specific CronJob.
  */
 export async function getExecutionHistory(batchApi, coreApi, namespace, name, limit = 20) {
-  log.debug('getExecutionHistory', `Fetching history for ${namespace}/${name}`);
+  log.debug('getExecutionHistory', { namespace, name, limit });
 
-  const jobsRes = await batchApi.listNamespacedJob(namespace);
+  if (!namespace || !name) {
+    log.error('getExecutionHistory', { error: 'namespace or name is missing', namespace, name });
+    return [];
+  }
+
+  // Use listJobForAllNamespaces (proven to work) and filter by namespace + ownerReferences.
+  // listNamespacedJob has parameter issues in @kubernetes/client-node v1.4.0.
+  const jobsRes = await batchApi.listJobForAllNamespaces();
+
   const ownedJobs = (jobsRes.items || []).filter(j =>
+    j.metadata?.namespace === namespace &&
     (j.metadata?.ownerReferences || []).some(ref =>
       ref.kind === 'CronJob' && ref.name === name
     )
@@ -417,7 +426,7 @@ export async function getExecutionHistory(batchApi, coreApi, namespace, name, li
  */
 export async function getJobLogs(coreApi, namespace, jobName, opts = {}) {
   const { tailLines = 500, container, previous = false } = opts;
-  log.debug('getJobLogs', `Fetching logs for job ${namespace}/${jobName}`);
+  log.debug('getJobLogs', { namespace, jobName });
 
   // Find pods owned by the Job
   const podsRes = await coreApi.listNamespacedPod(namespace, undefined, undefined, undefined, undefined,

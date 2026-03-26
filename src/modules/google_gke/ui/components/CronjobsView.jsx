@@ -31,7 +31,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   Clock, RefreshCw, AlertTriangle, CheckCircle2, XCircle, AlertCircle,
   ChevronDown, ChevronRight, FileText, Download, Play, Pause, Timer,
-  Shield, Users, TrendingUp, Activity, Bell, Eye,
+  Shield, Users, TrendingUp, Activity, Bell, Eye, Grid3X3, BarChart3,
 } from 'lucide-react';
 import ApiClient from '@shared/services/apiClient';
 import uiText from '../config/uiText.json';
@@ -208,7 +208,7 @@ export default function CronjobsView({ user, onNavigate }) {
   const [historyData, setHistoryData] = useState({});
   const [historyLoading, setHistoryLoading] = useState({});
   const [logsDialog, setLogsDialog] = useState({ open: false, ns: null, name: null, jobName: null });
-  const [activeTab, setActiveTab] = useState('dashboard');
+  // Removed activeTab - no tabs, single page layout
   const [nsFilter, setNsFilter] = useState('');
   const [healthFilter, setHealthFilter] = useState('');
   const [ownerFilter, setOwnerFilter] = useState('');
@@ -308,6 +308,11 @@ export default function CronjobsView({ user, onNavigate }) {
     )},
     { key: 'lastStatus', label: T.grid.lastStatus, width: 100, render: (_v, row) => <StatusBadge status={row.lastStatus} /> },
     { key: 'lastScheduleAge', label: T.grid.lastRun, width: 90 },
+    { key: 'nextRunEstimate', label: T.grid.nextRun, width: 110, render: (_v, row) => {
+      if (!row.nextRunEstimate) return <span className="text-[11px] text-gray-400">—</span>;
+      const nextDate = new Date(row.nextRunEstimate);
+      return <span className="text-[11px] text-gray-600">{nextDate.toLocaleString()}</span>;
+    }},
     { key: 'lastDuration', label: T.grid.lastDuration, width: 90 },
     { key: 'successRate', label: T.grid.successRate, width: 160, render: (_v, row) => <SuccessGauge rate={row.successRate} runs={row.totalRuns} /> },
     { key: 'succeededRuns', label: T.grid.succeeded, width: 70, render: (_v, row) => (
@@ -447,190 +452,172 @@ export default function CronjobsView({ user, onNavigate }) {
         </div>
       </div>
 
-      {/* ── Tab Switcher ────────────────────────────────────────────────── */}
-      <div className="flex gap-1 bg-gray-100/70 rounded-lg p-0.5 w-fit">
-        {[
-          { id: 'dashboard', label: 'Dashboard', icon: Activity },
-          { id: 'table', label: 'CronJobs', icon: Clock },
-          { id: 'timeline', label: 'Timeline', icon: TrendingUp },
-        ].map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              activeTab === tab.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
-            }`}>
-            <tab.icon size={12} /> {tab.label}
-          </button>
-        ))}
+      {/* ── Summary Cards ─────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <StatCard icon={Clock} iconBg="bg-indigo-50" iconColor="text-indigo-500" label={T.summary.total} value={summary.total} />
+        <StatCard icon={Play} iconBg="bg-blue-50" iconColor="text-blue-500" label={T.summary.active} value={summary.active}
+          subValue={summary.suspended > 0 ? `${summary.suspended} suspended` : undefined} subColor="text-slate-400" />
+        <StatCard icon={CheckCircle2} iconBg="bg-emerald-50" iconColor="text-emerald-500" label={T.summary.healthy} value={summary.healthy} />
+        <StatCard icon={AlertTriangle} iconBg="bg-amber-50" iconColor="text-amber-500" label={T.summary.warning} value={summary.warning}
+          subValue={summary.critical > 0 ? `${summary.critical} critical` : undefined} subColor="text-red-500" />
+        <StatCard icon={TrendingUp} iconBg="bg-violet-50" iconColor="text-violet-500" label={T.summary.overallSuccessRate}
+          value={summary.overallSuccessRate !== null ? `${summary.overallSuccessRate}%` : '—'}
+          subValue={`${summary.totalSucceeded ?? 0}/${summary.totalRuns ?? 0} passed`} subColor="text-gray-400" />
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* DASHBOARD TAB                                                     */}
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'dashboard' && (
-        <>
-          {/* ── Summary Cards ─────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            <StatCard icon={Clock} iconBg="bg-indigo-50" iconColor="text-indigo-500" label={T.summary.total} value={summary.total} />
-            <StatCard icon={Play} iconBg="bg-blue-50" iconColor="text-blue-500" label={T.summary.active} value={summary.active}
-              subValue={summary.suspended > 0 ? `${summary.suspended} suspended` : undefined} subColor="text-slate-400" />
-            <StatCard icon={CheckCircle2} iconBg="bg-emerald-50" iconColor="text-emerald-500" label={T.summary.healthy} value={summary.healthy} />
-            <StatCard icon={AlertTriangle} iconBg="bg-amber-50" iconColor="text-amber-500" label={T.summary.warning} value={summary.warning}
-              subValue={summary.critical > 0 ? `${summary.critical} critical` : undefined} subColor="text-red-500" />
-            <StatCard icon={TrendingUp} iconBg="bg-violet-50" iconColor="text-violet-500" label={T.summary.overallSuccessRate}
-              value={summary.overallSuccessRate !== null ? `${summary.overallSuccessRate}%` : '—'}
-              subValue={`${summary.totalSucceeded ?? 0}/${summary.totalRuns ?? 0} passed`} subColor="text-gray-400" />
-          </div>
+      {/* ── Execution Stats Row ───────────────────────────────────── */}
+      <div className="grid grid-cols-3 gap-3">
+        <StatCard icon={Activity} iconBg="bg-sky-50" iconColor="text-sky-500" label={T.summary.totalRuns} value={summary.totalRuns} />
+        <StatCard icon={CheckCircle2} iconBg="bg-emerald-50" iconColor="text-emerald-500" label={T.summary.totalSucceeded} value={summary.totalSucceeded} />
+        <StatCard icon={XCircle} iconBg="bg-red-50" iconColor="text-red-500" label={T.summary.totalFailed} value={summary.totalFailed} />
+      </div>
 
-          {/* ── Execution Stats Row ───────────────────────────────────── */}
-          <div className="grid grid-cols-3 gap-3">
-            <StatCard icon={Activity} iconBg="bg-sky-50" iconColor="text-sky-500" label={T.summary.totalRuns} value={summary.totalRuns} />
-            <StatCard icon={CheckCircle2} iconBg="bg-emerald-50" iconColor="text-emerald-500" label={T.summary.totalSucceeded} value={summary.totalSucceeded} />
-            <StatCard icon={XCircle} iconBg="bg-red-50" iconColor="text-red-500" label={T.summary.totalFailed} value={summary.totalFailed} />
+      {/* ── Alerts Panel ──────────────────────────────────────────── */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Bell size={14} className="text-gray-400" />
+            <h3 className="text-xs font-bold text-gray-700">{T.alerts.title}</h3>
+            {alerts.length > 0 && (
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-100 text-red-600 text-[10px] font-bold">{alerts.length}</span>
+            )}
           </div>
-
-          {/* ── Alerts Panel ──────────────────────────────────────────── */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Bell size={14} className="text-gray-400" />
-                <h3 className="text-xs font-bold text-gray-700">{T.alerts.title}</h3>
-                {alerts.length > 0 && (
-                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-100 text-red-600 text-[10px] font-bold">{alerts.length}</span>
-                )}
-              </div>
+        </div>
+        <div className="max-h-[250px] overflow-y-auto">
+          {alerts.length === 0 ? (
+            <div className="flex items-center gap-2 px-4 py-6 text-xs text-gray-400">
+              <CheckCircle2 size={14} className="text-emerald-400" /> {T.alerts.noAlerts}
             </div>
-            <div className="max-h-[250px] overflow-y-auto">
-              {alerts.length === 0 ? (
-                <div className="flex items-center gap-2 px-4 py-6 text-xs text-gray-400">
-                  <CheckCircle2 size={14} className="text-emerald-400" /> {T.alerts.noAlerts}
-                </div>
-              ) : (
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="text-[10px] text-gray-400 uppercase tracking-wider bg-gray-50/50">
-                      <th className="text-left px-4 py-1.5">{T.alerts.severity}</th>
-                      <th className="text-left px-3 py-1.5">{T.alerts.cronjob}</th>
-                      <th className="text-left px-3 py-1.5">Type</th>
-                      <th className="text-left px-3 py-1.5">{T.alerts.message}</th>
-                      <th className="text-left px-3 py-1.5">{T.alerts.time}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {alerts.map((a, i) => (
-                      <tr key={i} className={`border-t border-gray-50 ${
-                        a.severity === 'critical' ? 'bg-red-50/30' : a.severity === 'warning' ? 'bg-amber-50/30' : ''
-                      }`}>
-                        <td className="px-4 py-2"><SeverityIcon severity={a.severity} /></td>
-                        <td className="px-3 py-2 font-medium text-gray-700">{a.cronjobName}</td>
-                        <td className="px-3 py-2">
-                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
-                            a.type === 'failure' ? 'bg-red-100 text-red-600' :
-                            a.type === 'missed_schedule' ? 'bg-amber-100 text-amber-600' :
-                            a.type === 'high_failure_rate' ? 'bg-orange-100 text-orange-600' :
-                            'bg-blue-100 text-blue-600'
-                          }`}>{a.type.replace(/_/g, ' ')}</span>
-                        </td>
-                        <td className="px-3 py-2 text-gray-600">{a.message}</td>
-                        <td className="px-3 py-2 text-gray-400">{a.timestamp ? new Date(a.timestamp).toLocaleTimeString() : '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-
-          {/* ── Team Health + CronJob Health side-by-side ──────────────── */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Team Breakdown */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-                <Users size={14} className="text-gray-400" />
-                <h3 className="text-xs font-bold text-gray-700">{T.teamBreakdown.title}</h3>
-              </div>
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-[10px] text-gray-400 uppercase tracking-wider bg-gray-50/50">
-                    <th className="text-left px-4 py-1.5">{T.teamBreakdown.team}</th>
-                    <th className="text-center px-3 py-1.5">{T.teamBreakdown.total}</th>
-                    <th className="text-center px-3 py-1.5">{T.teamBreakdown.healthy}</th>
-                    <th className="text-center px-3 py-1.5">{T.teamBreakdown.warning}</th>
-                    <th className="text-center px-3 py-1.5">{T.teamBreakdown.critical}</th>
+          ) : (
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-[10px] text-gray-400 uppercase tracking-wider bg-gray-50/50">
+                  <th className="text-left px-4 py-1.5">{T.alerts.severity}</th>
+                  <th className="text-left px-3 py-1.5">{T.alerts.cronjob}</th>
+                  <th className="text-left px-3 py-1.5">Type</th>
+                  <th className="text-left px-3 py-1.5">{T.alerts.message}</th>
+                  <th className="text-left px-3 py-1.5">{T.alerts.time}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {alerts.map((a, i) => (
+                  <tr key={i} className={`border-t border-gray-50 ${
+                    a.severity === 'critical' ? 'bg-red-50/30' : a.severity === 'warning' ? 'bg-amber-50/30' : ''
+                  }`}>
+                    <td className="px-4 py-2"><SeverityIcon severity={a.severity} /></td>
+                    <td className="px-3 py-2 font-medium text-gray-700">{a.cronjobName}</td>
+                    <td className="px-3 py-2">
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                        a.type === 'failure' ? 'bg-red-100 text-red-600' :
+                        a.type === 'missed_schedule' ? 'bg-amber-100 text-amber-600' :
+                        a.type === 'high_failure_rate' ? 'bg-orange-100 text-orange-600' :
+                        'bg-blue-100 text-blue-600'
+                      }`}>{a.type.replace(/_/g, ' ')}</span>
+                    </td>
+                    <td className="px-3 py-2 text-gray-600">{a.message}</td>
+                    <td className="px-3 py-2 text-gray-400">{a.timestamp ? new Date(a.timestamp).toLocaleTimeString() : '—'}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(byTeam).map(([team, stats]) => (
-                    <tr key={team} className="border-t border-gray-50 hover:bg-gray-50/50">
-                      <td className="px-4 py-2 font-medium text-gray-700 capitalize">{team.replace(/-/g, ' ')}</td>
-                      <td className="px-3 py-2 text-center font-bold text-gray-600">{stats.total}</td>
-                      <td className="px-3 py-2 text-center font-bold text-emerald-600">{stats.healthy}</td>
-                      <td className="px-3 py-2 text-center font-bold text-amber-600">{stats.warning || '—'}</td>
-                      <td className="px-3 py-2 text-center font-bold text-red-600">{stats.critical || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
 
-            {/* CronJob Health Summary */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-                <Shield size={14} className="text-gray-400" />
-                <h3 className="text-xs font-bold text-gray-700">CronJob Success Rates</h3>
-              </div>
-              <div className="max-h-[250px] overflow-y-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="text-[10px] text-gray-400 uppercase tracking-wider bg-gray-50/50">
-                      <th className="text-left px-4 py-1.5">CronJob</th>
-                      <th className="text-left px-3 py-1.5">Success Rate</th>
-                      <th className="text-center px-3 py-1.5">Last</th>
-                      <th className="text-center px-3 py-1.5">Health</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cronjobs.map(cj => (
-                      <tr key={cj.id} className="border-t border-gray-50 hover:bg-gray-50/50">
-                        <td className="px-4 py-2 font-medium text-gray-700">{cj.name}</td>
-                        <td className="px-3 py-2"><SuccessGauge rate={cj.successRate} runs={cj.totalRuns} /></td>
-                        <td className="px-3 py-2 text-center"><StatusBadge status={cj.lastStatus} /></td>
-                        <td className="px-3 py-2 text-center"><HealthBadge health={cj.health} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+      {/* ── Team Health + CronJob Health side-by-side ──────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Team Breakdown */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+            <Users size={14} className="text-gray-400" />
+            <h3 className="text-xs font-bold text-gray-700">{T.teamBreakdown.title}</h3>
           </div>
-        </>
-      )}
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[10px] text-gray-400 uppercase tracking-wider bg-gray-50/50">
+                <th className="text-left px-4 py-1.5">{T.teamBreakdown.team}</th>
+                <th className="text-center px-3 py-1.5">{T.teamBreakdown.total}</th>
+                <th className="text-center px-3 py-1.5">{T.teamBreakdown.healthy}</th>
+                <th className="text-center px-3 py-1.5">{T.teamBreakdown.warning}</th>
+                <th className="text-center px-3 py-1.5">{T.teamBreakdown.critical}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(byTeam).map(([team, stats]) => (
+                <tr key={team} className="border-t border-gray-50 hover:bg-gray-50/50">
+                  <td className="px-4 py-2 font-medium text-gray-700 capitalize">{team.replace(/-/g, ' ')}</td>
+                  <td className="px-3 py-2 text-center font-bold text-gray-600">{stats.total}</td>
+                  <td className="px-3 py-2 text-center font-bold text-emerald-600">{stats.healthy}</td>
+                  <td className="px-3 py-2 text-center font-bold text-amber-600">{stats.warning || '—'}</td>
+                  <td className="px-3 py-2 text-center font-bold text-red-600">{stats.critical || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* CRONJOBS TABLE TAB                                                */}
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'table' && (
-        <>
-          {/* Filters */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <select value={nsFilter} onChange={e => setNsFilter(e.target.value)}
-              className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5">
-              <option value="">{T.filters.allNamespaces}</option>
-              {namespaces.map(ns => <option key={ns} value={ns}>{ns}</option>)}
-            </select>
-            <select value={healthFilter} onChange={e => setHealthFilter(e.target.value)}
-              className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5">
-              <option value="">{T.filters.allHealth}</option>
-              {['Healthy', 'Warning', 'Critical', 'Suspended'].map(h => <option key={h} value={h}>{h}</option>)}
-            </select>
-            <select value={ownerFilter} onChange={e => setOwnerFilter(e.target.value)}
-              className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5">
-              <option value="">{T.filters.allOwners}</option>
-              {owners.map(o => <option key={o} value={o}>{o}</option>)}
-            </select>
-            <span className="text-[10px] text-gray-400">{filteredCronjobs.length} of {cronjobs.length} CronJobs</span>
+        {/* CronJob Health Summary */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+            <Shield size={14} className="text-gray-400" />
+            <h3 className="text-xs font-bold text-gray-700">CronJob Success Rates</h3>
           </div>
+          <div className="max-h-[250px] overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-[10px] text-gray-400 uppercase tracking-wider bg-gray-50/50">
+                  <th className="text-left px-4 py-1.5">CronJob</th>
+                  <th className="text-left px-3 py-1.5">Success Rate</th>
+                  <th className="text-center px-3 py-1.5">Last</th>
+                  <th className="text-center px-3 py-1.5">Health</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cronjobs.map(cj => (
+                  <tr key={cj.id} className="border-t border-gray-50 hover:bg-gray-50/50">
+                    <td className="px-4 py-2 font-medium text-gray-700">{cj.name}</td>
+                    <td className="px-3 py-2"><SuccessGauge rate={cj.successRate} runs={cj.totalRuns} /></td>
+                    <td className="px-3 py-2 text-center"><StatusBadge status={cj.lastStatus} /></td>
+                    <td className="px-3 py-2 text-center"><HealthBadge health={cj.health} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
 
-          {/* DataTable */}
+      {/* ── CronJobs Grid Table ───────────────────────────────────── */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Grid3X3 size={14} className="text-gray-400" />
+            <h3 className="text-xs font-bold text-gray-700">All CronJobs</h3>
+          </div>
+        </div>
+        
+        {/* Filters */}
+        <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3 flex-wrap bg-gray-50/50">
+          <select value={nsFilter} onChange={e => setNsFilter(e.target.value)}
+            className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5">
+            <option value="">{T.filters.allNamespaces}</option>
+            {namespaces.map(ns => <option key={ns} value={ns}>{ns}</option>)}
+          </select>
+          <select value={healthFilter} onChange={e => setHealthFilter(e.target.value)}
+            className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5">
+            <option value="">{T.filters.allHealth}</option>
+            {['Healthy', 'Warning', 'Critical', 'Suspended'].map(h => <option key={h} value={h}>{h}</option>)}
+          </select>
+          <select value={ownerFilter} onChange={e => setOwnerFilter(e.target.value)}
+            className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5">
+            <option value="">{T.filters.allOwners}</option>
+            {owners.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+          <span className="text-[10px] text-gray-400 ml-auto">{filteredCronjobs.length} of {cronjobs.length} CronJobs</span>
+        </div>
+
+        {/* DataTable */}
+        <div className="overflow-x-auto">
           <DataTable
             data={filteredCronjobs}
             columns={columns}
@@ -641,58 +628,54 @@ export default function CronjobsView({ user, onNavigate }) {
             compact
             renderExpandedRow={renderExpandedRow}
           />
-        </>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* TIMELINE TAB                                                      */}
-      {/* ══════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'timeline' && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-            <TrendingUp size={14} className="text-gray-400" />
-            <h3 className="text-xs font-bold text-gray-700">{T.timeline.title}</h3>
-            <span className="text-[10px] text-gray-400 ml-1">{T.timeline.subtitle}</span>
-          </div>
-          <div className="max-h-[600px] overflow-y-auto">
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 bg-white">
-                <tr className="text-[10px] text-gray-400 uppercase tracking-wider bg-gray-50/80">
-                  <th className="text-left px-4 py-2">{T.timeline.status}</th>
-                  <th className="text-left px-3 py-2">{T.timeline.cronjob}</th>
-                  <th className="text-left px-3 py-2">{T.timeline.jobName}</th>
-                  <th className="text-left px-3 py-2">{T.timeline.startTime}</th>
-                  <th className="text-left px-3 py-2">{T.timeline.duration}</th>
-                  <th className="text-left px-3 py-2">{T.timeline.schedule}</th>
-                  <th className="text-left px-3 py-2">Logs</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentExecs.length === 0 ? (
-                  <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No recent executions.</td></tr>
-                ) : recentExecs.map((exec, i) => (
-                  <tr key={i} className={`border-t border-gray-50 hover:bg-gray-50/50 ${
-                    exec.status === 'Failed' ? 'bg-red-50/20' : ''
-                  }`}>
-                    <td className="px-4 py-2"><StatusBadge status={exec.status} /></td>
-                    <td className="px-3 py-2 font-medium text-gray-700">{exec.cronjobName}</td>
-                    <td className="px-3 py-2 font-mono text-[10px] text-gray-500">{exec.name}</td>
-                    <td className="px-3 py-2 text-gray-500">{exec.startTime ? new Date(exec.startTime).toLocaleString() : '—'}</td>
-                    <td className="px-3 py-2 font-medium text-gray-700">{exec.duration}</td>
-                    <td className="px-3 py-2 text-gray-400 font-mono text-[10px]">{exec.schedule}</td>
-                    <td className="px-3 py-2">
-                      <button onClick={() => setLogsDialog({ open: true, ns: exec.cronjobNamespace, name: exec.cronjobName, jobName: exec.name })}
-                        className="text-[10px] px-2 py-0.5 bg-gray-50 border border-gray-200 rounded hover:bg-gray-100 flex items-center gap-1">
-                        <FileText size={10} /> Logs
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </div>
-      )}
+      </div>
+
+      {/* ── Execution Timeline ────────────────────────────────────── */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+          <TrendingUp size={14} className="text-gray-400" />
+          <h3 className="text-xs font-bold text-gray-700">{T.timeline.title}</h3>
+          <span className="text-[10px] text-gray-400 ml-1">{T.timeline.subtitle}</span>
+        </div>
+        <div className="max-h-[600px] overflow-y-auto">
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 bg-white">
+              <tr className="text-[10px] text-gray-400 uppercase tracking-wider bg-gray-50/80">
+                <th className="text-left px-4 py-2">{T.timeline.status}</th>
+                <th className="text-left px-3 py-2">{T.timeline.cronjob}</th>
+                <th className="text-left px-3 py-2">{T.timeline.jobName}</th>
+                <th className="text-left px-3 py-2">{T.timeline.startTime}</th>
+                <th className="text-left px-3 py-2">{T.timeline.duration}</th>
+                <th className="text-left px-3 py-2">{T.timeline.schedule}</th>
+                <th className="text-left px-3 py-2">Logs</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentExecs.length === 0 ? (
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No recent executions.</td></tr>
+              ) : recentExecs.map((exec, i) => (
+                <tr key={i} className={`border-t border-gray-50 hover:bg-gray-50/50 ${
+                  exec.status === 'Failed' ? 'bg-red-50/20' : ''
+                }`}>
+                  <td className="px-4 py-2"><StatusBadge status={exec.status} /></td>
+                  <td className="px-3 py-2 font-medium text-gray-700">{exec.cronjobName}</td>
+                  <td className="px-3 py-2 font-mono text-[10px] text-gray-500">{exec.name}</td>
+                  <td className="px-3 py-2 text-gray-500">{exec.startTime ? new Date(exec.startTime).toLocaleString() : '—'}</td>
+                  <td className="px-3 py-2 font-medium text-gray-700">{exec.duration}</td>
+                  <td className="px-3 py-2 text-gray-400 font-mono text-[10px]">{exec.schedule}</td>
+                  <td className="px-3 py-2">
+                    <button onClick={() => setLogsDialog({ open: true, ns: exec.cronjobNamespace, name: exec.cronjobName, jobName: exec.name })}
+                      className="text-[10px] px-2 py-0.5 bg-gray-50 border border-gray-200 rounded hover:bg-gray-100 flex items-center gap-1">
+                      <FileText size={10} /> Logs
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {/* ── Logs Dialog ────────────────────────────────────────────────── */}
       <JobLogsDialog

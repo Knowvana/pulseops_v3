@@ -251,10 +251,12 @@ function formatCronjob(cj, jobs) {
   const failedJobs = formattedJobs.filter(j => j.status === 'Failed');
   for (const failedJob of failedJobs) {
     const failMsg = `Execution failed — Job: ${failedJob.name}, failed pods: ${failedJob.failed}, started: ${failedJob.startTime ? new Date(failedJob.startTime).toISOString() : 'unknown'}`;
+    const logMsg = `Job ${failedJob.name}: ${failedJob.failed} failed pod(s), ${failedJob.active} active, duration: ${failedJob.duration}`;
     alerts.push({
       type: 'failure',
       severity: 'critical',
       message: failMsg,
+      logMessage: logMsg,
       status: 'Failed',
       jobName: failedJob?.name || null,
       failedCount: failedJob?.failed || 0,
@@ -272,6 +274,7 @@ function formatCronjob(cj, jobs) {
         type: 'missed_schedule',
         severity: 'warning',
         message: `Schedule may be missed — last run ${lastRunAge}, expected every ${describeCron(schedule)}`,
+        logMessage: `Last scheduled: ${lastScheduleTime}, expected interval: ${intervalSec}s`,
         status: lastStatus,
         lastScheduleTime,
         expectedIntervalSec: intervalSec,
@@ -287,6 +290,7 @@ function formatCronjob(cj, jobs) {
       type: 'high_failure_rate',
       severity: 'warning',
       message: `Success rate is ${successRate}% (${failedRuns}/${totalRuns} failed)`,
+      logMessage: `${failedRuns} of last ${totalRuns} executions failed (${100 - successRate}% failure rate)`,
       status: lastStatus,
       successRate,
       failedRuns,
@@ -302,6 +306,7 @@ function formatCronjob(cj, jobs) {
       type: 'long_running',
       severity: 'info',
       message: `Active job running for ${lastJob.duration}`,
+      logMessage: `Job: ${lastJob.name}, running for ${lastJob.duration} (threshold: 5m)`,
       status: 'Running',
       jobName: lastJob?.name,
       durationSeconds: lastJob?.durationSeconds,
@@ -415,6 +420,47 @@ export async function getCronjobDashboard(batchApi, coreApi) {
       });
     }
   }
+
+  // Enrich failure alerts with actual pod logs from the failed Job
+  log.info('Enriching cron failure alerts with pod logs', { failureAlerts: allAlerts.filter(a => a.type === 'failure').length });
+  for (const alert of allAlerts) {
+    if (alert.type === 'failure' && alert.jobName && alert.cronjobNamespace) {
+      try {
+        log.info('Fetching job pod logs for alert enrichment', { job: alert.jobName, namespace: alert.cronjobNamespace });
+        const jobLogResult = await getJobLogs(coreApi, alert.cronjobNamespace, alert.jobName, { tailLines: 50 });
+        log.info('getJobLogs result', {
+          job: alert.jobName,
+          podName: jobLogResult.podName,
+          logsLength: jobLogResult.logs?.length || 0,
+          hasError: !!jobLogResult.error,
+          error: jobLogResult.error || null,
+          message: jobLogResult.message || null,
+          logsPreview: (jobLogResult.logs || '').substring(0, 200),
+        });
+        if (jobLogResult.logs) {
+          const lines = jobLogResult.logs.split('\n').map(l => l.trim()).filter(Boolean);
+          // Find the last error line
+          const reversed = [...lines].reverse();
+          const errorLine = reversed.find(l =>
+            /error|failed|exception|fatal|panic|timeout/i.test(l)
+          );
+          if (errorLine) {
+            alert.logMessage = errorLine.length > 300 ? errorLine.substring(0, 300) + '...' : errorLine;
+            log.info('Enriched cron alert with error log line', { job: alert.jobName, logMessage: alert.logMessage });
+          } else if (lines.length > 0) {
+            const lastLine = reversed[0];
+            alert.logMessage = lastLine.length > 300 ? lastLine.substring(0, 300) + '...' : lastLine;
+            log.info('Enriched cron alert with last log line', { job: alert.jobName, logMessage: alert.logMessage });
+          }
+        } else {
+          log.warn('No logs returned for failed job', { job: alert.jobName, result: jobLogResult });
+        }
+      } catch (err) {
+        log.warn('Failed to enrich cron alert with pod logs', { job: alert.jobName, error: err.message, stack: err.stack?.substring(0, 300) });
+      }
+    }
+  }
+
   // Sort alerts by severity then timestamp
   const severityOrder = { critical: 0, warning: 1, info: 2 };
   allAlerts.sort((a, b) => (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9));
@@ -493,29 +539,37 @@ export async function getExecutionHistory(batchApi, coreApi, namespace, name, li
  */
 export async function getJobLogs(coreApi, namespace, jobName, opts = {}) {
   const { tailLines = 500, container, previous = false } = opts;
-  log.debug('getJobLogs', { namespace, jobName });
+  log.info('getJobLogs called', { namespace, jobName, tailLines, previous });
 
   // Find pods owned by the Job
-  const podsRes = await coreApi.listNamespacedPod(namespace, undefined, undefined, undefined, undefined,
-    `job-name=${jobName}`
-  );
+  const podsRes = await coreApi.listNamespacedPod({
+    namespace,
+    labelSelector: `job-name=${jobName}`,
+  });
 
   const pods = podsRes.items || [];
+  log.info('getJobLogs pod lookup', { jobName, podsFound: pods.length, podNames: pods.map(p => p.metadata?.name) });
   if (pods.length === 0) return { logs: '', podName: null, message: 'No pods found for this job' };
 
   // Get logs from the first (or only) pod
   const pod = pods[0];
   const podName = pod.metadata?.name;
-  const logOpts = { tailLines, previous };
-  if (container) logOpts.container = container;
+  const podPhase = pod.status?.phase;
+  log.info('getJobLogs fetching logs from pod', { podName, podPhase, jobName });
 
   try {
-    const logRes = await coreApi.readNamespacedPodLog(podName, namespace, container || undefined,
-      undefined, undefined, undefined, previous, undefined, tailLines
-    );
-    return { logs: logRes || '', podName, namespace };
+    const logRes = await coreApi.readNamespacedPodLog({
+      name: podName,
+      namespace,
+      container: container || undefined,
+      previous,
+      tailLines,
+    });
+    const logText = typeof logRes === 'string' ? logRes : (logRes?.body || logRes?.response?.body || '');
+    log.info('getJobLogs success', { podName, logLength: logText.length, preview: logText.substring(0, 150) });
+    return { logs: logText, podName, namespace };
   } catch (err) {
-    log.warn('getJobLogs', `Could not read logs for ${podName}: ${err.message}`);
+    log.warn('getJobLogs readNamespacedPodLog failed', { podName, jobName, error: err.message });
     return { logs: '', podName, error: err.message };
   }
 }

@@ -19,12 +19,13 @@ import { Router } from 'express';
 import { createGkeLogger } from '../lib/moduleLogger.js';
 import { apiErrors, apiMessages } from '../config/index.js';
 import { loadClusterConfigFile, DatabaseService, dbSchema } from './helpers.js';
-import { getK8sCoreApi, getK8sAppsApi, getK8sClient } from '../lib/KubernetesClient.js';
+import { getK8sCoreApi, getK8sAppsApi, getK8sBatchApi, getK8sClient } from '../lib/KubernetesClient.js';
 import { isEncrypted, decryptToken } from '../lib/credentialEncryption.js';
 import {
   getDashboardSummary, getAllPods, getAllWorkloads,
   getPodLogs, getNamespaces,
 } from '../services/WorkloadService.js';
+import { getCronjobDashboard } from '../services/CronjobService.js';
 
 const log = createGkeLogger('workloadRoutes');
 const router = Router();
@@ -41,7 +42,7 @@ function ensureK8sClient() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GET /dashboard/summary — Full cluster dashboard summary
+// GET /dashboard/summary — Full cluster dashboard summary + alerts
 // ═══════════════════════════════════════════════════════════════════════════════
 router.get('/dashboard/summary', async (req, res) => {
   try {
@@ -49,8 +50,37 @@ router.get('/dashboard/summary', async (req, res) => {
     ensureK8sClient();
     const coreApi = getK8sCoreApi();
     const appsApi = getK8sAppsApi();
-    const summary = await getDashboardSummary(coreApi, appsApi);
-    return res.json({ success: true, data: summary });
+    const batchApi = getK8sBatchApi();
+    
+    const [summary, cronjobData] = await Promise.all([
+      getDashboardSummary(coreApi, appsApi),
+      getCronjobDashboard(batchApi, coreApi).catch(err => {
+        log.warn('Failed to fetch cronjob alerts', { error: err.message });
+        return { alerts: [], cronjobs: [] };
+      }),
+    ]);
+    
+    // Combine pod/workload alerts from summary with cronjob alerts
+    const podWorkloadAlerts = summary.alerts || [];
+    const cronjobAlerts = cronjobData.alerts || [];
+    const allAlerts = [...podWorkloadAlerts, ...cronjobAlerts];
+
+    log.info('Dashboard summary assembled', {
+      pods: summary.pods?.total,
+      workloads: summary.workloads?.total,
+      podWorkloadAlerts: podWorkloadAlerts.length,
+      cronjobAlerts: cronjobAlerts.length,
+      totalAlerts: allAlerts.length,
+    });
+    
+    return res.json({ 
+      success: true, 
+      data: {
+        ...summary,
+        alerts: allAlerts,
+        cronjobs: cronjobData,
+      },
+    });
   } catch (err) {
     log.error('Dashboard summary failed', { error: err.message, stack: err.stack });
     return res.status(500).json({

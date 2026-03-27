@@ -670,10 +670,10 @@ export default function CronjobsView({ user, onNavigate }) {
 
       {/* ── Active Alerts (TOP — most important section) ───────────── */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-4 py-3 border-b border-rose-300 bg-gradient-to-r from-rose-400 to-pink-500 flex items-center justify-between">
+        <div className="px-4 py-3 border-b border-amber-300 bg-gradient-to-r from-amber-200 to-amber-50 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Bell size={14} className="text-white" />
-            <h3 className="text-xs font-bold text-white">{T.alerts.title}</h3>
+            <Bell size={14} className="text-amber-700" />
+            <h3 className="text-xs font-bold text-amber-900">{T.alerts.title}</h3>
             {alerts.length > 0 && (
               <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-100 text-red-600 text-[10px] font-bold">{alerts.length}</span>
             )}

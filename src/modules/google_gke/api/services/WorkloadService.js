@@ -15,8 +15,32 @@
 // PATTERN SOURCE: ESM functional style (same as KubernetesClient.js)
 // ============================================================================
 import { createGkeLogger } from '../lib/moduleLogger.js';
+import { getPodFailureMessage, getWorkloadFailureMessage } from './LogsService.js';
 
 const log = createGkeLogger('WorkloadService');
+
+// ─── System Namespaces Filter (Global) ─────────────────────────────────────
+// Exclude Kubernetes system namespaces from pod/workload counts
+const SYSTEM_NAMESPACES = new Set([
+  'default',
+  'kube-system',
+  'kube-public',
+  'kube-node-lease',
+  'local-path-storage',
+  'kube-apiserver',
+  'kube-controller-manager',
+  'kube-scheduler',
+]);
+
+// ─── System Deployment Names Filter ────────────────────────────────────────
+// Exclude system deployments by name (even if in user namespaces)
+const SYSTEM_DEPLOYMENT_NAMES = new Set([
+  'coredns',
+  'metrics-server',
+  'local-path-provisioner',
+  'nginx-ingress',
+  'ingress-nginx',
+]);
 
 // ─── Helper: human-readable age ────────────────────────────────────────────
 function formatAge(isoTimestamp) {
@@ -190,8 +214,10 @@ export async function getAllPods(coreApi) {
   log.debug('Fetching all pods across all namespaces');
   try {
     const res = await coreApi.listPodForAllNamespaces();
-    const pods = (res.items || []).map(formatPod);
-    log.info('Pods fetched', { total: pods.length });
+    const pods = (res.items || [])
+      .filter(pod => !SYSTEM_NAMESPACES.has(pod.metadata?.namespace))
+      .map(formatPod);
+    log.info('Pods fetched', { total: pods.length, filtered: res.items?.length || 0 });
     return pods;
   } catch (err) {
     log.error('Failed to fetch pods', { error: err.message });
@@ -219,7 +245,12 @@ export async function getAllWorkloads(coreApi, appsApi) {
     const workloads = [];
 
     // ── Deployments ──
-    for (const dep of (deploymentsRes.items || [])) {
+    const filteredDeployments = (deploymentsRes.items || []).filter(d => 
+      !SYSTEM_NAMESPACES.has(d.metadata?.namespace) && 
+      !SYSTEM_DEPLOYMENT_NAMES.has(d.metadata?.name)
+    );
+    log.info('Deployments found', { total: deploymentsRes.items?.length || 0, filtered: filteredDeployments.length, names: filteredDeployments.map(d => d.metadata?.name) });
+    for (const dep of filteredDeployments) {
       const desired = dep.spec?.replicas ?? 1;
       const ready = dep.status?.readyReplicas ?? 0;
       const updated = dep.status?.updatedReplicas ?? 0;
@@ -234,9 +265,23 @@ export async function getAllWorkloads(coreApi, appsApi) {
       const restarts = ownedPods.reduce((sum, p) =>
         sum + (p.status?.containerStatuses || []).reduce((s, cs) => s + (cs.restartCount || 0), 0), 0);
 
-      let health = 'Healthy';
-      if (ready === 0 && desired > 0) health = 'Unhealthy';
-      else if (ready < desired) health = 'Degraded';
+      let health = 'Available';
+      // If no replicas are available but some are desired, it's unavailable
+      if (available === 0 && desired > 0) {
+        health = 'Unavailable';
+      }
+      // If some but not all replicas are available, it's degraded
+      else if (available > 0 && available < desired) {
+        health = 'Degraded';
+      }
+
+      const depConditions = (dep.status?.conditions || []).map(c => ({
+        type: c.type,
+        status: c.status,
+        reason: c.reason || '',
+        message: c.message || '',
+        lastTransitionTime: c.lastTransitionTime,
+      }));
 
       workloads.push({
         id: `Deployment/${dep.metadata?.namespace}/${dep.metadata?.name}`,
@@ -255,14 +300,19 @@ export async function getAllWorkloads(coreApi, appsApi) {
         podCount: ownedPods.length,
         labels: dep.metadata?.labels || {},
         strategy: dep.spec?.strategy?.type || '—',
+        conditions: depConditions,
       });
     }
 
     // ── StatefulSets ──
-    for (const ss of (statefulSetsRes.items || [])) {
+    for (const ss of (statefulSetsRes.items || []).filter(s => 
+      !SYSTEM_NAMESPACES.has(s.metadata?.namespace) && 
+      !SYSTEM_DEPLOYMENT_NAMES.has(s.metadata?.name)
+    )) {
       const desired = ss.spec?.replicas ?? 1;
       const ready = ss.status?.readyReplicas ?? 0;
       const updated = ss.status?.updatedReplicas ?? 0;
+      const available = ss.status?.availableReplicas ?? 0;
       const matchLabels = ss.spec?.selector?.matchLabels || {};
 
       const ownedPods = allPods.filter(p =>
@@ -272,9 +322,12 @@ export async function getAllWorkloads(coreApi, appsApi) {
       const restarts = ownedPods.reduce((sum, p) =>
         sum + (p.status?.containerStatuses || []).reduce((s, cs) => s + (cs.restartCount || 0), 0), 0);
 
-      let health = 'Healthy';
-      if (ready === 0 && desired > 0) health = 'Unhealthy';
-      else if (ready < desired) health = 'Degraded';
+      let health = 'Available';
+      if (available === 0 && desired > 0) {
+        health = 'Unavailable';
+      } else if (available > 0 && available < desired) {
+        health = 'Degraded';
+      }
 
       workloads.push({
         id: `StatefulSet/${ss.metadata?.namespace}/${ss.metadata?.name}`,
@@ -297,7 +350,10 @@ export async function getAllWorkloads(coreApi, appsApi) {
     }
 
     // ── DaemonSets ──
-    for (const ds of (daemonSetsRes.items || [])) {
+    for (const ds of (daemonSetsRes.items || []).filter(d => 
+      !SYSTEM_NAMESPACES.has(d.metadata?.namespace) && 
+      !SYSTEM_DEPLOYMENT_NAMES.has(d.metadata?.name)
+    )) {
       const desired = ds.status?.desiredNumberScheduled ?? 0;
       const ready = ds.status?.numberReady ?? 0;
       const updated = ds.status?.updatedNumberScheduled ?? 0;
@@ -311,9 +367,12 @@ export async function getAllWorkloads(coreApi, appsApi) {
       const restarts = ownedPods.reduce((sum, p) =>
         sum + (p.status?.containerStatuses || []).reduce((s, cs) => s + (cs.restartCount || 0), 0), 0);
 
-      let health = 'Healthy';
-      if (ready === 0 && desired > 0) health = 'Unhealthy';
-      else if (ready < desired) health = 'Degraded';
+      let health = 'Available';
+      if (available === 0 && desired > 0) {
+        health = 'Unavailable';
+      } else if (available > 0 && available < desired) {
+        health = 'Degraded';
+      }
 
       workloads.push({
         id: `DaemonSet/${ds.metadata?.namespace}/${ds.metadata?.name}`,
@@ -365,7 +424,9 @@ export async function getDashboardSummary(coreApi, appsApi) {
       coreApi.listNode(),
     ]);
 
-    const namespaces = (namespacesRes.items || []).map(ns => ns.metadata?.name);
+    const namespaces = (namespacesRes.items || [])
+      .filter(ns => !SYSTEM_NAMESPACES.has(ns.metadata?.name))
+      .map(ns => ns.metadata?.name);
     const nodes = (nodesRes.items || []).map(node => {
       const isReady = (node.status?.conditions || []).find(c => c.type === 'Ready')?.status === 'True';
       return {
@@ -409,6 +470,98 @@ export async function getDashboardSummary(coreApi, appsApi) {
       workloadsByHealth[w.health] = (workloadsByHealth[w.health] || 0) + 1;
     }
 
+    // ── Pod alerts ───────────────────────────────────────────────────────────
+    const podAlerts = [];
+    const ts = new Date().toISOString();
+
+    // CrashLoopBackOff pods — fetch actual logs via LogsService
+    const crashLoopPodsList = pods.filter(p => p.health === 'CrashLoopBackOff');
+    log.info('Generating CrashLoopBackOff pod alerts', { count: crashLoopPodsList.length });
+    for (const pod of crashLoopPodsList) {
+      const logMessage = await getPodFailureMessage(coreApi, pod).catch(() => 'CrashLoopBackOff');
+      log.debug('CrashLoop pod alert', { pod: pod.name, namespace: pod.namespace, logMessage });
+      podAlerts.push({
+        type: 'crashloop',
+        severity: 'critical',
+        message: `Pod ${pod.name} in CrashLoopBackOff`,
+        podName: pod.name,
+        namespace: pod.namespace,
+        logMessage,
+        timestamp: ts,
+      });
+    }
+
+    // Failed pods — fetch actual logs + events via LogsService
+    const failedPodsList = pods.filter(p => p.phase === 'Failed');
+    log.info('Generating Failed pod alerts', { count: failedPodsList.length });
+    for (const pod of failedPodsList) {
+      const logMessage = await getPodFailureMessage(coreApi, pod).catch(() => pod.health || 'Failed');
+      log.debug('Failed pod alert', { pod: pod.name, namespace: pod.namespace, logMessage });
+      podAlerts.push({
+        type: 'failed',
+        severity: 'critical',
+        message: `Pod ${pod.name} in Failed state`,
+        podName: pod.name,
+        namespace: pod.namespace,
+        logMessage,
+        timestamp: ts,
+      });
+    }
+
+    // High restart pods — include last restart age
+    const highRestartPods = pods.filter(p => p.restarts > 5);
+    log.info('Generating high-restart pod alerts', { count: highRestartPods.length });
+    for (const pod of highRestartPods) {
+      podAlerts.push({
+        type: 'high_restarts',
+        severity: 'warning',
+        message: `Pod ${pod.name} has ${pod.restarts} restarts`,
+        podName: pod.name,
+        namespace: pod.namespace,
+        logMessage: `Restarts: ${pod.restarts}, last restart: ${pod.lastRestartAge}`,
+        timestamp: ts,
+      });
+    }
+
+    // Pending pods (when more than 5)
+    const pendingPodsList = pods.filter(p => p.health === 'Pending');
+    if (pendingPodsList.length > 5) {
+      log.warn('High pending pod count', { count: pendingPodsList.length });
+      for (const pod of pendingPodsList.slice(0, 10)) {
+        podAlerts.push({
+          type: 'pending',
+          severity: 'warning',
+          message: `Pod ${pod.name} pending for extended time`,
+          podName: pod.name,
+          namespace: pod.namespace,
+          logMessage: `Age: ${pod.age}`,
+          timestamp: ts,
+        });
+      }
+    }
+
+    // ── Workload/Deployment alerts ────────────────────────────────────────────
+    const workloadAlerts = [];
+    const unhealthyWorkloads = workloads.filter(w => w.health === 'Unhealthy' || w.health === 'Degraded');
+    log.info('Generating workload failure alerts', { count: unhealthyWorkloads.length });
+    for (const wk of unhealthyWorkloads) {
+      const logMessage = getWorkloadFailureMessage(wk);
+      const severity = wk.health === 'Unhealthy' ? 'critical' : 'warning';
+      log.debug('Workload alert', { name: wk.name, type: wk.type, health: wk.health, logMessage });
+      workloadAlerts.push({
+        type: 'workload_unavailable',
+        severity,
+        message: `${wk.type} ${wk.name}: ${wk.ready}/${wk.desired} replicas ready`,
+        workloadName: wk.name,
+        workloadType: wk.type,
+        namespace: wk.namespace,
+        logMessage,
+        timestamp: ts,
+      });
+    }
+
+    const allPodAndWorkloadAlerts = [...workloadAlerts, ...podAlerts];
+
     const summary = {
       cluster: {
         nodeCount: nodes.length,
@@ -431,13 +584,14 @@ export async function getDashboardSummary(coreApi, appsApi) {
       },
       workloads: {
         total: workloads.length,
-        healthy: workloadsByHealth['Healthy'] || 0,
+        available: workloadsByHealth['Available'] || 0,
         degraded: workloadsByHealth['Degraded'] || 0,
-        unhealthy: workloadsByHealth['Unhealthy'] || 0,
+        unavailable: workloadsByHealth['Unavailable'] || 0,
         byType: workloadsByType,
         byHealth: workloadsByHealth,
         items: workloads,
       },
+      alerts: allPodAndWorkloadAlerts,
       fetchedAt: new Date().toISOString(),
     };
 
@@ -445,6 +599,9 @@ export async function getDashboardSummary(coreApi, appsApi) {
       pods: summary.pods.total,
       workloads: summary.workloads.total,
       nodes: summary.cluster.nodeCount,
+      podAlerts: podAlerts.length,
+      workloadAlerts: workloadAlerts.length,
+      totalAlerts: allPodAndWorkloadAlerts.length,
     });
 
     return summary;
@@ -476,18 +633,14 @@ export async function getPodLogs(coreApi, namespace, podName, opts = {}) {
     if (opts.sinceSeconds) logOpts.sinceSeconds = opts.sinceSeconds;
     if (opts.previous) logOpts.previous = true;
 
-    const logText = await coreApi.readNamespacedPodLog(
-      podName, namespace,
-      logOpts.container,      // container
-      undefined,              // follow
-      undefined,              // insecureSkipTLSVerifyBackend
-      undefined,              // limitBytes
-      undefined,              // pretty
-      logOpts.previous,       // previous
-      logOpts.sinceSeconds,   // sinceSeconds
-      logOpts.tailLines,      // tailLines
-      undefined,              // timestamps
-    );
+    const logText = await coreApi.readNamespacedPodLog({
+      name: podName,
+      namespace,
+      container: logOpts.container,
+      previous: logOpts.previous,
+      sinceSeconds: logOpts.sinceSeconds,
+      tailLines: logOpts.tailLines,
+    });
 
     log.debug('Pod logs fetched', { namespace, podName, length: (logText || '').length });
     return logText || '';

@@ -15,7 +15,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   RefreshCw, AlertTriangle, Settings, Loader2,
   Server, Container, Layers, Box, HardDrive, Network,
-  CheckCircle2, XCircle, AlertCircle, Clock, Cpu, MemoryStick,
+  CheckCircle2, XCircle, AlertCircle, Clock, Cpu, MemoryStick, Bell,
 } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
@@ -27,6 +27,83 @@ const log = createLogger('GKEDashboard');
 const t = uiText.dashboard;
 const ts = t.summary;
 const api = urls.api;
+
+// ── Timezone helpers ──────────────────────────────────────────────────────────
+function getTimezoneAbbreviation(iana) {
+  try {
+    const short = new Intl.DateTimeFormat('en', { timeZone: iana, timeZoneName: 'shortGeneric' })
+      .formatToParts(new Date())
+      .find(p => p.type === 'timeZoneName')?.value || '';
+    if (!short.startsWith('GMT')) return short;
+    const long = new Intl.DateTimeFormat('en', { timeZone: iana, timeZoneName: 'long' })
+      .formatToParts(new Date())
+      .find(p => p.type === 'timeZoneName')?.value || '';
+    const words = long.split(/\s+/).filter(w => w.length > 0);
+    if (words.length >= 2) return words.map(w => w[0].toUpperCase()).join('');
+    return short || long;
+  } catch { return ''; }
+}
+
+function getTimezoneOffset(iana) {
+  try {
+    const now = new Date();
+    const utcStr = now.toLocaleString('en-US', { timeZone: 'UTC' });
+    const localStr = now.toLocaleString('en-US', { timeZone: iana });
+    const diffMs = new Date(localStr) - new Date(utcStr);
+    const totalMin = Math.round(diffMs / 60000);
+    const sign = totalMin >= 0 ? '+' : '-';
+    const absMin = Math.abs(totalMin);
+    const h = Math.floor(absMin / 60);
+    const m = absMin % 60;
+    return `GMT${sign}${h}${m > 0 ? ':' + String(m).padStart(2, '0') : ''}`;
+  } catch { return 'GMT'; }
+}
+
+function formatTimeOnly(date, iana) {
+  try {
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: iana,
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: true,
+    }).format(date instanceof Date ? date : new Date(date));
+  } catch { return new Date(date).toLocaleTimeString(); }
+}
+
+function formatTimeFromNow(date) {
+  if (!date) return '—';
+  const now = new Date();
+  const target = new Date(date);
+  const diffMs = target - now;
+  const diffSecs = Math.floor(Math.abs(diffMs) / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  const remainingSecs = diffSecs % 60;
+  const remainingMins = diffMins % 60;
+  
+  if (diffMs < 0) {
+    const absSecs = Math.abs(diffSecs);
+    const absMins = Math.abs(diffMins);
+    const absHours = Math.abs(diffHours);
+    const absDays = Math.abs(diffDays);
+    if (absSecs < 60) return `${absSecs}s ago`;
+    if (absMins < 60) return `${absMins}m ${remainingSecs}s ago`;
+    if (absHours < 24) return `${absHours}h ${remainingMins}m ago`;
+    return `${absDays}d ago`;
+  } else {
+    if (diffSecs < 60) return `in ${diffSecs}s`;
+    if (diffMins < 60) return `in ${diffMins}m ${remainingSecs}s`;
+    if (diffHours < 24) return `in ${diffHours}h ${remainingMins}m`;
+    return `in ${diffDays}d`;
+  }
+}
+
+function formatTimeWithRelative(date, iana) {
+  if (!date) return '—';
+  const actualTime = formatTimeOnly(date, iana);
+  const relativeTime = formatTimeFromNow(date);
+  return `${actualTime} (${relativeTime})`;
+}
 
 // ── Stat Card ───────────────────────────────────────────────────────────────
 function StatCard({ icon: Icon, iconBg, iconColor, label, value, subValue, subColor, onClick }) {
@@ -52,9 +129,9 @@ function StatCard({ icon: Icon, iconBg, iconColor, label, value, subValue, subCo
 // ── Health Badge ────────────────────────────────────────────────────────────
 function HealthBadge({ health }) {
   const map = {
-    Healthy: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+    Available: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
     Degraded: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
-    Unhealthy: { bg: 'bg-rose-50', text: 'text-rose-700', dot: 'bg-rose-500' },
+    Unavailable: { bg: 'bg-rose-50', text: 'text-rose-700', dot: 'bg-rose-500' },
   };
   const s = map[health] || { bg: 'bg-surface-50', text: 'text-surface-600', dot: 'bg-surface-400' };
   return (
@@ -63,6 +140,55 @@ function HealthBadge({ health }) {
       {health}
     </span>
   );
+}
+
+// ── Alert Severity Icon ──────────────────────────────────────────────────────
+function SeverityIcon({ severity }) {
+  if (severity === 'critical') return <XCircle size={14} className="text-red-500" />;
+  if (severity === 'warning') return <AlertTriangle size={14} className="text-amber-500" />;
+  return <AlertCircle size={14} className="text-blue-400" />;
+}
+
+// ── Alert Type Badge ────────────────────────────────────────────────────────
+function alertTypeColor(type) {
+  const map = {
+    failure: 'bg-red-100 text-red-600',
+    missed_schedule: 'bg-amber-100 text-amber-600',
+    high_failure_rate: 'bg-orange-100 text-orange-600',
+    long_running: 'bg-blue-100 text-blue-600',
+    crashloop: 'bg-red-100 text-red-600',
+    failed: 'bg-red-100 text-red-600',
+    high_restarts: 'bg-amber-100 text-amber-600',
+    pending: 'bg-yellow-100 text-yellow-600',
+    workload_unavailable: 'bg-rose-100 text-rose-700',
+  };
+  return map[type] || 'bg-gray-100 text-gray-600';
+}
+
+function alertTypeLabel(type) {
+  const map = {
+    failure: 'FAILED',
+    missed_schedule: 'MISSED',
+    high_failure_rate: 'HIGH RATE',
+    long_running: 'LONG RUN',
+    crashloop: 'CRASHLOOP',
+    failed: 'FAILED',
+    high_restarts: 'HIGH RESTARTS',
+    pending: 'PENDING',
+    workload_unavailable: 'UNAVAILABLE',
+  };
+  return map[type] || type.replace(/_/g, ' ').toUpperCase();
+}
+
+function alertComponentLabel(alert) {
+  if (alert.workloadName) return `${alert.workloadType || 'Workload'}`;
+  if (alert.podName) return 'Pods';
+  if (alert.cronjobName) return 'CronJobs';
+  return alert.component || '—';
+}
+
+function alertSubLabel(alert) {
+  return alert.workloadName || alert.podName || alert.cronjobName || alert.namespace || '—';
 }
 
 // ── Mini Bar ────────────────────────────────────────────────────────────────
@@ -98,8 +224,31 @@ export default function GKEDashboard({ user, onNavigate }) {
   const [refreshInterval, setRefreshInterval] = useState(30);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState(null);
+  const [timezone, setTimezone] = useState(null);
   const intervalRef = useRef(null);
   const initRan = useRef(false);
+
+  // ── Load timezone from ServiceNow module ──────────────────────────────
+  useEffect(() => {
+    (async () => {
+      try {
+        log.debug('Timezone', 'Fetching config from ServiceNow module');
+        const res = await ApiClient.get('/api/servicenow/config/timezone');
+        if (res?.success && res.data?.effectiveTimezone) {
+          const iana = res.data.effectiveTimezone;
+          const abbr = getTimezoneAbbreviation(iana);
+          const offset = getTimezoneOffset(iana);
+          const label = `${offset} ${iana}, ${abbr}`;
+          setTimezone({ iana, abbr, offset, label });
+          log.info('Timezone', `Loaded: ${label}`);
+        } else {
+          log.debug('Timezone', 'ServiceNow timezone not available, using browser default');
+        }
+      } catch (err) {
+        log.debug('Timezone', 'Could not fetch timezone from ServiceNow', { error: err.message });
+      }
+    })();
+  }, []);
 
   // ── Fetch dashboard summary ─────────────────────────────────────────────
   const fetchDashboard = useCallback(async (showLoading = true) => {
@@ -189,6 +338,11 @@ export default function GKEDashboard({ user, onNavigate }) {
   }
 
   // ── Render: dashboard ───────────────────────────────────────────────────
+  const allAlerts = data?.alerts || [];
+  const criticalAlerts = allAlerts.filter(a => a.severity === 'critical');
+  const warningAlerts = allAlerts.filter(a => a.severity === 'warning');
+  log.debug('render', 'Alerts ready', { total: allAlerts.length, critical: criticalAlerts.length, warning: warningAlerts.length });
+
   return (
     <div className="space-y-5 pb-8">
       {/* Header */}
@@ -222,24 +376,235 @@ export default function GKEDashboard({ user, onNavigate }) {
         </div>
       </div>
 
-      {/* Summary Cards — Row 1: Pods */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatCard icon={Box} iconBg="bg-blue-50" iconColor="text-blue-600" label={ts.totalPods} value={pods.total} subValue={`${ts.runningPods}: ${pods.running ?? 0}`} subColor="text-emerald-600" />
-        <StatCard icon={CheckCircle2} iconBg="bg-emerald-50" iconColor="text-emerald-600" label={ts.runningPods} value={pods.running} />
-        <StatCard icon={Clock} iconBg="bg-amber-50" iconColor="text-amber-600" label={ts.pendingPods} value={pods.pending} subColor={pods.pending > 0 ? 'text-amber-600' : undefined} />
-        <StatCard icon={XCircle} iconBg="bg-rose-50" iconColor="text-rose-600" label={ts.failedPods} value={pods.failed} subColor={pods.failed > 0 ? 'text-rose-600' : undefined} />
-        <StatCard icon={AlertCircle} iconBg="bg-orange-50" iconColor="text-orange-600" label={ts.crashLoopPods} value={pods.crashLoop} subColor={pods.crashLoop > 0 ? 'text-orange-600' : undefined} />
-        <StatCard icon={RefreshCw} iconBg="bg-purple-50" iconColor="text-purple-600" label={ts.totalRestarts} value={pods.totalRestarts} />
-      </div>
+      {/* Main Alerts Section */}
+      {allAlerts.length > 0 && (
+        <div className="bg-white rounded-2xl border border-surface-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-amber-200 bg-gradient-to-r from-amber-200 to-amber-50 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Bell size={16} className="text-amber-700" />
+              <div>
+                <p className="text-xs font-bold text-amber-900">Active Alerts</p>
+                <p className="text-[10px] text-amber-700">{criticalAlerts.length} critical, {warningAlerts.length} warning</p>
+              </div>
+            </div>
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-600 text-[10px] font-bold">
+              {allAlerts.length}
+            </span>
+          </div>
+          <div className={allAlerts.length > 8 ? 'max-h-[400px] overflow-y-auto' : ''}>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-[10px] text-surface-500 uppercase tracking-wider bg-surface-50/50 border-b border-surface-100 font-bold">
+                  <th className="text-left px-4 py-2">Time (GMT{timezone?.offset?.replace('GMT', '')}) {timezone?.abbr}</th>
+                  <th className="text-left px-3 py-2">Severity</th>
+                  <th className="text-left px-3 py-2">Component</th>
+                  <th className="text-left px-3 py-2">Type</th>
+                  <th className="text-left px-3 py-2">Message</th>
+                  <th className="text-left px-3 py-2">Log</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-surface-50">
+                {allAlerts.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).map((alert, idx) => (
+                  <tr key={idx} className="hover:bg-surface-50/60">
+                    <td className="px-4 py-2 text-surface-600 whitespace-nowrap">
+                      <div className="text-[10px]">
+                        {timezone ? formatTimeWithRelative(alert.timestamp, timezone.iana) : (alert.timestamp ? new Date(alert.timestamp).toLocaleTimeString() : '—')}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-1">
+                        <SeverityIcon severity={alert.severity} />
+                        <span className="capitalize text-[10px] font-bold">{alert.severity}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-surface-600">
+                      <div className="text-xs font-medium">{alertComponentLabel(alert)}</div>
+                      <div className="text-[10px] text-surface-400">{alertSubLabel(alert)}</div>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${alertTypeColor(alert.type)}`}>
+                        {alertTypeLabel(alert.type)}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-surface-700 max-w-md">{alert.message}</td>
+                    <td className="px-3 py-2 text-surface-700 max-w-sm">
+                      <div className="text-xs text-surface-700 break-words">{alert.logMessage || '—'}</div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
-      {/* Summary Cards — Row 2: Cluster */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatCard icon={Layers} iconBg="bg-indigo-50" iconColor="text-indigo-600" label={ts.totalWorkloads} value={wk.total} subValue={`${ts.healthyWorkloads}: ${wk.healthy ?? 0}`} subColor="text-emerald-600" />
-        <StatCard icon={Server} iconBg="bg-teal-50" iconColor="text-teal-600" label={ts.nodes} value={cluster.nodeCount} subValue={`${ts.nodesReady}: ${cluster.nodesReady ?? 0}`} subColor="text-emerald-600" />
-        <StatCard icon={Network} iconBg="bg-cyan-50" iconColor="text-cyan-600" label={ts.namespaces} value={cluster.namespaceCount} />
-        <StatCard icon={Container} iconBg="bg-sky-50" iconColor="text-sky-600" label={ts.deployments} value={wk.byType?.Deployment ?? 0} />
-        <StatCard icon={HardDrive} iconBg="bg-violet-50" iconColor="text-violet-600" label={ts.statefulSets} value={wk.byType?.StatefulSet ?? 0} />
-        <StatCard icon={Cpu} iconBg="bg-fuchsia-50" iconColor="text-fuchsia-600" label={ts.daemonSets} value={wk.byType?.DaemonSet ?? 0} />
+      {/* Summary Cards — 2 Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Column 1: Pods & Workloads Overview - Same Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 auto-rows-fr">
+          {/* Pods Section */}
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-100 shadow-sm p-4 pb-2 h-fit">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-7 h-7 rounded-lg bg-blue-500 flex items-center justify-center">
+                <Box size={14} className="text-white" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-surface-800">Pods</h3>
+                <p className="text-[9px] text-surface-500">Container instances</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-1">
+              <div className="bg-white rounded-lg p-1.5 border border-blue-100">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <div className="w-4 h-4 rounded-lg bg-surface-100 flex items-center justify-center">
+                    <div className="w-1.5 h-1.5 rounded-full bg-surface-400"></div>
+                  </div>
+                  <span className="text-[9px] font-medium text-surface-600">Total</span>
+                </div>
+                <div className="text-sm font-bold text-surface-800">{pods.total}</div>
+              </div>
+              <div className="bg-white rounded-lg p-1.5 border border-emerald-100">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <div className="w-4 h-4 rounded-lg bg-emerald-100 flex items-center justify-center">
+                    <CheckCircle2 size={10} className="text-emerald-600" />
+                  </div>
+                  <span className="text-[9px] font-medium text-surface-600">Running</span>
+                </div>
+                <div className="text-sm font-bold text-emerald-600">{pods.running ?? 0}</div>
+              </div>
+              <div className="bg-white rounded-lg p-1.5 border border-amber-100">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <div className="w-4 h-4 rounded-lg bg-amber-100 flex items-center justify-center">
+                    <Clock size={10} className="text-amber-600" />
+                  </div>
+                  <span className="text-[9px] font-medium text-surface-600">Pending</span>
+                </div>
+                <div className="text-sm font-bold text-amber-600">{pods.pending ?? 0}</div>
+              </div>
+              <div className="bg-white rounded-lg p-1.5 border border-rose-100">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <div className="w-4 h-4 rounded-lg bg-rose-100 flex items-center justify-center">
+                    <XCircle size={10} className="text-rose-600" />
+                  </div>
+                  <span className="text-[9px] font-medium text-surface-600">Failed</span>
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[8px] text-surface-500">CrashLoop</span>
+                    <span className="text-xs font-bold text-orange-600">{pods.crashLoop ?? 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[8px] text-surface-500">Failed</span>
+                    <span className="text-xs font-bold text-rose-600">{(pods.failed ?? 0) - (pods.crashLoop ?? 0)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Workloads Section */}
+          <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg border border-indigo-100 shadow-sm p-4 pb-2 h-fit">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-7 h-7 rounded-lg bg-indigo-500 flex items-center justify-center">
+                <Layers size={14} className="text-white" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold text-surface-800">Workloads</h3>
+                <p className="text-[9px] text-surface-500">Deployments & services</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-1">
+              <div className="bg-white rounded-lg p-1.5 border border-indigo-100">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <div className="w-4 h-4 rounded-lg bg-surface-100 flex items-center justify-center">
+                    <div className="w-1.5 h-1.5 rounded-full bg-surface-400"></div>
+                  </div>
+                  <span className="text-[9px] font-medium text-surface-600">Total</span>
+                </div>
+                <div className="text-sm font-bold text-surface-800">{wk.total}</div>
+              </div>
+              <div className="bg-white rounded-lg p-1.5 border border-emerald-100">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <div className="w-4 h-4 rounded-lg bg-emerald-100 flex items-center justify-center">
+                    <CheckCircle2 size={10} className="text-emerald-600" />
+                  </div>
+                  <span className="text-[9px] font-medium text-surface-600">Available</span>
+                </div>
+                <div className="text-sm font-bold text-emerald-600">{wk.available ?? 0}</div>
+              </div>
+              <div className="bg-white rounded-lg p-1.5 border border-amber-100">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <div className="w-4 h-4 rounded-lg bg-amber-100 flex items-center justify-center">
+                    <AlertTriangle size={10} className="text-amber-600" />
+                  </div>
+                  <span className="text-[9px] font-medium text-surface-600">Degraded</span>
+                </div>
+                <div className="text-sm font-bold text-amber-600">{wk.degraded ?? 0}</div>
+              </div>
+              <div className="bg-white rounded-lg p-1.5 border border-rose-100">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <div className="w-4 h-4 rounded-lg bg-rose-100 flex items-center justify-center">
+                    <XCircle size={10} className="text-rose-600" />
+                  </div>
+                  <span className="text-[9px] font-medium text-surface-600">Unavailable</span>
+                </div>
+                <div className="text-sm font-bold text-rose-600">{wk.unavailable ?? 0}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        
+        {/* Column 2: Namespaces, Deployments & StatefulSets */}
+        <div className="bg-gradient-to-br from-cyan-50 to-blue-50 rounded-lg border border-cyan-100 shadow-sm p-4 pb-2 h-fit">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-7 h-7 rounded-lg bg-cyan-500 flex items-center justify-center">
+              <Network size={14} className="text-white" />
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-surface-800">Resources</h3>
+              <p className="text-[9px] text-surface-500">Namespaces & Workloads</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-4 gap-1">
+            <div className="bg-white rounded-lg p-1.5 border border-cyan-100">
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="w-4 h-4 rounded-lg bg-cyan-100 flex items-center justify-center">
+                  <Network size={10} className="text-cyan-600" />
+                </div>
+                <span className="text-[9px] font-medium text-surface-600">Namespaces</span>
+              </div>
+              <div className="text-sm font-bold text-cyan-600">{cluster.namespaceCount}</div>
+            </div>
+            <div className="bg-white rounded-lg p-1.5 border border-sky-100">
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="w-4 h-4 rounded-lg bg-sky-100 flex items-center justify-center">
+                  <Container size={10} className="text-sky-600" />
+                </div>
+                <span className="text-[9px] font-medium text-surface-600">Deployments</span>
+              </div>
+              <div className="text-sm font-bold text-sky-600">{wk.byType?.Deployment ?? 0}</div>
+            </div>
+            <div className="bg-white rounded-lg p-1.5 border border-violet-100">
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="w-4 h-4 rounded-lg bg-violet-100 flex items-center justify-center">
+                  <HardDrive size={10} className="text-violet-600" />
+                </div>
+                <span className="text-[9px] font-medium text-surface-600">StatefulSets</span>
+              </div>
+              <div className="text-sm font-bold text-violet-600">{wk.byType?.StatefulSet ?? 0}</div>
+            </div>
+            <div className="bg-white rounded-lg p-1.5 border border-orange-100">
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="w-4 h-4 rounded-lg bg-orange-100 flex items-center justify-center">
+                  <Clock size={10} className="text-orange-600" />
+                </div>
+                <span className="text-[9px] font-medium text-surface-600">CronJobs</span>
+              </div>
+              <div className="text-sm font-bold text-orange-600">{data.cronjobs?.summary?.total ?? 0}</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Middle: Workload Health + Pod Distribution */}

@@ -1,0 +1,19 @@
+{
+  "_description": "Accessio Operations module — all backend API error messages. Centralized for consistency and easy management.",
+
+  "config": {
+    "loadFailed": "Failed to load configuration: {message}",
+    "saveFailed": "Failed to save configuration: {message}",
+    "missingRequired": "Required fields missing: apiServerUrl and serviceAccountToken",
+    "connectionTestFailed": "Connection test failed: {message}",
+    "generalSettingsLoadFailed": "Failed to load general settings: {message}",
+    "generalSettingsSaveFailed": "Failed to save general settings: {message}"
+  },
+
+  "data": {
+    "schemaInfoFailed": "Failed to get schema information: {message}",
+    "schemaStatusFailed": "Failed to check schema status: {message}",
+    "loadDefaultsFailed": "Failed to load default data: {message}",
+    "resetFailed": "Failed to reset module data: {message}"
+  }
+}

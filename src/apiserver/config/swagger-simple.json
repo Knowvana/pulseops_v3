@@ -12,39 +12,6 @@
     }
   ],
   "paths": {
-    "/timezone": {
-      "get": {
-        "tags": ["Core - Configuration"],
-        "operationId": "getTimezoneConfig",
-        "summary": "Get timezone configuration",
-        "description": "Returns the platform timezone configuration including timezone, timezone label, date format, and time format. This endpoint is anonymous and does not require authentication.",
-        "responses": {
-          "200": { 
-            "description": "Timezone configuration retrieved successfully.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "data": {
-                      "type": "object",
-                      "properties": {
-                        "timezone": { "type": "string", "example": "Asia/Kolkata" },
-                        "timezoneLabel": { "type": "string", "example": "(GMT+05:30) India Time (IST)" },
-                        "dateFormat": { "type": "string", "example": "DD/MM/YYYY" },
-                        "timeFormat": { "type": "string", "example": "hh:mm:ss A" }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "500": { "description": "Failed to load timezone configuration." }
-        }
-      }
-    },
     "/auth/superadmin/login": {
       "post": {
         "tags": ["Authentication"],

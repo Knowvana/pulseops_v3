@@ -1,0 +1,10 @@
+{
+  "_description": "Accessio Operations module — all frontend UI success and info messages.",
+  "config": {
+    "generalSaved": "General settings saved successfully."
+  },
+  "data": {
+    "defaultsLoaded": "Default data loaded successfully.",
+    "dataReset": "Module data reset successfully."
+  }
+}

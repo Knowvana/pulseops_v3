@@ -1,0 +1,13 @@
+{
+  "_description": "Accessio Operations module — all internal API route paths. Zero hardcoding in route files.",
+
+  "routes": {
+    "configGeneral": "/config/general",
+    "schemaInfo": "/schema/info",
+    "schemaStatus": "/schema/status",
+    "loadDefaults": "/data/defaults",
+    "resetData": "/data/reset",
+    "clusterConfig": "/cluster/config",
+    "clusterTest": "/cluster/test"
+  }
+}

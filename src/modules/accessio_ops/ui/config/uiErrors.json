@@ -1,0 +1,13 @@
+{
+  "_description": "Accessio Operations module — all frontend UI error messages.",
+  "common": {
+    "fetchError": "Failed to load data. Please try again.",
+    "saveError": "Failed to save. Please try again.",
+    "networkError": "Network error. Check your connection.",
+    "unexpectedError": "An unexpected error occurred."
+  },
+  "config": {
+    "loadFailed": "Failed to load configuration.",
+    "saveFailed": "Failed to save configuration."
+  }
+}

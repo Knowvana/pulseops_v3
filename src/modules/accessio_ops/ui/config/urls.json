@@ -1,0 +1,15 @@
+{
+  "_description": "Accessio Operations module UI API endpoints. Self-contained — no dependency on platform urls.json.",
+  "api": {
+    "status":              "/api/accessio_ops/status",
+
+    "configGeneral":       "/api/accessio_ops/config/general",
+
+    "dashboard":           "/api/accessio_ops/dashboard",
+
+    "schemaInfo":          "/api/accessio_ops/schema/info",
+    "schemaStatus":        "/api/accessio_ops/schema/status",
+    "loadDefaults":        "/api/accessio_ops/data/defaults",
+    "resetData":           "/api/accessio_ops/data/reset"
+  }
+}

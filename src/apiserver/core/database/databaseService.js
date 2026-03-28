@@ -421,17 +421,8 @@ const DatabaseService = {
       }
 
       // ── Register core modules ──────────────────────────────────────────────
-      await client.query(`
-        INSERT INTO ${schema}.system_modules (module_id, name, short_name, version, description, is_core, installed, enabled, has_manifest, has_api, schema_initialized, "order")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        ON CONFLICT (module_id) DO NOTHING
-      `, ['platform_admin', 'Admin', 'Admin', '3.0.0', 'Platform dashboard, module management, and global settings', true, true, true, true, true, true, 0]);
-
-      await client.query(`
-        INSERT INTO ${schema}.system_modules (module_id, name, short_name, version, description, is_core, installed, enabled, has_manifest, has_api, schema_initialized, "order")
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        ON CONFLICT (module_id) DO NOTHING
-      `, ['auth', 'Authentication', 'Auth', '3.0.0', 'Authentication, authorization, RBAC, session control', true, true, true, true, true, true, 1]);
+      // Core platform modules (auth, platform_admin) are built-in features and
+      // should NOT be in the modules database. Only add-on modules are registered here.
 
       await client.query('COMMIT');
       logger.info(messages.success.defaultDataLoaded, { schema });

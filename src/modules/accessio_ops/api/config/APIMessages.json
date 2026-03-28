@@ -1,0 +1,17 @@
+{
+  "_description": "Accessio Operations module — all backend API success and informational messages. Centralized for consistency.",
+
+  "config": {
+    "loaded": "Configuration loaded successfully",
+    "saved": "Configuration saved successfully",
+    "connectionTestSuccess": "Cluster connection test successful",
+    "generalSettingsSaved": "General settings saved successfully"
+  },
+
+  "data": {
+    "schemaInfoLoaded": "Schema information loaded successfully",
+    "schemaStatusChecked": "Schema status checked successfully",
+    "defaultsLoaded": "Default data loaded successfully",
+    "dataReset": "Module data reset successfully"
+  }
+}

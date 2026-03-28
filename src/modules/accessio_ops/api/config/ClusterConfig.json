@@ -7,23 +7,13 @@
     "clusterName": "prod1-cluster"
   },
   "connectionStatus": {
-    "isConfigured": true,
-    "testStatus": "success",
-    "lastTested": "2026-03-28T07:52:02.205Z",
-    "clusterInfo": {
-      "name": "prod1-cluster",
-      "version": "v1.35.0",
-      "platform": "linux/amd64",
-      "nodeCount": 1,
-      "nodesReady": 1,
-      "namespaceCount": 6,
-      "podCount": 24,
-      "podsRunning": 17
-    }
+    "isConfigured": false,
+    "testStatus": "",
+    "lastTested": ""
   },
   "_meta": {
-    "moduleId": "google_gke",
+    "moduleId": "accessio_ops",
     "version": "1.0.0",
-    "description": "Unified Kubernetes cluster configuration for both production GKE and local development. Stores explicit connection parameters (URL + token) that work identically in both environments. No environment-specific authentication logic needed."
+    "description": "Kubernetes cluster configuration for Accessio Operations module. Stores connection parameters for GKE/local cluster connectivity."
   }
 }

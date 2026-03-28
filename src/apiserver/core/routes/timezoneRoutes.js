@@ -69,28 +69,42 @@ const TIMEZONE_LIST = [
   { value: 'Pacific/Auckland', label: 'Auckland (GMT+12:00)', offset: 12 },
 ];
 
-// Map IANA timezone to short label
+// Map IANA timezone to full name and short label
 function getTimezoneLabel(tz) {
-  const labelMap = {
-    'Asia/Kolkata': 'IST',
-    'UTC': 'UTC',
-    'Europe/London': 'GMT',
-    'America/New_York': 'EST',
-    'America/Chicago': 'CST',
-    'America/Denver': 'MST',
-    'America/Los_Angeles': 'PST',
-    'Europe/Berlin': 'CET',
-    'Europe/Paris': 'CET',
-    'Europe/Athens': 'EET',
-    'Europe/Moscow': 'MSK',
-    'Asia/Dubai': 'GST',
-    'Asia/Tokyo': 'JST',
-    'Asia/Shanghai': 'CST',
-    'Asia/Singapore': 'SGT',
-    'Australia/Sydney': 'AEST',
-    'Pacific/Auckland': 'NZST',
+  const timezoneMap = {
+    'Asia/Kolkata': { fullName: 'India Time', shortLabel: 'IST' },
+    'UTC': { fullName: 'Coordinated Universal Time', shortLabel: 'UTC' },
+    'Europe/London': { fullName: 'Greenwich Mean Time', shortLabel: 'GMT' },
+    'America/New_York': { fullName: 'Eastern Standard Time', shortLabel: 'EST' },
+    'America/Chicago': { fullName: 'Central Standard Time', shortLabel: 'CST' },
+    'America/Denver': { fullName: 'Mountain Standard Time', shortLabel: 'MST' },
+    'America/Los_Angeles': { fullName: 'Pacific Standard Time', shortLabel: 'PST' },
+    'Europe/Berlin': { fullName: 'Central European Time', shortLabel: 'CET' },
+    'Europe/Paris': { fullName: 'Central European Time', shortLabel: 'CET' },
+    'Europe/Athens': { fullName: 'Eastern European Time', shortLabel: 'EET' },
+    'Europe/Moscow': { fullName: 'Moscow Standard Time', shortLabel: 'MSK' },
+    'Asia/Dubai': { fullName: 'Gulf Standard Time', shortLabel: 'GST' },
+    'Asia/Tokyo': { fullName: 'Japan Standard Time', shortLabel: 'JST' },
+    'Asia/Shanghai': { fullName: 'China Standard Time', shortLabel: 'CST' },
+    'Asia/Singapore': { fullName: 'Singapore Time', shortLabel: 'SGT' },
+    'Australia/Sydney': { fullName: 'Australian Eastern Time', shortLabel: 'AEST' },
+    'Pacific/Auckland': { fullName: 'New Zealand Standard Time', shortLabel: 'NZST' },
   };
-  return labelMap[tz] || tz;
+  
+  // Find the timezone in TIMEZONE_LIST to get the offset
+  const timezoneData = TIMEZONE_LIST.find(tzItem => tzItem.value === tz);
+  const timezoneInfo = timezoneMap[tz] || { fullName: tz, shortLabel: tz };
+  
+  if (timezoneData) {
+    const offset = timezoneData.offset;
+    const sign = offset >= 0 ? '+' : '';
+    const hours = Math.floor(Math.abs(offset));
+    const minutes = (Math.abs(offset) % 1) * 60;
+    const offsetStr = minutes > 0 ? `${sign}${hours}:${minutes.toString().padStart(2, '0')}` : `${sign}${hours}`;
+    return `(GMT${offsetStr}) ${timezoneInfo.fullName} (${timezoneInfo.shortLabel})`;
+  }
+  
+  return timezoneInfo.shortLabel;
 }
 
 // ── GET /timezone — Public (no auth required) ──────────────────────────────

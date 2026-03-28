@@ -1,0 +1,24 @@
+{
+  "_meta": {
+    "moduleId": "accessio_ops",
+    "version": "1.0.0",
+    "description": "Accessio Operations Module — database schema. Tables are provisioned when the module is enabled via Module Manager. Stores module configuration. Additional tables will be added as features are built."
+  },
+  "tables": [
+    {
+      "name": "ao_module_config",
+      "description": "Consolidated module configuration — key-value store with JSONB values.",
+      "columns": [
+        { "name": "id",           "type": "SERIAL PRIMARY KEY" },
+        { "name": "config_key",   "type": "VARCHAR(100) UNIQUE NOT NULL" },
+        { "name": "config_value", "type": "JSONB NOT NULL DEFAULT '{}'::jsonb" },
+        { "name": "description",  "type": "TEXT" },
+        { "name": "created_at",   "type": "TIMESTAMPTZ DEFAULT NOW()" },
+        { "name": "updated_at",   "type": "TIMESTAMPTZ DEFAULT NOW()" }
+      ],
+      "indexes": [
+        { "name": "idx_ao_module_config_key", "columns": ["config_key"], "unique": true }
+      ]
+    }
+  ]
+}

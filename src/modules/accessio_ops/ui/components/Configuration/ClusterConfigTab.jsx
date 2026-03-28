@@ -372,14 +372,14 @@ export default function ClusterConfigTab() {
     return TimezoneService.formatTimeWithLabel(lastTestedAt.toISOString());
   }
 
-  // Get connection status class (like conditional formatting in VB.NET)
+  // Get connection status class (like conditional formatting in VB.NET) - Match GKE colors
   function getConnectionStatusClass() {
     if (isConnected) {
       return 'bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200';
     } else if (isFailed) {
-      return 'bg-gradient-to-r from-rose-50 to-pink-50 border-rose-200';
+      return 'bg-gradient-to-r from-rose-50 to-red-50 border-rose-200';
     } else {
-      return 'bg-gradient-to-r from-slate-50 to-gray-50 border-slate-200';
+      return 'bg-gradient-to-r from-slate-50 to-gray-50 border-surface-200';
     }
   }
 
@@ -391,13 +391,13 @@ export default function ClusterConfigTab() {
     return Server;
   }
 
-  // Get status message (like status label in VB.NET)
+  // Get status message (like status label in VB.NET) - Match GKE format
   function getStatusMessage() {
     if (isLoading) return 'Loading configuration...';
-    if (connecting) return 'Testing Connection...';
-    if (isConnected) return 'Connection Status: Connected';
-    if (isFailed) return 'Connection Status: Failed';
-    return 'Connection Status: Not Connected';
+    if (connecting) return 'Testing...';
+    if (isConnected) return 'Connected';
+    if (isFailed) return 'Disconnected';
+    return 'Not Tested';
   }
 
   // ============================================================================
@@ -429,48 +429,26 @@ export default function ClusterConfigTab() {
 
             {/* Status content (like Label controls in VB.NET) */}
             <div className="flex-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <h3 className="font-semibold text-surface-900">
-                    Connection Status:{' '}
-                    <span className={
-                      isConnected 
-                        ? 'text-emerald-600' 
-                        : isFailed 
-                        ? 'text-rose-600' 
-                        : connecting 
-                        ? 'text-brand-600' 
-                        : 'text-slate-600'
-                    }>
-                      {isConnected 
-                        ? 'Connected' 
-                        : isFailed 
-                        ? 'Failed' 
-                        : connecting 
-                        ? 'Testing Connection...' 
-                        : 'Not Connected'
-                      }
-                    </span>
-                  </h3>
-                  
-                  {/* Last tested time next to connection status */}
-                  {getFormattedLastTestedTime() && !connecting && (
-                    <div className="flex items-center gap-1.5 text-xs text-surface-400">
-                      <RefreshCw size={12} />
-                      <span>Last Tested: {getFormattedLastTestedTime()}</span>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Test connection button moved to right side */}
-                <button
-                  onClick={handleTestConnectionClick}
-                  disabled={connecting}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg bg-brand-500 text-white hover:bg-brand-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {connecting ? 'Testing...' : 'Test Connection'}
-                </button>
-              </div>
+              <p className="text-sm font-semibold text-surface-800">
+                Connection Status:{' '}
+                <span className={
+                  isConnected 
+                    ? 'text-emerald-600' 
+                    : isFailed 
+                    ? 'text-rose-600' 
+                    : connecting 
+                    ? 'text-brand-600' 
+                    : 'text-slate-600'
+                }>
+                  {connecting
+                    ? 'Testing...'
+                    : isConnected
+                      ? 'Connected'
+                      : isFailed
+                        ? 'Disconnected'
+                        : 'Not Tested'}
+                </span>
+              </p>
 
               {/* Error message display (like ErrorProvider in VB.NET) */}
               {testError && !connecting && (
@@ -479,33 +457,41 @@ export default function ClusterConfigTab() {
                 </div>
               )}
 
-              {/* Cluster information (like DataGrid in VB.NET) */}
+              {/* Cluster information (like DataGrid in VB.NET) - Match GKE layout */}
               {clusterInfo && !connecting && (
-                <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-4 text-xs">
-                  <div>
-                    <span className="text-surface-500">Platform</span>
-                    <p className="font-medium text-surface-900">{clusterInfo.platform}</p>
-                  </div>
-                  <div>
-                    <span className="text-surface-500">API Server</span>
-                    <p className="font-medium text-surface-900 truncate">{clusterInfo.apiServer}</p>
-                  </div>
-                  <div>
-                    <span className="text-surface-500">Nodes</span>
-                    <p className="font-medium text-surface-900">{clusterInfo.nodes}</p>
-                  </div>
-                  <div>
-                    <span className="text-surface-500">Namespaces</span>
-                    <p className="font-medium text-surface-900">{clusterInfo.namespaces}</p>
-                  </div>
-                  <div>
-                    <span className="text-surface-500">Pods</span>
-                    <p className="font-medium text-surface-900">{clusterInfo.pods}</p>
-                  </div>
+                <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1">
+                  <p className="text-xs text-surface-600">
+                    <span className="font-medium text-surface-700">Cluster Name:</span>{' '}
+                    {clusterInfo.clusterName || 'N/A'}
+                  </p>
+                  <p className="text-xs text-surface-600">
+                    <span className="font-medium text-surface-700">Server Version:</span>{' '}
+                    {clusterInfo.serverVersion || 'N/A'}
+                  </p>
+                  <p className="text-xs text-surface-600">
+                    <span className="font-medium text-surface-700">Platform:</span>{' '}
+                    {clusterInfo.platform || 'N/A'}
+                  </p>
+                  <p className="text-xs text-surface-600">
+                    <span className="font-medium text-surface-700">API Server:</span>{' '}
+                    {clusterInfo.apiServer || 'N/A'}
+                  </p>
+                  <p className="text-xs text-surface-600">
+                    <span className="font-medium text-surface-700">Nodes:</span>{' '}
+                    {clusterInfo.nodes ?? 0} (Ready: {clusterInfo.nodesReady ?? 0})
+                  </p>
+                  <p className="text-xs text-surface-600">
+                    <span className="font-medium text-surface-700">Namespaces:</span>{' '}
+                    {clusterInfo.namespaces ?? 0}
+                  </p>
+                  <p className="text-xs text-surface-600">
+                    <span className="font-medium text-surface-700">Pods:</span>{' '}
+                    {clusterInfo.pods ?? 0} (Running: {clusterInfo.podsRunning ?? 0})
+                  </p>
                 </div>
               )}
 
-              {/* Current time display (like Timer control in VB.NET) */}
+              {/* Current Time */}
               <div className="mt-2 flex items-center gap-1.5 text-xs text-surface-400">
                 <Clock size={12} />
                 <span>Current Time: {getFormattedCurrentTime()}</span>
@@ -513,19 +499,36 @@ export default function ClusterConfigTab() {
             </div>
           </div>
 
-          {/* Progress indicator (like ProgressBar in VB.NET) */}
-          {connecting && (
-            <div className="mt-3">
-              <div className="flex items-center gap-2 text-xs text-surface-500 mb-1">
-                <Loader2 size={12} className="animate-spin" />
-                <span>Testing connection to cluster...</span>
-              </div>
-              <div className="w-full bg-surface-200 rounded-full h-1.5">
-                <div className="bg-gradient-to-r from-brand-400 to-brand-600 h-1.5 rounded-full animate-pulse w-2/3"></div>
-              </div>
-            </div>
-          )}
+          {/* Test Connection button and Last Tested container */}
+          <div className="flex flex-col items-end">
+            {/* Test Connection button */}
+            <button
+              onClick={handleTestConnectionClick}
+              disabled={connecting}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {connecting ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+              {connecting ? 'Testing...' : 'Test Connection'}
+            </button>
+
+            {/* Last Tested - below button, aligned left */}
+            {getFormattedLastTestedTime() && !connecting && (
+              <p className="text-xs text-surface-400 mt-2 text-left">
+                Last Tested: {getFormattedLastTestedTime()}
+              </p>
+            )}
+          </div>
         </div>
+
+        {/* Inline progress bar */}
+        {connecting && (
+          <div className="mb-3">
+            <div className="w-full bg-surface-100 rounded-full h-1.5 overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-brand-400 to-brand-600 rounded-full animate-pulse w-2/3" />
+            </div>
+            <p className="text-xs text-surface-400 mt-1">Testing cluster connectivity...</p>
+          </div>
+        )}
       </div>
 
       {/* ── Configuration Form (like Form controls in VB.NET) ───────────────────── */}
@@ -640,24 +643,6 @@ export default function ClusterConfigTab() {
 
         {/* Action buttons (like Button controls in VB.NET) */}
         <div className="flex items-center gap-3 pt-4 flex-wrap">
-          <button
-            onClick={handleTestConnectionClick}
-            disabled={connecting}
-            className="px-4 py-2 bg-brand-50 text-brand-700 rounded-lg hover:bg-brand-100 disabled:opacity-50 flex items-center gap-2"
-          >
-            {connecting ? (
-              <>
-                <Loader2 size={16} className="animate-spin" />
-                Testing...
-              </>
-            ) : (
-              <>
-                <RefreshCw size={16} />
-                Test Connection
-              </>
-            )}
-          </button>
-
           <button
             onClick={handleSaveConfigurationClick}
             disabled={saving || !isConnected}

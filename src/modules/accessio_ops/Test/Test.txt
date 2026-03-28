@@ -1,0 +1,8 @@
+# Tests cluster config loading from JSON file - Run from project root with API server on localhost:4001
+node src/modules/accessio_ops/Test/clusterApiTest.js
+
+# Swagger UI: http://localhost:4001/swagger-ui/
+
+# Kill Node.js API server (if running on port 4001):
+tasklist | findstr node.exe
+taskkill /IM node.exe /F

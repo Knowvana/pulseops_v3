@@ -1,0 +1,22 @@
+{
+  "id": "accessio_ops",
+  "name": "Accessio Operations",
+  "shortName": "Accessio Ops",
+  "version": "1.0.0",
+  "description": "Accessio Operations — Centralized operations management for the Accessio identity platform. Monitor, manage, and report on Accessio components.",
+  "roles": ["super_admin", "admin", "user"],
+  "isCore": false,
+  "order": 5,
+  "defaultView": "dashboard",
+  "configDefaultTab": "ao_general_settings",
+  "moduleDetails": {
+    "features": [
+      "Accessio Operations Dashboard",
+      "Module configuration and settings",
+      "Data management with schema provisioning"
+    ],
+    "author": "PulseOps Team",
+    "license": "Proprietary",
+    "dependencies": []
+  }
+}

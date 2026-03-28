@@ -1,0 +1,175 @@
+# Accessio Ops Module - VB.NET Forms Style Coding Rules
+
+## PURPOSE
+This document defines coding standards for the Accessio Ops module to maintain consistency with VB.NET Forms development patterns. All React components should be written in a style that feels natural to VB.NET developers.
+
+## CODE STYLE RULES
+
+### 1. Function Declarations (NOT Arrow Functions)
+**REQUIRED:** Use explicit function declarations instead of arrow functions
+```javascript
+// ✅ CORRECT (VB.NET style)
+function handleButtonClick() {
+  // Implementation
+}
+
+// ❌ WRONG (JavaScript shorthand)
+const handleButtonClick = () => {
+  // Implementation
+};
+```
+
+### 2. Variable Declarations (Explicit and Descriptive)
+**REQUIRED:** Use explicit variable declarations with descriptive names
+```javascript
+// ✅ CORRECT (VB.NET style)
+function handleTimerTick() {
+  const currentSystemTime = new Date();
+  const formattedTimeString = formatTime(currentSystemTime);
+  setCurrentTime(formattedTimeString);
+}
+
+// ❌ WRONG (JavaScript shorthand)
+const handleTimerTick = () => setCurrentTime(formatTime(new Date()));
+```
+
+### 3. Event Handler Naming (VB.NET Convention)
+**REQUIRED:** Use VB.NET-style event handler names
+```javascript
+// ✅ CORRECT (VB.NET style)
+function handleTimerTick() { }        // Like Timer_Tick
+function handleButtonClick() { }     // Like Button_Click
+function handleFormLoad() { }         // Like Page_Load
+function handleFormUnload() { }      // Like Page_Unload
+function handleSelectedIndexChanged() { } // Like SelectedIndexChanged
+
+// ❌ WRONG (JavaScript style)
+const onTimerTick = () => { }
+const onButtonClick = () => { }
+```
+
+### 4. Component Lifecycle (VB.NET Page Events)
+**REQUIRED:** Use VB.NET-style comments and structure
+```javascript
+// ✅ CORRECT (VB.NET style)
+// Component mounted (like Page_Load event)
+React.useEffect(() => {
+  // Initialize component
+  startTimer();
+  subscribeToEvents();
+  
+  // Cleanup on unmount (like Page_Unload in VB.NET)
+  return () => {
+    stopTimer();
+    unsubscribeFromEvents();
+  };
+}, []);
+
+// ❌ WRONG (JavaScript style)
+useEffect(() => {
+  const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+  return () => clearInterval(timer);
+}, []);
+```
+
+### 5. State Management (VB.NET ViewState Style)
+**REQUIRED:** Use explicit state declarations with VB.NET-style comments
+```javascript
+// ✅ CORRECT (VB.NET style)
+// Component state variables (like ViewState in VB.NET)
+const [currentTime, setCurrentTime] = React.useState(new Date());
+const [isLoading, setIsLoading] = React.useState(false);
+const [errorMessage, setErrorMessage] = React.useState(null);
+
+// ❌ WRONG (JavaScript style)
+const [currentTime, setCurrentTime] = useState(new Date());
+```
+
+### 6. Comments (VB.NET Documentation Style)
+**REQUIRED:** Include VB.NET analogies in all comments
+```javascript
+// ✅ CORRECT (VB.NET style)
+// Timer_Tick event handler (like Timer_Tick in VB.NET)
+function handleTimerTick() {
+  // Get current system time (like DateTime.Now in VB.NET)
+  const currentSystemTime = new Date();
+  
+  // Update component state (like updating a Label control in VB.NET)
+  setCurrentTime(currentSystemTime);
+}
+
+// ❌ WRONG (JavaScript style)
+// Timer tick handler
+const handleTimerTick = () => setCurrentTime(new Date());
+```
+
+### 7. Error Handling (VB.NET Try-Catch Style)
+**REQUIRED:** Use explicit error handling with VB.NET-style comments
+```javascript
+// ✅ CORRECT (VB.NET style)
+function handleApiCall() {
+  try {
+    // API call logic (like calling a Web Service in VB.NET)
+    const response = await fetch('/api/data');
+    const data = await response.json();
+    
+    // Update UI (like binding data to controls in VB.NET)
+    setData(data);
+  } catch (error) {
+    // Handle error (like Try-Catch in VB.NET)
+    setErrorMessage(error.message);
+  }
+}
+
+// ❌ WRONG (JavaScript style)
+const handleApiCall = async () => {
+  try {
+    const response = await fetch('/api/data');
+    setData(await response.json());
+  } catch (error) {
+    setErrorMessage(error.message);
+  }
+};
+```
+
+### 8. Component Structure (VB.NET Form Structure)
+**REQUIRED:** Structure components like VB.NET forms
+```javascript
+// ✅ CORRECT (VB.NET style)
+export default function ClusterConfigTab() {
+  // 1. State variables (like form-level variables in VB.NET)
+  const [isLoading, setIsLoading] = React.useState(false);
+  
+  // 2. Event handlers (like event subs in VB.NET)
+  function handleButtonClick() { }
+  function handleTimerTick() { }
+  
+  // 3. Component lifecycle (like Page_Load/Unload in VB.NET)
+  React.useEffect(() => { }, []);
+  
+  // 4. Helper methods (like private methods in VB.NET)
+  function formatDisplayValue() { }
+  
+  // 5. Render method (like form rendering in VB.NET)
+  return (
+    <div>
+      {/* UI controls (like controls on a VB.NET form) */}
+    </div>
+  );
+}
+```
+
+## ENFORCEMENT
+
+All code changes in the Accessio Ops module must follow these rules. This ensures consistency for developers coming from VB.NET backgrounds and maintains readable, maintainable code.
+
+## EXAMPLES
+
+See `ClusterConfigTab.jsx` for a complete example of VB.NET-style React component.
+
+## NOTES
+
+- These rules apply ONLY to the Accessio Ops module
+- Other modules may follow different coding standards
+- The goal is readability and familiarity for VB.NET developers
+- Comments should always include VB.NET analogies

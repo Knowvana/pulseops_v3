@@ -6,10 +6,10 @@
 // settings like auth provider, feature flags, and module configs.
 //
 // ENDPOINTS:
-//   GET    /config         — List all config entries
-//   GET    /config/:key    — Get a specific config by key
-//   POST   /config         — Create or update a config entry
-//   DELETE /config/:key    — Delete a config entry
+//   GET    /config         — List all config entries (Auth required)
+//   GET    /config/:key    — Get a specific config by key (Auth required)
+//   POST   /config         — Create or update a config entry (Auth + super_admin required)
+//   DELETE /config/:key    — Delete a config entry (Auth + super_admin required)
 //
 // AUTH: All routes require authentication. Write operations require
 // super_admin role.

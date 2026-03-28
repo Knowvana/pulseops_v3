@@ -31,7 +31,7 @@ export { default as PageLoader } from '@shared/components/PageLoader';
 export { default as UILogService } from '@shared/services/UILogService';
 export { default as TimezoneService } from '@shared/services/timezoneService';
 export { createLogger } from '@shared/services/consoleLogger';
-// export { default as ApiClient } from '@shared/services/apiClient';
+export { default as ApiClient } from '@shared/services/apiClient';
 
 // --- Hooks ---
 // (Add hooks as they are created)

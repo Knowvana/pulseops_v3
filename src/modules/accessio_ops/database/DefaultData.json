@@ -1,0 +1,16 @@
+{
+  "_meta": {
+    "moduleId": "accessio_ops",
+    "version": "1.0.0",
+    "description": "Default seed data for the Accessio Operations module. Loaded via Data Management → Load Default Data. Uses ON CONFLICT DO NOTHING so safe to run multiple times."
+  },
+  "ao_module_config": [
+    {
+      "config_key": "general_settings",
+      "config_value": {
+        "placeholder": true
+      },
+      "description": "General module settings — placeholder for future configuration."
+    }
+  ]
+}

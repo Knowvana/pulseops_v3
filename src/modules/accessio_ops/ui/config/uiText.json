@@ -1,0 +1,74 @@
+{
+  "sideNav": {
+    "title": "Accessio Operations",
+    "subtitle": "Operations Management"
+  },
+  "navItems": {
+    "dashboard": "Dashboard",
+    "config": "Configuration"
+  },
+  "common": {
+    "loading": "Loading...",
+    "saving": "Saving...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "close": "Close",
+    "refresh": "Refresh",
+    "search": "Search...",
+    "noData": "No data available.",
+    "fetchError": "Failed to load data.",
+    "actions": "Actions",
+    "status": "Status",
+    "name": "Name",
+    "description": "Description",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "dashboard": {
+    "title": "Accessio Operations Dashboard",
+    "subtitle": "Centralized operations overview for the Accessio identity platform.",
+    "placeholder": "Dashboard features will be added incrementally."
+  },
+  "config": {
+    "title": "Accessio Operations Configuration",
+    "subtitle": "Configure module settings and manage data.",
+    "tabs": {
+      "generalSettings": { "id": "ao_general_settings", "label": "General Settings" },
+      "dataManagement": { "id": "ao_data_management", "label": "Data Management" }
+    }
+  },
+  "generalSettings": {
+    "title": "General Settings",
+    "subtitle": "Module-wide configuration and default values.",
+    "placeholderMessage": "Configuration options will be added as features are built.",
+    "saveButton": "Save Settings",
+    "savingButton": "Saving..."
+  },
+  "dataManagement": {
+    "title": "Data Management",
+    "subtitle": "View schema status, load default data, or reset all module data.",
+    "schemaStatus": "Schema Status",
+    "loadDefaultsButton": "Load Default Data",
+    "loadingDefaultsButton": "Loading...",
+    "resetButton": "Reset All Data",
+    "resettingButton": "Resetting...",
+    "resetConfirm": {
+      "title": "Reset Module Data",
+      "message": "This will drop ALL Accessio Operations module tables and data. This action cannot be undone.",
+      "confirmButton": "Reset"
+    },
+    "tableColumns": {
+      "name": "Table",
+      "exists": "Exists",
+      "rowCount": "Rows",
+      "columns": "Columns",
+      "indexes": "Indexes"
+    }
+  }
+}

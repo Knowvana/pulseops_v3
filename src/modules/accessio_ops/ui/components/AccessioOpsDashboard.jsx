@@ -1,11 +1,76 @@
 // ============================================================================
 // AccessioOpsDashboard — Accessio Operations Module Dashboard
-//
-// PURPOSE: Main dashboard view for the Accessio Operations module.
-// Features cluster health alerts, workload status, and system monitoring.
-//
-// USED BY: manifest.jsx → getViews() → dashboard
 // ============================================================================
+/*
+ * DASHBOARD COMPONENT DOCUMENTATION
+ * ============================================================================
+ * 
+ * PURPOSE: Primary dashboard for Accessio Operations module showing cluster
+ * workload status, pod health, and alerts with real-time Kubernetes data.
+ * 
+ * DEPENDENCIES:
+ * - React hooks: useState, useEffect for state management
+ * - Lucide icons: LayoutDashboard, Bell, XCircle, AlertTriangle, AlertCircle, RefreshCw, Loader2, X
+ * - Platform services: createLogger, ApiClient
+ * - Module config: uiText.json, urls.json
+ * 
+ * API ENDPOINTS CALLED:
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │ 1. /api/settings (Platform Core)                                      │
+ * │    → Purpose: Platform timezone and time format settings               │
+ * │    → Used by: convertToTimezone() for timestamp display               │
+ * │    → Route: Core platform settings API                                │
+ * └─────────────────────────────────────────────────────────────────────┘
+ * 
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │ 2. /api/accessio_ops/cluster/info (Accessio Ops)                     │
+ * │    → Purpose: Cluster metadata, version, node information             │
+ * │    → Used by: Dashboard header cluster info display                   │
+ * │    → Route: GET /cluster/info → getClusterInfo() in ClusterService.js │
+ * │    → Backend: KubernetesClient.js → K8s API cluster/nodes             │
+ * └─────────────────────────────────────────────────────────────────────┘
+ * 
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │ 3. /api/accessio_ops/cluster/workloads (Accessio Ops)                │
+ * │    → Purpose: Workloads (Deployments, StatefulSets, CronJobs) & pods │
+ * │    → Used by: All dashboard metrics (workloads, pods, types)          │
+ * │    → Route: GET /cluster/workloads → getWorkloads() in ClusterService.js│
+ * │    → Backend: KubernetesClient.js → K8s APIs: apps/v1, batch/v1, core/v1│
+ * └─────────────────────────────────────────────────────────────────────┘
+ * 
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │ 4. /api/accessio_ops/cluster/pods/errors (Accessio Ops)              │
+ * │    → Purpose: Pod error analysis, conditions, and failure details    │
+ * │    → Used by: Alert generation, error pod counting, modal details     │
+ * │    → Route: GET /cluster/pods/errors → analyzePodErrors() in routes   │
+ * │    → Backend: ClusterService.js → pod condition analysis             │
+ * └─────────────────────────────────────────────────────────────────────┘
+ * 
+ * DATA PROCESSING FLOW:
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │ 1. loadDashboardData() → Promise.all() parallel API calls            │
+ * │ 2. Process responses → Calculate summaries (workloads, pods, alerts) │
+ * │ 3. Generate alerts from workload + pod error data                    │
+ * │ 4. Update state → UI renders tiles, alerts grid, modals             │
+ * └─────────────────────────────────────────────────────────────────────┘
+ * 
+ * KEY CALCULATIONS:
+ * - Workload types: Count by workload.type (deployment, statefulset, cronjob)
+ * - Pod counts: Sum workload.pods.ready/total + error pod analysis
+ * - Alerts: Combine workload status + pod errors with severity levels
+ * - Health status: workload.status + pod.phase conditions
+ * 
+ * FILES THAT USE THIS COMPONENT:
+ * - src/modules/accessio_ops/ui/manifest.jsx (module routing)
+ * - Platform hot-reload system (dynamic module loading)
+ * 
+ * RELATED FILES:
+ * - ClusterService.js: Backend data fetching and processing
+ * - clusterRoutes.js: API route handlers  
+ * - KubernetesClient.js: K8s API client abstraction
+ * - urls.json: API endpoint configuration
+ * ============================================================================
+ */
 import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, Bell, XCircle, AlertTriangle, AlertCircle, RefreshCw, Loader2, X } from 'lucide-react';
 import { createLogger } from '@shared';

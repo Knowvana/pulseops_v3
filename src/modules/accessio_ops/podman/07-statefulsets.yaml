@@ -1,0 +1,201 @@
+# ── Accessio Operations - StatefulSet Workloads ───────────────────────────────
+#
+# PURPOSE: Deploy ultra-lightweight placeholder StatefulSets
+# USAGE: Apply after deployments are created
+# EFFECT: Creates minimal StatefulSets for testing purposes
+# ============================================================================
+
+# ── identityiq-ui StatefulSet ─────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: identityiq-ui
+  namespace: prod-iga
+  labels:
+    app: identityiq-ui
+    environment: production
+    purpose: placeholder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: identityiq-ui
+  serviceName: identityiq-ui
+  template:
+    metadata:
+      labels:
+        app: identityiq-ui
+        environment: production
+        purpose: placeholder
+    spec:
+      containers:
+      - name: identityiq-ui
+        image: nginx:alpine
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+        ports:
+        - containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# ── identityiq-task StatefulSet ───────────────────────────────────────────────
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: identityiq-task
+  namespace: prod-iga
+  labels:
+    app: identityiq-task
+    environment: production
+    purpose: placeholder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: identityiq-task
+  serviceName: identityiq-task
+  template:
+    metadata:
+      labels:
+        app: identityiq-task
+        environment: production
+        purpose: placeholder
+    spec:
+      containers:
+      - name: identityiq-task
+        image: nginx:alpine
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+        ports:
+        - containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# ── openidm StatefulSet ─────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: openidm
+  namespace: prod-iga
+  labels:
+    app: openidm
+    environment: production
+    purpose: placeholder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openidm
+  serviceName: openidm
+  template:
+    metadata:
+      labels:
+        app: openidm
+        environment: production
+        purpose: placeholder
+    spec:
+      containers:
+      - name: openidm
+        image: nginx:alpine
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+        ports:
+        - containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# ── postfix-mta StatefulSet ───────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postfix-mta
+  namespace: mail
+  labels:
+    app: postfix-mta
+    environment: production
+    purpose: placeholder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postfix-mta
+  serviceName: postfix-mta
+  template:
+    metadata:
+      labels:
+        app: postfix-mta
+        environment: production
+        purpose: placeholder
+    spec:
+      containers:
+      - name: postfix-mta
+        image: nginx:alpine
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+        ports:
+        - containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5

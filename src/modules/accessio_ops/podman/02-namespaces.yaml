@@ -1,0 +1,27 @@
+---
+# Namespace creation for Accessio Operations
+# Execute with: kubectl apply -f namespaces.yaml
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prod-iga
+  labels:
+    environment: production
+    purpose: identity-governance
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prod
+  labels:
+    environment: production
+    purpose: general
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mail
+  labels:
+    environment: production
+    purpose: mail-services

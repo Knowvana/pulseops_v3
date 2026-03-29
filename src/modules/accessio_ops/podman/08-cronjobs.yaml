@@ -1,0 +1,278 @@
+# ── Accessio Operations - CronJob Workloads ───────────────────────────────────
+#
+# PURPOSE: Deploy ultra-lightweight placeholder CronJobs
+# USAGE: Apply after StatefulSets are created
+# EFFECT: Creates minimal CronJobs for testing purposes
+# ============================================================================
+
+# ── ad-link-write CronJob (Daily - Success) ───────────────────────────────────
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ad-link-write
+  namespace: prod-iga
+  labels:
+    app: ad-link-write
+    environment: production
+    purpose: placeholder
+    schedule: daily
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: ad-link-write
+            image: busybox:1.35
+            command: ["/bin/sh", "-c"]
+            args:
+            - |
+              echo "Starting AD link write job..."
+              sleep 5
+              echo "AD link write completed successfully"
+              exit 0
+            resources:
+              requests:
+                memory: "16Mi"
+                cpu: "5m"
+              limits:
+                memory: "32Mi"
+                cpu: "20m"
+          restartPolicy: OnFailure
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+
+---
+# ── cloudsql-backup CronJob (Daily - Success) ───────────────────────────────
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cloudsql-backup
+  namespace: prod
+  labels:
+    app: cloudsql-backup
+    environment: production
+    purpose: placeholder
+    schedule: daily
+spec:
+  schedule: "0 3 * * *"  # Daily at 3 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: cloudsql-backup
+            image: busybox:1.35
+            command: ["/bin/sh", "-c"]
+            args:
+            - |
+              echo "Starting CloudSQL backup..."
+              sleep 8
+              echo "CloudSQL backup completed successfully"
+              exit 0
+            resources:
+              requests:
+                memory: "16Mi"
+                cpu: "5m"
+              limits:
+                memory: "32Mi"
+                cpu: "20m"
+          restartPolicy: OnFailure
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+
+---
+# ── elasticsearch-backup CronJob (Hourly - Fails) ───────────────────────────
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: elasticsearch-backup
+  namespace: prod
+  labels:
+    app: elasticsearch-backup
+    environment: production
+    purpose: placeholder
+    schedule: hourly
+spec:
+  schedule: "0 * * * *"  # Hourly at minute 0
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: elasticsearch-backup
+            image: busybox:1.35
+            command: ["/bin/sh", "-c"]
+            args:
+            - |
+              echo "Starting Elasticsearch backup..."
+              sleep 3
+              echo "Simulating backup failure..."
+              exit 1  # Simulate failure
+            resources:
+              requests:
+                memory: "16Mi"
+                cpu: "5m"
+              limits:
+                memory: "32Mi"
+                cpu: "20m"
+          restartPolicy: OnFailure
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+
+---
+# ── weekly-report-vdr CronJob (Weekly - Success) ───────────────────────────
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: weekly-report-vdr
+  namespace: prod
+  labels:
+    app: weekly-report-vdr
+    environment: production
+    purpose: placeholder
+    schedule: weekly
+spec:
+  schedule: "0 4 * * 0"  # Weekly on Sunday at 4 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: weekly-report-vdr
+            image: busybox:1.35
+            command: ["/bin/sh", "-c"]
+            args:
+            - |
+              echo "Starting weekly VDR report..."
+              sleep 10
+              echo "Weekly VDR report completed successfully"
+              exit 0
+            resources:
+              requests:
+                memory: "16Mi"
+                cpu: "5m"
+              limits:
+                memory: "32Mi"
+                cpu: "20m"
+          restartPolicy: OnFailure
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+
+---
+# ── daily-report-ad-dqc CronJob (Daily - Success) ───────────────────────────
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: daily-report-ad-dqc
+  namespace: prod-iga
+  labels:
+    app: daily-report-ad-dqc
+    environment: production
+    purpose: placeholder
+    schedule: daily
+spec:
+  schedule: "0 5 * * *"  # Daily at 5 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: daily-report-ad-dqc
+            image: busybox:1.35
+            command: ["/bin/sh", "-c"]
+            args:
+            - |
+              echo "Starting daily AD DQC report..."
+              sleep 6
+              echo "Daily AD DQC report completed successfully"
+              exit 0
+            resources:
+              requests:
+                memory: "16Mi"
+                cpu: "5m"
+              limits:
+                memory: "32Mi"
+                cpu: "20m"
+          restartPolicy: OnFailure
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+
+---
+# ── daily-report-vdr-dqc CronJob (Daily - Failure) ─────────────────────────
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: daily-report-vdr-dqc
+  namespace: prod
+  labels:
+    app: daily-report-vdr-dqc
+    environment: production
+    purpose: placeholder
+    schedule: daily
+spec:
+  schedule: "0 6 * * *"  # Daily at 6 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: daily-report-vdr-dqc
+            image: busybox:1.35
+            command: ["/bin/sh", "-c"]
+            args:
+            - |
+              echo "Starting daily VDR DQC report..."
+              sleep 4
+              echo "Simulating report generation failure..."
+              exit 1  # Simulate failure
+            resources:
+              requests:
+                memory: "16Mi"
+                cpu: "5m"
+              limits:
+                memory: "32Mi"
+                cpu: "20m"
+          restartPolicy: OnFailure
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+
+---
+# ── bigtable-backup CronJob (Daily - Failure) ───────────────────────────────
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bigtable-backup
+  namespace: prod
+  labels:
+    app: bigtable-backup
+    environment: production
+    purpose: placeholder
+    schedule: daily
+spec:
+  schedule: "0 7 * * *"  # Daily at 7 AM
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: bigtable-backup
+            image: busybox:1.35
+            command: ["/bin/sh", "-c"]
+            args:
+            - |
+              echo "Starting BigTable backup..."
+              sleep 2
+              echo "Simulating BigTable backup failure..."
+              exit 1  # Simulate failure
+            resources:
+              requests:
+                memory: "16Mi"
+                cpu: "5m"
+              limits:
+                memory: "32Mi"
+                cpu: "20m"
+          restartPolicy: OnFailure
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3

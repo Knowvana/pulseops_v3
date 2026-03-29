@@ -1,0 +1,249 @@
+# ── Accessio Operations - Deployment Workloads ───────────────────────────────
+#
+# PURPOSE: Deploy ultra-lightweight placeholder deployments
+# USAGE: Apply after namespaces and service account are created
+# EFFECT: Creates minimal deployments for testing purposes
+# ============================================================================
+
+# ── jas Deployment ───────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jas
+  namespace: prod-iga
+  labels:
+    app: jas
+    environment: production
+    purpose: placeholder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jas
+  template:
+    metadata:
+      labels:
+        app: jas
+        environment: production
+        purpose: placeholder
+    spec:
+      containers:
+      - name: jas
+        image: nginx:alpine
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+        ports:
+        - containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# ── ig Deployment ───────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ig
+  namespace: prod-iga
+  labels:
+    app: ig
+    environment: production
+    purpose: placeholder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ig
+  template:
+    metadata:
+      labels:
+        app: ig
+        environment: production
+        purpose: placeholder
+    spec:
+      containers:
+      - name: ig
+        image: nginx:alpine
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+        ports:
+        - containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# ── talend Deployment ───────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: talend
+  namespace: prod
+  labels:
+    app: talend
+    environment: production
+    purpose: placeholder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: talend
+  template:
+    metadata:
+      labels:
+        app: talend
+        environment: production
+        purpose: placeholder
+    spec:
+      containers:
+      - name: talend
+        image: nginx:alpine
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+        ports:
+        - containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# ── iga-api Deployment ──────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iga-api
+  namespace: prod-iga
+  labels:
+    app: iga-api
+    environment: production
+    purpose: placeholder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iga-api
+  template:
+    metadata:
+      labels:
+        app: iga-api
+        environment: production
+        purpose: placeholder
+    spec:
+      containers:
+      - name: iga-api
+        image: nonexistent-image:latest  # This will fail to pull
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+        ports:
+        - containerPort: 9999  # Invalid port for nginx
+        livenessProbe:
+          httpGet:
+            path: /nonexistent
+            port: 9999  # Invalid port and path
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /nonexistent
+            port: 9999  # Invalid port and path
+          initialDelaySeconds: 2
+          periodSeconds: 5
+          timeoutSeconds: 1
+          failureThreshold: 3
+
+---
+# ── jobserver Deployment ─────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jobserver
+  namespace: prod
+  labels:
+    app: jobserver
+    environment: production
+    purpose: placeholder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jobserver
+  template:
+    metadata:
+      labels:
+        app: jobserver
+        environment: production
+        purpose: placeholder
+    spec:
+      containers:
+      - name: jobserver
+        image: nginx:alpine
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+        ports:
+        - containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5

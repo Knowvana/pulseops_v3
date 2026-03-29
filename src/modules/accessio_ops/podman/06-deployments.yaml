@@ -149,7 +149,7 @@ spec:
           periodSeconds: 5
 
 ---
-# ── iga-api Deployment ──────────────────────────────────────────────────────
+# ── iga-api Deployment (Image Pull Error) ─────────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -173,7 +173,7 @@ spec:
     spec:
       containers:
       - name: iga-api
-        image: nonexistent-image:latest  # This will fail to pull
+        image: nonexistent-image:latest  # This will fail to pull - ImagePullBackOff
         resources:
           requests:
             memory: "32Mi"
@@ -187,21 +187,17 @@ spec:
           httpGet:
             path: /nonexistent
             port: 9999  # Invalid port and path
-          initialDelaySeconds: 5
+          initialDelaySeconds: 30
           periodSeconds: 10
-          timeoutSeconds: 1
-          failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /nonexistent
-            port: 9999  # Invalid port and path
-          initialDelaySeconds: 2
+            path: /
+            port: 80
+          initialDelaySeconds: 5
           periodSeconds: 5
-          timeoutSeconds: 1
-          failureThreshold: 3
 
 ---
-# ── jobserver Deployment ─────────────────────────────────────────────────────
+# ── jobserver Deployment (Resource Quota Error) ───────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -225,14 +221,14 @@ spec:
     spec:
       containers:
       - name: jobserver
-        image: nginx:alpine
+        image: nginx:alpine  # Valid image
         resources:
           requests:
-            memory: "32Mi"
-            cpu: "10m"
+            memory: "16Gi"   # Excessive memory request - will cause ResourceQuota error
+            cpu: "8000m"     # Excessive CPU request - will cause ResourceQuota error
           limits:
-            memory: "64Mi"
-            cpu: "50m"
+            memory: "32Gi"   # Excessive memory limit
+            cpu: "16000m"    # Excessive CPU limit
         ports:
         - containerPort: 80
         livenessProbe:

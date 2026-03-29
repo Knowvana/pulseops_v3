@@ -1,0 +1,81 @@
+# ── Workloads for Minimal Kind Cluster ───────────────────────────────────────
+#
+# PURPOSE: Deploy ultra-lightweight workloads to Kind cluster
+# USAGE: Apply to cluster after creation
+# EFFECT: Creates test workloads with minimal resource usage
+# ============================================================================
+
+# ── Namespace ─────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: default
+  labels:
+    environment: production
+    purpose: testing
+---
+# ── ConfigMap ─────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-info
+  namespace: default
+data:
+  cluster.name: "prod-cluster"
+  cluster.environment: "production"
+  cluster.purpose: "testing"
+  cluster.created: "2026-03-28"
+  cluster.type: "kind"
+---
+# ── Deployment ───────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-test-app
+  namespace: default
+  labels:
+    app: cluster-test
+    environment: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cluster-test
+  template:
+    metadata:
+      labels:
+        app: cluster-test
+        environment: production
+    spec:
+      containers:
+      - name: test-container
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "16Mi"    # Ultra-low memory request
+            cpu: "10m"        # Minimal CPU request
+          limits:
+            memory: "32Mi"    # Ultra-low memory limit
+            cpu: "50m"        # Minimal CPU limit
+        # Reduce memory usage further
+        env:
+        - name: NGINX_WORKER_PROCESSES
+          value: "1"
+        - name: NGINX_WORKER_CONNECTIONS
+          value: "10"
+---
+# ── Service ─────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: cluster-test-service
+  namespace: default
+spec:
+  selector:
+    app: cluster-test
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP

@@ -1,0 +1,49 @@
+# ── Kind Minimal Single Node Cluster Configuration ───────────────────────────
+#
+# PURPOSE: Create 1 lightweight Kind cluster with minimal resources
+# USAGE: kind create cluster --config kind-clusters.yaml --name prod1-cluster
+# EFFECT: Creates single-node cluster with bare minimum memory usage
+# ============================================================================
+
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: prod1-cluster
+nodes:
+- role: control-plane
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "cluster=prod1-cluster,role=control-plane"
+        # Reduce memory usage
+        system-reserved: "memory=100Mi"
+        kube-reserved: "memory=100Mi"
+        eviction-hard: "memory.available<200Mi"
+  extraPortMappings:
+  - containerPort: 30000
+    hostPort: 30001
+    protocol: TCP
+networking:
+  disableDefaultCNI: false
+  kubeProxyMode: "iptables"
+# Configure cluster for minimal resource usage
+kubeadmConfigPatches:
+  - |
+    kind: ClusterConfiguration
+    apiServer:
+      extraArgs:
+        # Reduce API server memory usage
+        max-requests-inflight: "100"
+        default-watch-cache-size: "100"
+        event-ttl: "1h"
+    controllerManager:
+      extraArgs:
+        # Reduce controller memory usage
+        horizontal-pod-autoscaler-sync-period: "30s"
+        node-monitor-period: "10s"
+    scheduler:
+      extraArgs:
+        # Reduce scheduler memory usage
+        kubeconfig: "/etc/kubernetes/scheduler.conf"
+        v: "1"

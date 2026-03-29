@@ -1,0 +1,84 @@
+# ── Complete Kubernetes Cleanup YAML ───────────────────────────────────────────
+#
+# PURPOSE: Delete ALL Kubernetes resources across ALL namespaces
+# USAGE: kubectl apply -f cleanup-all.yaml
+# EFFECT: Removes all user-created resources and namespaces
+# ============================================================================
+
+# ── Cleanup Job to Delete Resources ─────────────────────────────────────────
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cleanup-all-resources
+  namespace: default
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: default
+      containers:
+      - name: kubectl-cleanup
+        image: bitnami/kubectl:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "🚀 Starting complete cleanup..."
+          
+          # Delete all resource types
+          echo "📋 Deleting all resources..."
+          kubectl delete all --all -A --force --grace-period=0 || true
+          kubectl delete deployments --all -A --force --grace-period=0 || true
+          kubectl delete statefulsets --all -A --force --grace-period=0 || true
+          kubectl delete daemonsets --all -A --force --grace-period=0 || true
+          kubectl delete jobs --all -A --force --grace-period=0 || true
+          kubectl delete cronjobs --all -A --force --grace-period=0 || true
+          
+          # Delete PVCs
+          echo "💾 Deleting PVCs..."
+          kubectl delete pvc --all -A --force --grace-period=0 || true
+          
+          # Delete secrets (keep system ones)
+          echo "🔐 Deleting user secrets..."
+          kubectl delete secrets --all -A --force --grace-period=0 --field-selector=metadata.namespace!=kube-system --field-selector=metadata.namespace!=kube-public --field-selector=metadata.namespace!=kube-node-lease || true
+          
+          # Delete configmaps (keep system ones)
+          echo "📝 Deleting user configmaps..."
+          kubectl delete configmaps --all -A --force --grace-period=0 --field-selector=metadata.namespace!=kube-system --field-selector=metadata.namespace!=kube-public --field-selector=metadata.namespace!=kube-node-lease || true
+          
+          # Delete user namespaces
+          echo "🗂️ Deleting user namespaces..."
+          kubectl get namespaces -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | grep -v -E "^(kube-system|kube-public|kube-node-lease|default)$" | xargs -r kubectl delete namespace --force --grace-period=0 || true
+          
+          # Wait a moment
+          sleep 5
+          
+          # Show what's left
+          echo "🔍 Remaining resources:"
+          kubectl get namespaces
+          kubectl get all -A
+          
+          echo "✅ Cleanup completed!"
+---
+# ── Alternative: Direct Resource Deletion (Manual Commands) ───────────────────
+# 
+# If the job doesn't work, run these commands manually:
+#
+# kubectl delete all,deployments,statefulsets,daemonsets,jobs,cronjobs,pvc,secrets,configmaps --all -A --force --grace-period=0
+# kubectl delete namespace --all --force --grace-period=0
+#
+# ── Or use this one-liner:
+#
+# kubectl delete all,deployments,statefulsets,daemonsets,jobs,cronjobs,pvc,secrets,configmaps --all -A --force --grace-period=0 && kubectl delete namespace --all --force --grace-period=0
+#
+# ── Individual resource type deletion:
+#
+# kubectl delete deployments --all -A --force --grace-period=0
+# kubectl delete statefulsets --all -A --force --grace-period=0
+# kubectl delete daemonsets --all -A --force --grace-period=0
+# kubectl delete jobs --all -A --force --grace-period=0
+# kubectl delete cronjobs --all -A --force --grace-period=0
+# kubectl delete pvc --all -A --force --grace-period=0
+# kubectl delete secrets --all -A --force --grace-period=0
+# kubectl delete configmaps --all -A --force --grace-period=0
+# kubectl delete namespace --all --force --grace-period=0

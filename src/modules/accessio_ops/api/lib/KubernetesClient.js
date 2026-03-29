@@ -48,6 +48,18 @@ export function initializeClient(config) {
 }
 
 // ── Test connection to cluster ───────────────────────────────────────────────
+// ── Get K8s Core API client ───────────────────────────────────────────────────────
+export function getK8sCoreApi(config) {
+  try {
+    const kc = initializeClient(config);
+    return kc.makeApiClient(k8s.CoreV1Api);
+  } catch (err) {
+    log.error('Failed to create K8s Core API client', { message: err.message });
+    throw err;
+  }
+}
+
+// ── Test connection to cluster ───────────────────────────────────────────────
 export async function testConnection(config) {
   try {
     const kc = initializeClient(config);
@@ -152,4 +164,20 @@ export async function testConnection(config) {
 // ── Get cluster configuration ───────────────────────────────────────────────────
 export function getClusterConfig() {
   return loadClusterConfigFile();
+}
+
+// ── Get K8s API clients ───────────────────────────────────────────────────────
+export async function getK8sAppsApi(config) {
+  const kc = initializeClient(config);
+  return kc.makeApiClient(k8s.AppsV1Api);
+}
+
+export async function getK8sAutoscalingApi(config) {
+  const kc = initializeClient(config);
+  return kc.makeApiClient(k8s.AutoscalingV1Api);
+}
+
+export async function getK8sBatchApi(config) {
+  const kc = initializeClient(config);
+  return kc.makeApiClient(k8s.BatchV1Api);
 }

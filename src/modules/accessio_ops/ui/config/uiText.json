@@ -50,6 +50,21 @@
     "saveButton": "Save Settings",
     "savingButton": "Saving..."
   },
+  "clusterFilters": {
+    "title": "Cluster Filters",
+    "subtitle": "Select which clusters, namespaces, and workloads to display in your dashboard",
+    "clusters": "Clusters",
+    "namespaces": "Namespaces", 
+    "workloads": "Workloads",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All",
+    "saveConfiguration": "Save Configuration",
+    "configurationSaved": "Configuration saved successfully",
+    "loading": "Loading cluster data...",
+    "searchPlaceholder": "Search clusters, namespaces, or workloads...",
+    "noResults": "No results found",
+    "error": "Error loading cluster data"
+  },
   "dataManagement": {
     "title": "Data Management",
     "subtitle": "View schema status, load default data, or reset all module data.",

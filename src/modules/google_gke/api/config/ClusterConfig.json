@@ -1,7 +1,7 @@
 {
   "connection": {
-    "apiServerUrl": "https://127.0.0.1:51393",
-    "serviceAccountToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImdwOWYxQVU0Vkh5Y3FOSFhUblBveDkxVDBMcE90ejhZbnhYX3MyNklsNzAifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJkZWZhdWx0Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZWNyZXQubmFtZSI6InB1bHNlb3BzLXRva2VuIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQubmFtZSI6InB1bHNlb3BzIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQudWlkIjoiNjA4YTNiNWEtMjBhYS00OTNlLTk3YzktZmJhOTc5ZDc5ZTU2Iiwic3ViIjoic3lzdGVtOnNlcnZpY2VhY2NvdW50OmRlZmF1bHQ6cHVsc2VvcHMifQ.W8kt_NdgkWtZaYGSmEAa7rNIDTFgAuPOYrALXEHoo3L80a0EuSSMXIqfYioCTF9NYmKj-pVfcN97hgfbqQu8ZR_PR6xrbvVNMH9r-wmEJPy5v_JiVjYa7Bfi9eVyhvK_CLSY-49PKxdRi46azd8LvhC74o6obmROjkGb6PuKtAF26t2QmR9bPHsKutEI6QykdaoF-B3IvDdjn7jmd8VxbO28HZkfY1TdIbBSuUXguGHILmzBaEQskkpM5kQa7Tl2Ms8NykcUKJbQ2CiZhXyJkwQd688wJU9JzlsDYhLn7XSWFIMTPK0j72qOugMRIH3F6JgQWkHOqKuFD_D8PXQhKg",
+    "apiServerUrl": "https://127.0.0.1:64746",
+    "serviceAccountToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6IlJXZUF5QmU3V0k5eDkzbXlpMlpKdlFzWWN5YWJIYXlwcFpiZ3JJMjdyaDAifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJkZWZhdWx0Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZWNyZXQubmFtZSI6ImFjY2Vzc2lvLXNlcnZpY2UtcGVybWFuZW50LXRva2VuIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQubmFtZSI6ImFjY2Vzc2lvLXNlcnZpY2UiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC51aWQiOiJiNzJiZjExMi0xMGFiLTQ1MzMtYmQ5OC05OTUwN2I1MTBmMTgiLCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6ZGVmYXVsdDphY2Nlc3Npby1zZXJ2aWNlIn0.OXuYv-43mNh0AVYOyjBIVacf0rMKSIZjCzdqIyjHnXDjSlhgUYS06cJrBK4b-f1_q870Mk8klAV_7eg0eCqV-3W0hKnZF4octEWj5UcaWdh5kOpHSknH2qKCsjfAHgOdkP5o8k5Q-9Gb6fFz4tpYzd7aONwV8hzaXEyHuNJVCJRHliLUIDaMdaVUG_EcNuSt1wBbS1qqn1OClAiHvAXELn8oA9mbG18r0zKiW97Q4VIIkPz8OcBWa0FCsnmcU5qP4lZrBJoYrHOfLay1x4FdeGR65rs8ARCcZX6knvjPkUifpXO8-sS8KKMX4GQFwi9vtEXCrbfveqtWlynb6Gp4-w",
     "projectId": "local-dev",
     "region": "local",
     "clusterName": "prod1-cluster"
@@ -9,16 +9,16 @@
   "connectionStatus": {
     "isConfigured": true,
     "testStatus": "success",
-    "lastTested": "2026-03-28T07:52:02.205Z",
+    "lastTested": "2026-03-29T08:40:33.248Z",
     "clusterInfo": {
       "name": "prod1-cluster",
       "version": "v1.35.0",
       "platform": "linux/amd64",
       "nodeCount": 1,
       "nodesReady": 1,
-      "namespaceCount": 6,
-      "podCount": 24,
-      "podsRunning": 17
+      "namespaceCount": 8,
+      "podCount": 14,
+      "podsRunning": 14
     }
   },
   "_meta": {

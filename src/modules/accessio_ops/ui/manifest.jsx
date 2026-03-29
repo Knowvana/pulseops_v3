@@ -26,7 +26,7 @@
 
 import React from 'react';
 import {
-  LayoutDashboard, Sliders, Settings, Database, Shield,
+  LayoutDashboard, Sliders, Settings, Database, Shield, Filter,
 } from 'lucide-react';
 import moduleConstants from './config/constants.json';
 import uiText from './config/uiText.json';
@@ -35,6 +35,7 @@ import uiText from './config/uiText.json';
 import AccessioOpsDashboard from './components/AccessioOpsDashboard';
 
 // ── Config Tab Components (lazy-mounted via render functions) ─────────────────
+import ClusterFiltersTab    from './components/Configuration/ClusterFiltersTab';
 import GeneralSettingsTab   from './components/Configuration/GeneralSettingsTab';
 import DataManagementTab    from './components/Configuration/DataManagementTab';
 import ClusterConfigTab     from './components/Configuration/ClusterConfigTab';
@@ -76,16 +77,22 @@ const accessioOpsManifest = {
    */
   getConfigTabs: () => [
     {
-      id:      cfgText.tabs.generalSettings.id,
-      label:   cfgText.tabs.generalSettings.label,
-      icon:    Settings,
-      content: () => <GeneralSettingsTab />,
-    },
-    {
       id:      'cluster-config',
       label:   'Cluster Configuration',
       icon:    Shield,
       content: () => <ClusterConfigTab />,
+    },
+    {
+      id:      'cluster-filters',
+      label:   'Cluster Filters',
+      icon:    Filter,
+      content: () => <ClusterFiltersTab />,
+    },
+    {
+      id:      cfgText.tabs.generalSettings.id,
+      label:   cfgText.tabs.generalSettings.label,
+      icon:    Settings,
+      content: () => <GeneralSettingsTab />,
     },
     {
       id:      cfgText.tabs.dataManagement.id,

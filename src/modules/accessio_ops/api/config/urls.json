@@ -3,6 +3,7 @@
 
   "routes": {
     "configGeneral": "/config/general",
+    "configCoreNamespaces": "/config/core-namespaces",
     "schemaInfo": "/schema/info",
     "schemaStatus": "/schema/status",
     "loadDefaults": "/data/defaults",

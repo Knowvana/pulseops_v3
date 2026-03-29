@@ -11,6 +11,24 @@
         "placeholder": true
       },
       "description": "General module settings — placeholder for future configuration."
+    },
+    {
+      "config_key": "filter_namespaces_default",
+      "config_value": {
+        "namespaces": [
+          "kube-system",
+          "kube-public",
+          "kube-node-lease",
+          "default",
+          "istio-system",
+          "cert-manager",
+          "ingress-nginx",
+          "monitoring",
+          "logging",
+          "local-path-storage"
+        ]
+      },
+      "description": "Default namespaces to filter out when fetching namespaces for monitoring."
     }
   ]
 }

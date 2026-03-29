@@ -58,42 +58,119 @@
         }
       }
     },
-    "/accessio_ops/cluster": {
-      "get": {
-        "tags": ["Accessio Operations - Cluster"],
-        "operationId": "aoGetClusterConfig",
-        "summary": "Get cluster configuration",
-        "description": "Returns the current Kubernetes cluster configuration.",
-        "responses": {
-          "200": { "description": "Cluster configuration loaded successfully." },
-          "401": { "description": "Authentication required." },
-          "500": { "description": "Failed to load configuration." }
-        }
-      },
-      "put": {
-        "tags": ["Accessio Operations - Cluster"],
-        "operationId": "aoUpdateClusterConfig",
-        "summary": "Update cluster configuration",
-        "description": "Saves the Kubernetes cluster configuration.",
-        "responses": {
-          "200": { "description": "Configuration saved successfully." },
-          "400": { "description": "Missing required fields." },
-          "401": { "description": "Authentication required." },
-          "500": { "description": "Failed to save configuration." }
-        }
-      }
-    },
-    "/accessio_ops/config": {
+    "/config/cluster": {
       "get": {
         "tags": ["Accessio Operations - Config"],
-        "operationId": "aoGetModuleConfig",
-        "summary": "Get module configuration",
-        "description": "Returns the module configuration from clusterconfig.json file.",
+        "operationId": "aoGetClusterConfig",
+        "summary": "Get cluster configuration",
+        "description": "Returns the cluster configuration from clusterconfig.json file.",
         "responses": {
-          "200": { "description": "Module configuration retrieved successfully." },
+          "200": { "description": "Cluster configuration retrieved successfully." },
           "404": { "description": "Configuration file not found." },
           "422": { "description": "Invalid JSON in configuration file." },
           "500": { "description": "Failed to read configuration file." }
+        }
+      },
+      "put": {
+        "tags": ["Accessio Operations - Config"],
+        "operationId": "aoSaveClusterConfig",
+        "summary": "Save cluster configuration",
+        "description": "Saves the cluster configuration to clusterconfig.json file.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "connection": {
+                    "type": "object",
+                    "properties": {
+                      "apiServerUrl": { 
+                        "type": "string", 
+                        "description": "Kubernetes API server URL",
+                        "example": "https://127.0.0.1:64746"
+                      },
+                      "serviceAccountToken": { 
+                        "type": "string", 
+                        "description": "Kubernetes service account token",
+                        "example": "eyJhbGciOiJSUzI1NiIs..."
+                      },
+                      "projectId": { 
+                        "type": "string", 
+                        "description": "Project ID",
+                        "example": "local-dev"
+                      },
+                      "region": { 
+                        "type": "string", 
+                        "description": "Region",
+                        "example": "local"
+                      },
+                      "clusterName": { 
+                        "type": "string", 
+                        "description": "Cluster name",
+                        "example": "prod1-cluster"
+                      }
+                    },
+                    "required": ["apiServerUrl", "serviceAccountToken", "projectId", "region", "clusterName"]
+                  },
+                  "connectionStatus": {
+                    "type": "object",
+                    "properties": {
+                      "isConfigured": { 
+                        "type": "boolean", 
+                        "description": "Whether the cluster is configured",
+                        "example": true
+                      },
+                      "testStatus": { 
+                        "type": "string", 
+                        "description": "Test connection status",
+                        "example": "success"
+                      },
+                      "lastTested": { 
+                        "type": "string", 
+                        "description": "Last test timestamp",
+                        "example": "2026-03-28T08:52:12.976Z"
+                      }
+                    }
+                  }
+                },
+                "required": ["connection"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { 
+            "description": "Cluster configuration saved successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "config": { "type": "object" },
+                        "metadata": {
+                          "type": "object",
+                          "properties": {
+                            "lastSaved": { "type": "string", "example": "2026-03-28T08:52:12.976Z" }
+                          }
+                        }
+                      }
+                    },
+                    "message": { "type": "string", "example": "Cluster configuration saved successfully" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid request body." },
+          "403": { "description": "Permission denied." },
+          "404": { "description": "Configuration directory not found." },
+          "500": { "description": "Failed to save configuration file." }
         }
       }
     },
@@ -103,11 +180,851 @@
         "operationId": "aoTestClusterConnection",
         "summary": "Test cluster connection",
         "description": "Tests connectivity to the Kubernetes cluster.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "apiServerUrl": { 
+                    "type": "string", 
+                    "description": "Kubernetes API server URL",
+                    "example": "https://127.0.0.1:64746"
+                  },
+                  "serviceAccountToken": { 
+                    "type": "string", 
+                    "description": "Kubernetes service account token (optional - uses configured token if not provided)",
+                    "example": "eyJhbGciOiJSUzI1NiIsImtpZCI6IlJXZUF5QmU3V0k5eDkzbXlpMlpKdlFzWWN5YWJIYXlwcFpiZ3JJMjdyaDAifQ.eyJhdWQiOlsiaHR0cHM6Ly9rdWJlcm5ldGVzLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWwiXSwiZXhwIjoxNzc0NzAzNDEyLCJpYXQiOjE3NzQ2OTk4MTIsImlzcyI6Imh0dHBzOi8va3ViZXJuZXRlcy5kZWZhdWx0LnN2Yy5jbHVzdGVyLmxvY2FsIiwianRpIjoiODkxZjgyYjEtOWFjZC00MmE0LWIxMGItZTUxYmRmMjliNWI1Iiwia3ViZXJuZXRlcy5pbyI6eyJuYW1lc3BhY2UiOiJkZWZhdWx0Iiwic2VydmljZWFjY291bnQiOnsibmFtZSI6ImFjY2Vzc2lvLXNlcnZpY2UiLCJ1aWQiOiJiNzJiZjExMi0xMGFiLTQ1MzMtYmQ5OC05OTUwN2I1MTBmMTgifX0sIm5iZiI6MTc3NDY5OTgxMiwic3ViIjoic3lzdGVtOnNlcnZpY2VhY2NvdW50OmRlZmF1bHQ6YWNjZXNzaW8tc2VydmljZSJ9.CynLZQ9_85kn1VfD6E97rLS_n4Hu6YPVm2NH34mOwcB2UMNZavTbaXkgbizWg7eGE9jZN3cjCojHX4NwIzgDnBIeIPFC5JvXYlunxnCG61hJExVmqrQfkXT_viHeKKKnPLc04R16sPoPaOgb5CzMAOWNGn0WiqhO_fgwqgsJZQkL0vB0RMfi5ceP0NReoRD8-51GqVP7c5GDj1cwqZOk7apdYLRijtkqcunCy9XMl9n1-1tghjBXR-e-Z948kTWt5zqv3OUByZs69emJ_DuGYegSq8PjcOwW2QQVfb64aR29Bf1l233STbBxDcLGkitgW2XzQyGdZCxtSM4FGMsYIA"
+                  },
+                  "projectId": { 
+                    "type": "string", 
+                    "description": "Project ID",
+                    "example": "local-dev"
+                  },
+                  "skipTLSVerify": {
+                    "type": "boolean",
+                    "description": "Skip TLS verification for self-signed certificates",
+                    "example": true
+                  }
+                },
+                "required": ["apiServerUrl", "projectId"]
+              }
+            }
+          }
+        },
         "responses": {
           "200": { "description": "Connection test successful." },
           "400": { "description": "Missing required fields." },
           "401": { "description": "Authentication required." },
           "500": { "description": "Connection test failed." }
+        }
+      }
+    },
+    "/accessio_ops/clusters": {
+      "get": {
+        "tags": ["Accessio Operations - Cluster"],
+        "operationId": "aoGetAllClusters",
+        "summary": "Get all clusters",
+        "description": "Retrieves all available Kubernetes clusters with their metadata, metrics, and health information.",
+        "responses": {
+          "200": {
+            "description": "Clusters retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "clusters": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": { "type": "string", "example": "local-dev" },
+                              "name": { "type": "string", "example": "GKE Cluster (local)" },
+                              "location": { "type": "string", "example": "local" },
+                              "status": { "type": "string", "example": "running" },
+                              "metrics": {
+                                "type": "object",
+                                "properties": {
+                                  "namespaces": { "type": "number", "example": 5 },
+                                  "nodes": { "type": "number", "example": 1 },
+                                  "pods": {
+                                    "type": "object",
+                                    "properties": {
+                                      "total": { "type": "number", "example": 9 },
+                                      "running": { "type": "number", "example": 9 }
+                                    }
+                                  }
+                                }
+                              },
+                              "workloads": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": { "type": "string", "example": "pod-name" },
+                                    "namespace": { "type": "string", "example": "default" },
+                                    "type": { "type": "string", "example": "unknown" }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "count": { "type": "number", "example": 1 }
+                      }
+                    },
+                    "message": { "type": "string", "example": "Clusters retrieved successfully" }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "description": "Failed to retrieve clusters" }
+        }
+      }
+    },
+    "/accessio_ops/clusters/{id}": {
+      "get": {
+        "tags": ["Accessio Operations - Cluster"],
+        "operationId": "aoGetClusterById",
+        "summary": "Get cluster by ID",
+        "description": "Retrieves detailed information about a specific cluster including workloads, networking, and metrics.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Cluster ID or name",
+            "schema": {
+              "type": "string",
+              "example": "local-dev"
+            }
+          },
+          {
+            "name": "serviceAccountToken",
+            "in": "header",
+            "required": false,
+            "description": "Kubernetes service account token for authentication (optional - uses configured token if not provided)",
+            "schema": {
+              "type": "string",
+              "example": "eyJhbGciOiJSUzI1NiIs..."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cluster retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "cluster": {
+                          "$ref": "#/components/schemas/DetailedCluster"
+                        },
+                        "metadata": {
+                          "$ref": "#/components/schemas/ResponseMetadata"
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Cluster retrieved successfully"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid cluster ID." },
+          "404": { "description": "Cluster not found." },
+          "500": { "description": "Failed to retrieve cluster." }
+        }
+      }
+    },
+    "/accessio_ops/clusters/health": {
+      "get": {
+        "tags": ["Accessio Operations - Cluster"],
+        "operationId": "aoGetClusterHealth",
+        "summary": "Get cluster health",
+        "description": "Performs a comprehensive health check on the cluster including API server responsiveness and node availability.",
+        "parameters": [
+          {
+            "name": "serviceAccountToken",
+            "in": "header",
+            "required": false,
+            "description": "Kubernetes service account token for authentication (optional - uses configured token if not provided)",
+            "schema": {
+              "type": "string",
+              "example": "eyJhbGciOiJSUzI1NiIs..."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Health check completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "health": {
+                          "$ref": "#/components/schemas/ClusterHealth"
+                        },
+                        "metadata": {
+                          "$ref": "#/components/schemas/ResponseMetadata"
+                        }
+                      }
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Cluster is healthy"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Authentication required." },
+          "403": { "description": "Permission denied." },
+          "500": { "description": "Health check failed." }
+        }
+      }
+    },
+    "/accessio_ops/cluster/info": {
+      "get": {
+        "tags": ["Accessio Operations - Cluster Management"],
+        "operationId": "aoGetClusterInfo",
+        "summary": "Get cluster metadata and nodes",
+        "description": "Retrieves cluster information including metadata, node count, and system details. Fast endpoint for cluster overview.",
+        "responses": {
+          "200": {
+            "description": "Cluster information retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "example": "local-dev",
+                          "description": "Unique cluster identifier"
+                        },
+                        "name": {
+                          "type": "string",
+                          "example": "Local Development Cluster",
+                          "description": "Human-readable cluster name"
+                        },
+                        "nodesCount": {
+                          "type": "integer",
+                          "example": 1,
+                          "description": "Number of nodes in the cluster"
+                        },
+                        "version": {
+                          "type": "string",
+                          "example": "v1.28.2",
+                          "description": "Kubernetes version"
+                        },
+                        "platform": {
+                          "type": "string",
+                          "example": "docker-desktop",
+                          "description": "Platform/infrastructure type"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "description": "Internal server error" }
+        }
+      }
+    },
+    "/accessio_ops/cluster/namespaces": {
+      "get": {
+        "tags": ["Accessio Operations - Cluster Management"],
+        "operationId": "aoGetClusterNamespaces",
+        "summary": "Get filtered namespaces",
+        "description": "Retrieves Kubernetes namespaces with automatic filtering of system namespaces. Fast endpoint for namespace listing.",
+        "responses": {
+          "200": {
+            "description": "Namespaces retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "namespaces": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "example": "prod-iga",
+                                "description": "Namespace name"
+                              },
+                              "status": {
+                                "type": "string",
+                                "example": "Active",
+                                "description": "Namespace status"
+                              },
+                              "creationTime": {
+                                "type": "string",
+                                "format": "date-time",
+                                "example": "2024-01-15T10:30:00Z",
+                                "description": "Namespace creation timestamp"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "description": "Internal server error" }
+        }
+      }
+    },
+    "/accessio_ops/cluster/workloads": {
+      "get": {
+        "tags": ["Accessio Operations - Cluster Management"],
+        "operationId": "aoGetClusterWorkloads",
+        "summary": "Get workloads and pods",
+        "description": "Retrieves all workloads (deployments, statefulsets, cronjobs) and their pod status. Medium performance endpoint with detailed workload information.",
+        "responses": {
+          "200": {
+            "description": "Workloads retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "workloads": {
+                          "type": "object",
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/components/schemas/Workload"
+                              }
+                            },
+                            "total": {
+                              "type": "integer",
+                              "example": 5,
+                              "description": "Total number of workloads"
+                            }
+                          }
+                        },
+                        "summary": {
+                          "type": "object",
+                          "properties": {
+                            "deployments": {
+                              "type": "integer",
+                              "example": 4
+                            },
+                            "statefulSets": {
+                              "type": "integer",
+                              "example": 1
+                            },
+                            "cronJobs": {
+                              "type": "integer",
+                              "example": 0
+                            },
+                            "pods": {
+                              "type": "integer",
+                              "example": 6
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "description": "Internal server error" }
+        }
+      }
+    },
+    "/accessio_ops/cluster": {
+      "get": {
+        "tags": ["Accessio Operations - Configuration"],
+        "operationId": "aoGetClusterConfiguration",
+        "summary": "Get cluster configuration",
+        "description": "Retrieves cluster connection configuration and settings for the configuration panel.",
+        "responses": {
+          "200": {
+            "description": "Cluster configuration retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "connection": {
+                          "$ref": "#/components/schemas/ClusterConnection"
+                        },
+                        "connectionStatus": {
+                          "$ref": "#/components/schemas/ConnectionStatus"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "description": "Internal server error" }
+        }
+      }
+    },
+    "/accessio_ops/cluster/config/filters": {
+      "get": {
+        "tags": ["Accessio Operations - Configuration"],
+        "operationId": "aoGetClusterFilterConfig",
+        "summary": "Get cluster filter configuration",
+        "description": "Retrieves saved cluster, namespace, and workload filter selections.",
+        "responses": {
+          "200": {
+            "description": "Filter configuration retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "clusterNames": {
+                          "type": "array",
+                          "items": { "type": "string" },
+                          "example": ["local-dev"],
+                          "description": "Selected cluster names"
+                        },
+                        "namespaces": {
+                          "type": "array",
+                          "items": { "type": "string" },
+                          "example": ["prod-iga", "prod"],
+                          "description": "Selected namespace names"
+                        },
+                        "workloads": {
+                          "type": "array",
+                          "items": { "type": "string" },
+                          "example": ["iga-api", "jobserver"],
+                          "description": "Selected workload names"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "description": "Internal server error" }
+        }
+      },
+      "put": {
+        "tags": ["Accessio Operations - Configuration"],
+        "operationId": "aoSaveClusterFilterConfig",
+        "summary": "Save cluster filter configuration",
+        "description": "Saves cluster, namespace, and workload filter selections to module configuration.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["configKey", "configValue"],
+                "properties": {
+                  "configKey": {
+                    "type": "string",
+                    "example": "cluster_filter_custom",
+                    "description": "Configuration key identifier"
+                  },
+                  "configValue": {
+                    "type": "object",
+                    "properties": {
+                      "clusterNames": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "example": ["local-dev"]
+                      },
+                      "namespaces": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "example": ["prod-iga", "prod"]
+                      },
+                      "workloads": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "example": ["iga-api", "jobserver"]
+                      }
+                    }
+                  },
+                  "description": {
+                    "type": "string",
+                    "example": "Custom cluster filter selections saved by user",
+                    "description": "Optional description for the configuration"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Filter configuration saved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Configuration saved successfully"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Invalid request data" },
+          "500": { "description": "Internal server error" }
+        }
+      }
+    },
+    "/accessio_ops/cluster/pods/errors": {
+      "get": {
+        "tags": ["Accessio Operations - Cluster Management"],
+        "operationId": "aoGetPodErrors",
+        "summary": "Get pod errors",
+        "description": "Retrieves error information for pods. Returns all pods with errors if no pod name specified, or detailed errors for a specific pod.",
+        "parameters": [
+          {
+            "name": "podName",
+            "in": "query",
+            "required": false,
+            "description": "Optional: Name of specific pod to check for errors (returns all error pods if not specified)",
+            "schema": {
+              "type": "string",
+              "example": "iga-api-5f8d9b7c9-abc123"
+            }
+          },
+          {
+            "name": "namespace",
+            "in": "query",
+            "required": false,
+            "description": "Optional namespace to search in (searches all namespaces if not provided)",
+            "schema": {
+              "type": "string",
+              "example": "prod-iga"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pod errors retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "description": "Response when podName is specified",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "example": "iga-api-5f8d9b7c9-abc123",
+                              "description": "Pod name"
+                            },
+                            "namespace": {
+                              "type": "string",
+                              "example": "prod-iga",
+                              "description": "Pod namespace"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "example": "Failed",
+                              "description": "Pod phase"
+                            },
+                            "hasErrors": {
+                              "type": "boolean",
+                              "example": true,
+                              "description": "Whether the pod has any errors"
+                            },
+                            "errors": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": ["phase_error", "container_waiting", "container_terminated", "ready_condition", "image_pull_error"],
+                                    "example": "image_pull_error",
+                                    "description": "Type of error"
+                                  },
+                                  "severity": {
+                                    "type": "string",
+                                    "enum": ["critical", "warning", "info"],
+                                    "example": "critical",
+                                    "description": "Error severity level"
+                                  },
+                                  "message": {
+                                    "type": "string",
+                                    "example": "Image pull error for container: iga-api",
+                                    "description": "Error message"
+                                  },
+                                  "details": {
+                                    "type": "string",
+                                    "example": "Failed to pull image: nonexistent-image:latest",
+                                    "description": "Detailed error information"
+                                  },
+                                  "container": {
+                                    "type": "string",
+                                    "example": "iga-api",
+                                    "description": "Container name (if applicable)"
+                                  },
+                                  "exitCode": {
+                                    "type": "integer",
+                                    "example": 125,
+                                    "description": "Container exit code (if terminated)"
+                                  }
+                                }
+                              }
+                            },
+                            "restartCount": {
+                              "type": "integer",
+                              "example": 3,
+                              "description": "Total restart count across all containers"
+                            },
+                            "creationTime": {
+                              "type": "string",
+                              "format": "date-time",
+                              "example": "2024-01-15T10:30:00Z",
+                              "description": "Pod creation timestamp"
+                            },
+                            "nodeName": {
+                              "type": "string",
+                              "example": "node-1",
+                              "description": "Node where pod is scheduled"
+                            },
+                            "podIP": {
+                              "type": "string",
+                              "example": "10.244.0.5",
+                              "description": "Pod IP address"
+                            },
+                            "containerStatuses": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string",
+                                    "example": "iga-api"
+                                  },
+                                  "ready": {
+                                    "type": "boolean",
+                                    "example": false
+                                  },
+                                  "restartCount": {
+                                    "type": "integer",
+                                    "example": 3
+                                  },
+                                  "image": {
+                                    "type": "string",
+                                    "example": "nonexistent-image:latest"
+                                  },
+                                  "imageID": {
+                                    "type": "string",
+                                    "example": "docker.io/library/nonexistent-image@sha123"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "description": "Response when no podName specified (all error pods)",
+                          "properties": {
+                            "podErrors": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string",
+                                    "example": "iga-api-5f8d9b7c9-abc123",
+                                    "description": "Pod name"
+                                  },
+                                  "namespace": {
+                                    "type": "string",
+                                    "example": "prod-iga",
+                                    "description": "Pod namespace"
+                                  },
+                                  "phase": {
+                                    "type": "string",
+                                    "example": "Failed",
+                                    "description": "Pod phase"
+                                  },
+                                  "hasErrors": {
+                                    "type": "boolean",
+                                    "example": true,
+                                    "description": "Whether the pod has any errors"
+                                  },
+                                  "errors": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "enum": ["phase_error", "container_waiting", "container_terminated", "ready_condition", "image_pull_error"],
+                                          "example": "image_pull_error"
+                                        },
+                                        "severity": {
+                                          "type": "string",
+                                          "enum": ["critical", "warning", "info"],
+                                          "example": "critical"
+                                        },
+                                        "message": {
+                                          "type": "string",
+                                          "example": "Image pull error for container: iga-api"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "restartCount": {
+                                    "type": "integer",
+                                    "example": 3
+                                  }
+                                }
+                              }
+                            },
+                            "summary": {
+                              "type": "object",
+                              "properties": {
+                                "totalPods": {
+                                  "type": "integer",
+                                  "example": 15,
+                                  "description": "Total number of pods in cluster"
+                                },
+                                "errorPods": {
+                                  "type": "integer",
+                                  "example": 3,
+                                  "description": "Number of pods with errors"
+                                },
+                                "errorTypes": {
+                                  "type": "object",
+                                  "properties": {
+                                    "phase_error": {
+                                      "type": "integer",
+                                      "example": 1,
+                                      "description": "Pods with Failed/Error/CrashLoopBackOff phase"
+                                    },
+                                    "container_waiting": {
+                                      "type": "integer",
+                                      "example": 1,
+                                      "description": "Pods with containers in waiting state"
+                                    },
+                                    "container_terminated": {
+                                      "type": "integer",
+                                      "example": 0,
+                                      "description": "Pods with terminated containers"
+                                    },
+                                    "ready_condition": {
+                                      "type": "integer",
+                                      "example": 0,
+                                      "description": "Pods failing ready condition"
+                                    },
+                                    "image_pull_error": {
+                                      "type": "integer",
+                                      "example": 1,
+                                      "description": "Pods with ImagePullBackOff errors"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "Pod not found (when podName is specified)" },
+          "500": { "description": "Internal server error" }
         }
       }
     }

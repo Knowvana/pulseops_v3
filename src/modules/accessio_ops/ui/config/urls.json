@@ -10,6 +10,7 @@
     "clusterInfo":          "/api/accessio_ops/cluster/info",
     "clusterNamespaces":    "/api/accessio_ops/cluster/namespaces",
     "clusterWorkloads":     "/api/accessio_ops/cluster/workloads",
+    "clusterMetrics":       "/api/accessio_ops/cluster/metrics",
     "testCluster":          "/api/accessio_ops/cluster/test",
 
     "dashboard":           "/api/accessio_ops/dashboard",

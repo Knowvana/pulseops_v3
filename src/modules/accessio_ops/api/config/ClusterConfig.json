@@ -4,7 +4,8 @@
     "serviceAccountToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6IlJXZUF5QmU3V0k5eDkzbXlpMlpKdlFzWWN5YWJIYXlwcFpiZ3JJMjdyaDAifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJkZWZhdWx0Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZWNyZXQubmFtZSI6ImFjY2Vzc2lvLXNlcnZpY2UtcGVybWFuZW50LXRva2VuIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQubmFtZSI6ImFjY2Vzc2lvLXNlcnZpY2UiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC51aWQiOiJiNzJiZjExMi0xMGFiLTQ1MzMtYmQ5OC05OTUwN2I1MTBmMTgiLCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6ZGVmYXVsdDphY2Nlc3Npby1zZXJ2aWNlIn0.OXuYv-43mNh0AVYOyjBIVacf0rMKSIZjCzdqIyjHnXDjSlhgUYS06cJrBK4b-f1_q870Mk8klAV_7eg0eCqV-3W0hKnZF4octEWj5UcaWdh5kOpHSknH2qKCsjfAHgOdkP5o8k5Q-9Gb6fFz4tpYzd7aONwV8hzaXEyHuNJVCJRHliLUIDaMdaVUG_EcNuSt1wBbS1qqn1OClAiHvAXELn8oA9mbG18r0zKiW97Q4VIIkPz8OcBWa0FCsnmcU5qP4lZrBJoYrHOfLay1x4FdeGR65rs8ARCcZX6knvjPkUifpXO8-sS8KKMX4GQFwi9vtEXCrbfveqtWlynb6Gp4-w",
     "projectId": "local-dev",
     "region": "local",
-    "clusterName": "prod1-cluster"
+    "clusterName": "prod1-cluster",
+    "skipTLSVerify": true
   },
   "connectionStatus": {
     "isConfigured": true,

@@ -35,6 +35,46 @@
     "subtitle": "Centralized operations overview for the Accessio identity platform.",
     "placeholder": "Dashboard features will be added incrementally."
   },
+  "workloads": {
+    "title": "Workloads Management",
+    "subtitle": "View, monitor, and manage Kubernetes workloads.",
+    "noData": "No workloads found.",
+    "loading": "Loading workloads...",
+    "error": "Error loading workloads",
+    "searchPlaceholder": "Search workloads...",
+    "columns": {
+      "name": "Name",
+      "namespace": "Namespace",
+      "type": "Type",
+      "status": "Status",
+      "ready": "Ready",
+      "total": "Total",
+      "age": "Age",
+      "actions": "Actions"
+    },
+    "actions": {
+      "restart": "Restart",
+      "restartConfirm": "Are you sure you want to restart this workload?",
+      "view": "View",
+      "edit": "Edit",
+      "logs": "Logs"
+    },
+    "status": {
+      "running": "Running",
+      "pending": "Pending",
+      "failed": "Failed",
+      "unknown": "Unknown"
+    },
+    "pagination": {
+      "showing": "Showing",
+      "to": "to",
+      "of": "of",
+      "results": "results",
+      "previous": "Previous",
+      "next": "Next",
+      "page": "Page"
+    }
+  },
   "config": {
     "title": "Accessio Operations Configuration",
     "subtitle": "Configure module settings and manage data.",

@@ -25,7 +25,7 @@ import { Router } from 'express';
 import { getConfigFile, saveConfigFile } from '../services/ModuleConfigService.js';
 import { testConnection, getK8sCoreApi } from '../lib/KubernetesClient.js';
 import { createAoLogger } from '../lib/moduleLogger.js';
-import { getClusterInfo, getNamespaces, getWorkloads } from '../services/ClusterService.js';
+import { getClusterInfo, getNamespaces, getWorkloads, getWorkloadsMetrics } from '../services/ClusterService.js';
 import { saveModuleConfig, loadModuleConfig } from './helpers.js';
 
 const log = createAoLogger('clusterRoutes.js');
@@ -158,6 +158,48 @@ router.get('/cluster/workloads', async (req, res) => {
       error: {
         code: 'WORKLOADS_FETCH_FAILED',
         message: 'Failed to retrieve workloads',
+        details: err.message
+      }
+    });
+  }
+});
+
+// ── GET /cluster/metrics — Get live CPU/memory metrics for workloads ─────────────────
+router.get('/cluster/metrics', async (req, res) => {
+  const startTime = Date.now();
+  
+  try {
+    log.info('GET /cluster/metrics request received', { startTime });
+
+    const metrics = await getWorkloadsMetrics();
+
+    const response = {
+      success: true,
+      data: metrics,
+      metadata: {
+        fetchedAt: new Date().toISOString(),
+        duration: Date.now() - startTime
+      }
+    };
+
+    log.info('GET /cluster/metrics completed successfully', {
+      duration: Date.now() - startTime,
+      workloadCount: metrics.workloads?.length || 0
+    });
+
+    res.status(200).json(response);
+
+  } catch (err) {
+    log.error('GET /cluster/metrics failed', {
+      error: err.message,
+      duration: Date.now() - startTime
+    });
+
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'METRICS_FETCH_FAILED',
+        message: 'Failed to retrieve workload metrics',
         details: err.message
       }
     });

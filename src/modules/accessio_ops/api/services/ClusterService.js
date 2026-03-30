@@ -20,12 +20,71 @@
 //   - getAllClusters()     → Legacy combined function (deprecated - not exported)
 //   - testClusterHealth()  → Cluster health check (not exported)
 // ============================================================================
-import { getK8sCoreApi, getK8sAppsApi, getK8sAutoscalingApi, getK8sBatchApi } from '../lib/KubernetesClient.js';
+import { getK8sCoreApi, getK8sAppsApi, getK8sAutoscalingApi, getK8sBatchApi, getK8sMetricsApi } from '../lib/KubernetesClient.js';
 import { getConfigFile } from './ModuleConfigService.js';
 import { createAoLogger } from '../lib/moduleLogger.js';
 import { loadModuleConfig } from '../routes/helpers.js';
 
 const log = createAoLogger('ClusterService');
+
+// Helper function to extract container resources
+function extractContainerResources(containers) {
+  if (!containers || !Array.isArray(containers)) return null;
+  
+  const totalRequests = { cpu: '0', memory: '0' };
+  const totalLimits = { cpu: '0', memory: '0' };
+  
+  containers.forEach(container => {
+    // Sum up requests
+    if (container.resources?.requests) {
+      totalRequests.cpu = addCpuValues(totalRequests.cpu, container.resources.requests.cpu || '0');
+      totalRequests.memory = addMemoryValues(totalRequests.memory, container.resources.requests.memory || '0');
+    }
+    
+    // Sum up limits
+    if (container.resources?.limits) {
+      totalLimits.cpu = addCpuValues(totalLimits.cpu, container.resources.limits.cpu || '0');
+      totalLimits.memory = addMemoryValues(totalLimits.memory, container.resources.limits.memory || '0');
+    }
+  });
+  
+  return {
+    requests: totalRequests,
+    limits: totalLimits
+  };
+}
+
+// Helper function to add CPU values (handles millicores)
+function addCpuValues(value1, value2) {
+  const parseCpu = (cpu) => {
+    if (!cpu) return 0;
+    if (cpu.toString().endsWith('m')) {
+      return parseInt(cpu.toString().replace('m', ''));
+    }
+    return parseInt(cpu.toString()) * 1000; // Convert cores to millicores
+  };
+  
+  const sum = parseCpu(value1) + parseCpu(value2);
+  return sum >= 1000 ? `${sum / 1000}` : `${sum}m`;
+}
+
+// Helper function to add memory values (handles Ki, Mi, Gi)
+function addMemoryValues(value1, value2) {
+  const parseMemory = (mem) => {
+    if (!mem) return 0;
+    const memStr = mem.toString();
+    if (memStr.endsWith('Ki')) return parseInt(memStr.replace('Ki', '')) / 1024;
+    if (memStr.endsWith('Mi')) return parseInt(memStr.replace('Mi', ''));
+    if (memStr.endsWith('Gi')) return parseInt(memStr.replace('Gi', '')) * 1024;
+    if (memStr.endsWith('K')) return parseInt(memStr.replace('K', '')) / 1024;
+    if (memStr.endsWith('M')) return parseInt(memStr.replace('M', ''));
+    if (memStr.endsWith('G')) return parseInt(memStr.replace('G', '')) * 1024;
+    return parseInt(memStr);
+  };
+  
+  const sum = parseMemory(value1) + parseMemory(value2);
+  return `${sum}Mi`; // Always return in Mi for consistency
+}
 
 /**
  * Get filtered namespaces (excluding core/system namespaces)
@@ -258,7 +317,8 @@ export async function getWorkloads() {
           total: totalReplicas
         },
         creationTime: deployment.metadata.creationTimestamp,
-        labels: deployment.metadata.labels || {}
+        labels: deployment.metadata.labels || {},
+        resources: extractContainerResources(deployment.spec.template.spec.containers)
       });
     });
     
@@ -291,7 +351,8 @@ export async function getWorkloads() {
           total: totalReplicas
         },
         creationTime: statefulSet.metadata.creationTimestamp,
-        labels: statefulSet.metadata.labels || {}
+        labels: statefulSet.metadata.labels || {},
+        resources: extractContainerResources(statefulSet.spec.template.spec.containers)
       });
     });
     
@@ -619,4 +680,311 @@ export async function testClusterHealth() {
       testedAt: new Date().toISOString()
     };
   }
+}
+
+/**
+ * Get live CPU/memory metrics for workloads using metrics server
+ * @returns {Promise<Object>} Workload metrics data
+ */
+export async function getWorkloadsMetrics() {
+  const startTime = Date.now();
+  
+  try {
+    log.debug('Getting workload metrics', { startTime });
+    
+    const config = await getConfigFile();
+    
+    // Use existing helper functions - no hardcoded client initialization
+    const coreApi = await getK8sCoreApi(config.connection);
+    
+    // Get all pod metrics via Metrics API (works for both Kind and GKE)
+    let allPodMetrics = [];
+    try {
+      const metricsApi = getK8sMetricsApi(config.connection);
+      const metricsResponse = await metricsApi.getPodMetrics();
+      allPodMetrics = metricsResponse.items || [];
+      
+      log.debug('Pod metrics fetched', { 
+        totalMetrics: allPodMetrics.length,
+        sampleMetrics: allPodMetrics.slice(0, 3).map(m => ({
+          name: m.metadata.name,
+          namespace: m.metadata.namespace,
+          cpu: m.containers?.[0]?.usage?.cpu,
+          memory: m.containers?.[0]?.usage?.memory
+        }))
+      });
+    } catch (metricsErr) {
+      log.warn('Failed to fetch pod metrics', { error: metricsErr.message });
+      allPodMetrics = [];
+    }
+    
+    // Get all running pods for workload mapping
+    const podsResponse = await coreApi.listPodForAllNamespaces();
+    const allPods = podsResponse.items || podsResponse.body?.items || [];
+    
+    log.debug('Pods fetched', { 
+      totalPods: allPods.length,
+      runningPods: allPods.filter(p => p.status.phase === 'Running').length
+    });
+    
+    // Create metrics lookup map
+    const metricsMap = new Map();
+    allPodMetrics.forEach(podMetric => {
+      const key = `${podMetric.metadata.namespace}/${podMetric.metadata.name}`;
+      metricsMap.set(key, podMetric);
+    });
+    
+    // Group pods by workload (deployment/statefulset/cronjob)
+    const workloadMetrics = new Map();
+    
+    for (const pod of allPods) {
+      // Skip pods that are not running
+      if (pod.status.phase !== 'Running') continue;
+      
+      // Get metrics for this pod
+      const podMetric = metricsMap.get(`${pod.metadata.namespace}/${pod.metadata.name}`);
+      if (!podMetric) continue; // Skip if no metrics available
+      
+      // Identify workload from pod labels
+      // 1. Try common labels first
+      // 2. For StatefulSets, look at controller-revision-hash or statefulset.kubernetes.io/pod-name
+      // 3. For Deployments, use pod-template-hash to find the replica set, or just use the prefix before the hash
+      
+      let workloadName = '';
+      
+      // Determine the owner of this pod to map it correctly to a workload
+      if (pod.metadata.ownerReferences && pod.metadata.ownerReferences.length > 0) {
+        const owner = pod.metadata.ownerReferences[0];
+        
+        if (owner.kind === 'ReplicaSet') {
+          // For ReplicaSets (which belong to Deployments), the Deployment name is usually 
+          // the ReplicaSet name minus the last hash part
+          const rsNameParts = owner.name.split('-');
+          if (rsNameParts.length > 1) {
+            workloadName = rsNameParts.slice(0, -1).join('-');
+          } else {
+            workloadName = owner.name;
+          }
+        } else if (owner.kind === 'StatefulSet' || owner.kind === 'DaemonSet' || owner.kind === 'Job') {
+          workloadName = owner.name;
+        } else {
+          workloadName = owner.name;
+        }
+      } else {
+        // Fallback to labels if no owner reference (e.g., bare pods)
+        if (pod.metadata.labels?.['app.kubernetes.io/instance']) {
+          workloadName = pod.metadata.labels['app.kubernetes.io/instance'];
+        } else if (pod.metadata.labels?.['app']) {
+          workloadName = pod.metadata.labels['app'];
+        } else if (pod.metadata.labels?.['app.kubernetes.io/name']) {
+          workloadName = pod.metadata.labels['app.kubernetes.io/name'];
+        } else if (pod.metadata.labels?.['k8s-app']) {
+          workloadName = pod.metadata.labels['k8s-app'];
+        } else if (pod.metadata.labels?.['name']) {
+          workloadName = pod.metadata.labels['name'];
+        } else {
+          // Absolute fallback: use pod name prefix
+          const parts = pod.metadata.name.split('-');
+          workloadName = parts.length > 2 ? parts.slice(0, -2).join('-') : parts[0];
+        }
+      }
+
+      const namespace = pod.metadata.namespace;
+      const workloadKey = `${namespace}/${workloadName}`;
+      
+      if (!workloadMetrics.has(workloadKey)) {
+        workloadMetrics.set(workloadKey, {
+          name: workloadName,
+          namespace: namespace,
+          type: getWorkloadTypeFromLabels(pod.metadata.labels),
+          pods: [],
+          totalCpuUsage: 0,
+          totalMemoryUsage: 0,
+          cpuRequests: 0,
+          memoryRequests: 0,
+          cpuLimits: 0,
+          memoryLimits: 0
+        });
+      }
+      
+      const workload = workloadMetrics.get(workloadKey);
+      
+      // Parse pod metrics
+      const podMetricsData = parsePodMetrics(podMetric);
+      
+      // Add pod data
+      workload.pods.push({
+        name: pod.metadata.name,
+        cpuUsage: podMetricsData.cpuUsage,
+        memoryUsage: podMetricsData.memoryUsage,
+        cpuRequest: podMetricsData.cpuRequest,
+        memoryRequest: podMetricsData.memoryRequest,
+        cpuLimit: podMetricsData.cpuLimit,
+        memoryLimit: podMetricsData.memoryLimit
+      });
+      
+      // Aggregate totals
+      workload.totalCpuUsage += podMetricsData.cpuUsage;
+      workload.totalMemoryUsage += podMetricsData.memoryUsage;
+      workload.cpuRequests += podMetricsData.cpuRequest;
+      workload.memoryRequests += podMetricsData.memoryRequest;
+      workload.cpuLimits += podMetricsData.cpuLimit;
+      workload.memoryLimits += podMetricsData.memoryLimit;
+    }
+    
+    const result = {
+      workloads: Array.from(workloadMetrics.values()),
+      summary: {
+        totalWorkloads: workloadMetrics.size,
+        totalPods: allPods.filter(p => p.status.phase === 'Running').length,
+        totalCpuUsage: Array.from(workloadMetrics.values()).reduce((sum, w) => sum + w.totalCpuUsage, 0),
+        totalMemoryUsage: Array.from(workloadMetrics.values()).reduce((sum, w) => sum + w.totalMemoryUsage, 0),
+        fetchedAt: new Date().toISOString()
+      }
+    };
+    
+    log.info('Workload metrics retrieved successfully', {
+      duration: Date.now() - startTime,
+      workloadCount: result.workloads.length,
+      totalPods: result.summary.totalPods,
+      workloads: result.workloads.map(w => ({
+        name: w.name,
+        namespace: w.namespace,
+        totalCpuUsage: w.totalCpuUsage,
+        totalMemoryUsage: w.totalMemoryUsage,
+        podCount: w.pods.length
+      }))
+    });
+    
+    return result;
+    
+  } catch (err) {
+    log.error('Failed to get workload metrics', {
+      error: err.message,
+      stack: err.stack,
+      duration: Date.now() - startTime
+    });
+    
+    // Return empty metrics on error (graceful degradation)
+    return {
+      workloads: [],
+      summary: {
+        totalWorkloads: 0,
+        totalPods: 0,
+        totalCpuUsage: 0,
+        totalMemoryUsage: 0,
+        fetchedAt: new Date().toISOString(),
+        error: err.message
+      }
+    };
+  }
+}
+
+/**
+ * Parse pod metrics from metrics API response
+ * @param {Object} podMetric - Pod metrics from metrics API
+ * @returns {Object} Parsed metrics
+ */
+function parsePodMetrics(podMetric) {
+  const defaultMetrics = {
+    cpuUsage: 0,
+    memoryUsage: 0,
+    cpuRequest: 0,
+    memoryRequest: 0,
+    cpuLimit: 0,
+    memoryLimit: 0
+  };
+  
+  try {
+    let cpuUsage = 0;
+    let memoryUsage = 0;
+    
+    if (podMetric.containers) {
+      for (const container of podMetric.containers) {
+        // Parse CPU usage
+        if (container.usage?.cpu) {
+          const cpuStr = container.usage.cpu.toString();
+          if (cpuStr.endsWith('n')) {
+            // nanocores to millicores: divide by 1,000,000
+            const nanos = parseInt(cpuStr.replace('n', ''));
+            cpuUsage += nanos / 1000000;
+          } else if (cpuStr.endsWith('u')) {
+            // microcores to millicores: divide by 1,000
+            const micros = parseInt(cpuStr.replace('u', ''));
+            cpuUsage += micros / 1000;
+          } else if (cpuStr.endsWith('m')) {
+            // already millicores
+            cpuUsage += parseInt(cpuStr.replace('m', ''));
+          } else {
+            // assume cores, convert to millicores
+            cpuUsage += parseFloat(cpuStr) * 1000;
+          }
+        }
+        
+        // Parse memory usage
+        if (container.usage?.memory) {
+          const memStr = container.usage.memory.toString();
+          if (memStr.endsWith('Ki')) {
+            // kibibytes to mebibytes: divide by 1024
+            const ki = parseInt(memStr.replace('Ki', ''));
+            memoryUsage += ki / 1024;
+          } else if (memStr.endsWith('Mi')) {
+            // already mebibytes
+            memoryUsage += parseInt(memStr.replace('Mi', ''));
+          } else if (memStr.endsWith('Gi')) {
+            // gibibytes to mebibytes: multiply by 1024
+            const gi = parseInt(memStr.replace('Gi', ''));
+            memoryUsage += gi * 1024;
+          } else if (memStr.endsWith('k')) {
+            // kilobytes to mebibytes: divide by 1024*1024
+            const k = parseInt(memStr.replace('k', ''));
+            memoryUsage += k / (1024 * 1024);
+          } else if (memStr.endsWith('M')) {
+            // megabytes to mebibytes (approximately equal)
+            memoryUsage += parseInt(memStr.replace('M', ''));
+          } else if (memStr.endsWith('G')) {
+            // gigabytes to mebibytes: multiply by 1000
+            const g = parseInt(memStr.replace('G', ''));
+            memoryUsage += g * 1000;
+          } else {
+            // assume bytes, convert to mebibytes: divide by 1024*1024
+            const bytes = parseInt(memStr);
+            memoryUsage += bytes / (1024 * 1024);
+          }
+        }
+      }
+    }
+    
+    return {
+      cpuUsage: Math.round(cpuUsage * 100) / 100, // Round to 2 decimal places
+      memoryUsage: Math.round(memoryUsage * 100) / 100, // Round to 2 decimal places
+      cpuRequest: defaultMetrics.cpuRequest,
+      memoryRequest: defaultMetrics.memoryRequest,
+      cpuLimit: defaultMetrics.cpuLimit,
+      memoryLimit: defaultMetrics.memoryLimit
+    };
+    
+  } catch (err) {
+    log.debug('Failed to parse pod metrics', { error: err.message });
+    return defaultMetrics;
+  }
+}
+
+/**
+ * Determine workload type from pod labels
+ * @param {Object} labels - Pod labels
+ * @returns {string} Workload type
+ */
+function getWorkloadTypeFromLabels(labels) {
+  if (!labels) return 'Unknown';
+  
+  // Check for common workload type labels
+  if (labels['app.kubernetes.io/managed-by'] === 'Helm') return 'Deployment';
+  if (labels['controller-revision-hash']) return 'StatefulSet';
+  if (labels['cronjob-name']) return 'CronJob';
+  if (labels['job-name']) return 'Job';
+  if (labels['daemonset']) return 'DaemonSet';
+  
+  // Default to Deployment for most cases
+  return 'Deployment';
 }

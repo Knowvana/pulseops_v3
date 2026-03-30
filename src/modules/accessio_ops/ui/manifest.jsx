@@ -26,13 +26,14 @@
 
 import React from 'react';
 import {
-  LayoutDashboard, Sliders, Settings, Database, Shield, Filter,
+  LayoutDashboard, Sliders, Settings, Database, Shield, Filter, Play,
 } from 'lucide-react';
 import moduleConstants from './config/constants.json';
 import uiText from './config/uiText.json';
 
 // ── View Component References (NOT instances — never call new or pass JSX) ────
 import AccessioOpsDashboard from './components/AccessioOpsDashboard';
+import WorkloadsView from './components/WorkloadsView';
 
 // ── Config Tab Components (lazy-mounted via render functions) ─────────────────
 import ClusterFiltersTab    from './components/Configuration/ClusterFiltersTab';
@@ -54,6 +55,7 @@ const accessioOpsManifest = {
   // ── Sidebar Navigation ─────────────────────────────────────────────────────
   navItems: [
     { id: 'dashboard',     label: navText.dashboard,     icon: LayoutDashboard },
+    { id: 'workloads',     label: 'Workloads',           icon: Play             },
     { type: 'separator' },
     { id: 'config',        label: navText.config,        icon: Sliders         },
   ],
@@ -67,6 +69,7 @@ const accessioOpsManifest = {
    */
   getViews: () => ({
     dashboard:     AccessioOpsDashboard,
+    workloads:     WorkloadsView,
   }),
 
   /**

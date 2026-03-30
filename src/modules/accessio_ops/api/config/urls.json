@@ -9,6 +9,12 @@
     "loadDefaults": "/data/defaults",
     "resetData": "/data/reset",
     "clusterConfig": "/cluster/config",
-    "clusterTest": "/cluster/test"
+    "clusterTest": "/cluster/test",
+    "clusterInfo": "/cluster/info",
+    "clusterNamespaces": "/cluster/namespaces",
+    "clusterWorkloads": "/cluster/workloads",
+    "clusterMetrics": "/cluster/metrics",
+    "clusterPodErrors": "/cluster/pods/errors",
+    "clusterFilters": "/cluster/config/filters"
   }
 }

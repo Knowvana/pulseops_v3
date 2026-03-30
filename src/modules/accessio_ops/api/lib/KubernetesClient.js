@@ -12,31 +12,37 @@ import { loadClusterConfigFile } from '../routes/helpers.js';
 const log = createAoLogger('KubernetesClient.js');
 
 // ── Initialize Kubernetes client with explicit connection parameters ───────────
+// All values come from ClusterConfig.json → connection object.
+// Works for both local Kind clusters and production GKE.
 export function initializeClient(config) {
   try {
     const kc = new k8s.KubeConfig();
     
-    // Use explicit connection parameters from ClusterConfig.json
+    // Derive internal identifiers from the cluster name (these are KubeConfig-internal only)
+    const clusterName = config.clusterName || 'default-cluster';
+    const userName    = `${clusterName}-user`;
+    const contextName = `${clusterName}-context`;
+
     kc.loadFromOptions({
       clusters: [{
-        name: config.clusterName || 'cluster',
+        name: clusterName,
         server: config.apiServerUrl,
-        skipTLSVerify: true,
+        skipTLSVerify: config.skipTLSVerify ?? false,
       }],
       users: [{
-        name: 'pulseops-user',
+        name: userName,
         token: config.serviceAccountToken,
       }],
       contexts: [{
-        name: 'pulseops-context',
-        cluster: config.clusterName || 'cluster',
-        user: 'pulseops-user',
+        name: contextName,
+        cluster: clusterName,
+        user: userName,
       }],
-      currentContext: 'pulseops-context',
+      currentContext: contextName,
     });
 
     log.info('Kubernetes client initialized', { 
-      cluster: config.clusterName,
+      cluster: clusterName,
       server: config.apiServerUrl 
     });
 
@@ -180,4 +186,12 @@ export async function getK8sAutoscalingApi(config) {
 export async function getK8sBatchApi(config) {
   const kc = initializeClient(config);
   return kc.makeApiClient(k8s.BatchV1Api);
+}
+
+// ── Get K8s Metrics API client ───────────────────────────────────────────────
+// NOTE: k8s.Metrics takes KubeConfig directly in its constructor,
+//       it does NOT use kc.makeApiClient(). This works for both Kind and GKE.
+export function getK8sMetricsApi(config) {
+  const kc = initializeClient(config);
+  return new k8s.Metrics(kc);
 }

@@ -8,23 +8,28 @@
 | d | `kubectl delete secret accessio-service-token --ignore-not-found` | **DELETE** existing service account token |
 | e | `kubectl delete clusterrole accessio-cluster-reader --ignore-not-found` | **DELETE** existing cluster role |
 | f | `kubectl delete clusterrolebinding accessio-cluster-reader-binding --ignore-not-found` | **DELETE** existing cluster role binding |
+| g | `kubectl delete -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\00-metrics-server.yaml --ignore-not-found` | **DELETE** existing metrics-server deployment |
 | 1 | `kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\01-kind-clusters.yaml` | **CREATE** Kind cluster |
+| 1.5 | `kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\00-metrics-server.yaml` | **INSTALL** metrics-server for live resource usage |
+| 1.6 | `kubectl top nodes` | **VERIFY** live node resource metrics |
+| 1.7 | `kubectl top pods -A` | **VERIFY** live pod resource metrics |
 | 2 | `kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\02-namespaces.yaml` | **CREATE** namespaces (prod-iga, prod, mail) |
 | 3 | `kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\03-accessio-service-account.yaml` | **CREATE** service account with permissions |
 | 4 | `./generate-permanent-token.ps1` | **GENERATE** permanent service account token |
 | 5 | `kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\06-deployments.yaml` | Deploy Deployment workloads |
 | 6 | `kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\07-statefulsets.yaml` | Deploy StatefulSet workloads |
 | 7 | `kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\08-cronjobs.yaml` | Deploy CronJob workloads |
-| 8 | `kubectl get nodes --show-labels` | Show cluster nodes with labels |
-| 9 | `kubectl get pods -A` | Show pods in cluster |
-| 10 | `kubectl get services -A` | Show services in cluster |
-| 11 | `kubectl cluster-info` | Get cluster information and API server URL |
-| 12 | `curl -X POST http://localhost:4001/api/accessio_ops/cluster/test -H "Content-Type: application/json" -d "{\"apiServerUrl\": \"https://127.0.0.1:64308\", \"projectId\": \"local-dev\"}"` | **TEST** cluster connection via API |
-| 13 | `curl -X GET http://localhost:4001/api/accessio_ops/clusters` | **TEST** get all clusters API |
-| 14 | `curl -X GET http://localhost:4001/api/accessio_ops/clusters/prod1-cluster` | **TEST** get cluster by ID API |
-| 15 | `curl -X GET http://localhost:4001/api/accessio_ops/clusters/health` | **TEST** cluster health API |
-| 16 | `kind delete cluster --name prod1-cluster` | **DELETE** prod1-cluster (cleanup) |
-| 17 | `kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\99-cleanup-all.yaml` | **DELETE ALL** resources (cleanup) |
+| 8 | `kubectl get pods -n kube-system | findstr metrics` | **VERIFY** metrics-server is running |
+| 9 | `kubectl get nodes --show-labels` | Show cluster nodes with labels |
+| 10 | `kubectl get pods -A` | Show pods in cluster |
+| 11 | `kubectl get services -A` | Show services in cluster |
+| 12 | `kubectl cluster-info` | Get cluster information and API server URL |
+| 13 | `curl -X POST http://localhost:4001/api/accessio_ops/cluster/test -H "Content-Type: application/json" -d "{\"apiServerUrl\": \"https://127.0.0.1:64308\", \"projectId\": \"local-dev\"}"` | **TEST** cluster connection via API |
+| 14 | `curl -X GET http://localhost:4001/api/accessio_ops/clusters` | **TEST** get all clusters API |
+| 15 | `curl -X GET http://localhost:4001/api/accessio_ops/clusters/prod1-cluster` | **TEST** get cluster by ID API |
+| 16 | `curl -X GET http://localhost:4001/api/accessio_ops/clusters/health` | **TEST** cluster health API |
+| 17 | `kind delete cluster --name prod1-cluster` | **DELETE** prod1-cluster (cleanup) |
+| 18 | `kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\99-cleanup-all.yaml` | **DELETE ALL** resources (cleanup) |
 
 ## 🚀 Step-by-Step Workflow (Complete Setup Process)
 
@@ -33,7 +38,7 @@
 cd C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman
 ```
 
-### Step 2: Clean Up Existing Resources (Orders b-f)
+### Step 2: Clean Up Existing Resources (Orders b-g)
 ```bash
 # Delete existing Kind cluster
 kind delete cluster --name prod1-cluster --ignore-not-found
@@ -43,6 +48,9 @@ kubectl delete serviceaccount accessio-service --ignore-not-found
 kubectl delete secret accessio-service-token --ignore-not-found
 kubectl delete clusterrole accessio-cluster-reader --ignore-not-found
 kubectl delete clusterrolebinding accessio-cluster-reader-binding --ignore-not-found
+
+# Delete existing metrics-server deployment
+kubectl delete -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\00-metrics-server.yaml --ignore-not-found
 ```
 
 ### Step 3: Create Physical Kind Cluster (Order 1)
@@ -55,7 +63,23 @@ kind get clusters
 kubectl config use-context kind-prod1-cluster
 ```
 
-### Step 4: Create Namespaces (Order 2)
+### Step 4: Install Metrics Server (Order 1.5)
+```bash
+# Install metrics-server for live resource monitoring
+kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\00-metrics-server.yaml
+
+# Verify metrics-server is running
+kubectl get pods -n kube-system | findstr metrics
+```
+
+### Step 5: Verify Metrics Server (Orders 1.6-1.7)
+```bash
+# Test live resource metrics
+kubectl top nodes
+kubectl top pods -A
+```
+
+### Step 6: Create Namespaces (Order 2)
 ```bash
 # Create namespaces with full path
 kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\02-namespaces.yaml
@@ -64,13 +88,13 @@ kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\
 kubectl get namespaces
 ```
 
-### Step 5: Create Service Account and Permissions (Order 3)
+### Step 7: Create Service Account and Permissions (Order 3)
 ```bash
 # Apply service account YAML with full path
 kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\03-accessio-service-account.yaml
 ```
 
-### Step 6: Generate Permanent Service Account Token (Order 4)
+### Step 8: Generate Permanent Service Account Token (Order 4)
 ```bash
 # Generate permanent token using PowerShell script
 ./generate-permanent-token.ps1
@@ -78,7 +102,7 @@ kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\
 # Copy this token to ClusterConfig.json
 ```
 
-### Step 7: Update Cluster Configuration
+### Step 9: Update Cluster Configuration
 ```bash
 # Update the ClusterConfig.json file with:
 # - API Server URL: https://127.0.0.1:64308
@@ -87,7 +111,7 @@ kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\
 # - Cluster Name: prod1-cluster
 ```
 
-### Step 8: Deploy Workloads to Cluster (Orders 5-7)
+### Step 10: Deploy Workloads to Cluster (Orders 5-7)
 ```bash
 # Deploy Deployment workloads with full path
 kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\06-deployments.yaml
@@ -104,7 +128,7 @@ kubectl get services -A
 kubectl get cronjobs -A
 ```
 
-### Step 9: Verify Cluster Information (Orders 8-11)
+### Step 11: Verify Cluster Information (Orders 8-12)
 ```bash
 # Get cluster details
 kubectl get nodes --show-labels
@@ -113,7 +137,7 @@ kubectl get services -A
 kubectl cluster-info
 ```
 
-### Step 10: Test Accessio Operations API (Orders 12-15)
+### Step 12: Test Accessio Operations API (Orders 13-16)
 ```bash
 # Test cluster connection
 curl -X POST http://localhost:4001/api/accessio_ops/cluster/test \
@@ -126,17 +150,20 @@ curl -X GET http://localhost:4001/api/accessio_ops/clusters/prod1-cluster
 curl -X GET http://localhost:4001/api/accessio_ops/clusters/health
 ```
 
-### Step 11: Test in Swagger UI
+### Step 13: Test in Swagger UI
 ```bash
 # Open browser to test API endpoints
 # http://localhost:4001/swagger-ui/
 # Look for "Accessio Operations - Cluster" section
 ```
 
-### Step 12: Cleanup (When Done - Orders 16-17)
+### Step 14: Cleanup (When Done - Orders 17-18)
 ```bash
 # Delete the cluster
 kind delete cluster --name prod1-cluster
+
+# Delete metrics-server specifically
+kubectl delete -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\00-metrics-server.yaml --ignore-not-found
 
 # Or delete all resources with cleanup script
 kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\99-cleanup-all.yaml

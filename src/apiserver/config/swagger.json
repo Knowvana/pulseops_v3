@@ -3,7 +3,11 @@
   "info": {
     "title": "PulseOps V2 API",
     "version": "2.0.0",
-    "description": "Simple API documentation"
+    "description": "Enterprise API for PulseOps V2 - Comprehensive platform for monitoring, managing, and orchestrating Kubernetes clusters, microservices, and operational workflows.",
+    "contact": {
+      "name": "PulseOps Support",
+      "url": "https://pulseops.io"
+    }
   },
   "servers": [
     {
@@ -60,10 +64,10 @@
     },
     "/config/cluster": {
       "get": {
-        "tags": ["Accessio Operations - Config"],
+        "tags": ["Accessio Operations - General Settings"],
         "operationId": "aoGetClusterConfig",
-        "summary": "Get cluster configuration",
-        "description": "Returns the cluster configuration from clusterconfig.json file.",
+        "summary": "Get cluster general settings",
+        "description": "Retrieves general cluster settings and configuration stored in the module database. Used for cluster-level preferences and metadata.",
         "responses": {
           "200": { "description": "Cluster configuration retrieved successfully." },
           "404": { "description": "Configuration file not found." },
@@ -72,10 +76,10 @@
         }
       },
       "put": {
-        "tags": ["Accessio Operations - Config"],
+        "tags": ["Accessio Operations - General Settings"],
         "operationId": "aoSaveClusterConfig",
-        "summary": "Save cluster configuration",
-        "description": "Saves the cluster configuration to clusterconfig.json file.",
+        "summary": "Save cluster general settings",
+        "description": "Saves general cluster settings and configuration to the module database. Updates cluster-level preferences and metadata.",
         "requestBody": {
           "required": true,
           "content": {
@@ -176,10 +180,10 @@
     },
     "/accessio_ops/cluster/test": {
       "post": {
-        "tags": ["Accessio Operations - Cluster"],
+        "tags": ["Accessio Operations - Connection Management"],
         "operationId": "aoTestClusterConnection",
-        "summary": "Test cluster connection",
-        "description": "Tests connectivity to the Kubernetes cluster.",
+        "summary": "Test Kubernetes cluster connectivity",
+        "description": "Validates connectivity to the configured Kubernetes cluster. Tests API server responsiveness and authentication using stored credentials.",
         "requestBody": {
           "required": true,
           "content": {
@@ -221,202 +225,12 @@
         }
       }
     },
-    "/accessio_ops/clusters": {
-      "get": {
-        "tags": ["Accessio Operations - Cluster"],
-        "operationId": "aoGetAllClusters",
-        "summary": "Get all clusters",
-        "description": "Retrieves all available Kubernetes clusters with their metadata, metrics, and health information.",
-        "responses": {
-          "200": {
-            "description": "Clusters retrieved successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "data": {
-                      "type": "object",
-                      "properties": {
-                        "clusters": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "id": { "type": "string", "example": "local-dev" },
-                              "name": { "type": "string", "example": "GKE Cluster (local)" },
-                              "location": { "type": "string", "example": "local" },
-                              "status": { "type": "string", "example": "running" },
-                              "metrics": {
-                                "type": "object",
-                                "properties": {
-                                  "namespaces": { "type": "number", "example": 5 },
-                                  "nodes": { "type": "number", "example": 1 },
-                                  "pods": {
-                                    "type": "object",
-                                    "properties": {
-                                      "total": { "type": "number", "example": 9 },
-                                      "running": { "type": "number", "example": 9 }
-                                    }
-                                  }
-                                }
-                              },
-                              "workloads": {
-                                "type": "array",
-                                "items": {
-                                  "type": "object",
-                                  "properties": {
-                                    "name": { "type": "string", "example": "pod-name" },
-                                    "namespace": { "type": "string", "example": "default" },
-                                    "type": { "type": "string", "example": "unknown" }
-                                  }
-                                }
-                              }
-                            }
-                          }
-                        },
-                        "count": { "type": "number", "example": 1 }
-                      }
-                    },
-                    "message": { "type": "string", "example": "Clusters retrieved successfully" }
-                  }
-                }
-              }
-            }
-          },
-          "500": { "description": "Failed to retrieve clusters" }
-        }
-      }
-    },
-    "/accessio_ops/clusters/{id}": {
-      "get": {
-        "tags": ["Accessio Operations - Cluster"],
-        "operationId": "aoGetClusterById",
-        "summary": "Get cluster by ID",
-        "description": "Retrieves detailed information about a specific cluster including workloads, networking, and metrics.",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "description": "Cluster ID or name",
-            "schema": {
-              "type": "string",
-              "example": "local-dev"
-            }
-          },
-          {
-            "name": "serviceAccountToken",
-            "in": "header",
-            "required": false,
-            "description": "Kubernetes service account token for authentication (optional - uses configured token if not provided)",
-            "schema": {
-              "type": "string",
-              "example": "eyJhbGciOiJSUzI1NiIs..."
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Cluster retrieved successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "data": {
-                      "type": "object",
-                      "properties": {
-                        "cluster": {
-                          "$ref": "#/components/schemas/DetailedCluster"
-                        },
-                        "metadata": {
-                          "$ref": "#/components/schemas/ResponseMetadata"
-                        }
-                      }
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Cluster retrieved successfully"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": { "description": "Invalid cluster ID." },
-          "404": { "description": "Cluster not found." },
-          "500": { "description": "Failed to retrieve cluster." }
-        }
-      }
-    },
-    "/accessio_ops/clusters/health": {
-      "get": {
-        "tags": ["Accessio Operations - Cluster"],
-        "operationId": "aoGetClusterHealth",
-        "summary": "Get cluster health",
-        "description": "Performs a comprehensive health check on the cluster including API server responsiveness and node availability.",
-        "parameters": [
-          {
-            "name": "serviceAccountToken",
-            "in": "header",
-            "required": false,
-            "description": "Kubernetes service account token for authentication (optional - uses configured token if not provided)",
-            "schema": {
-              "type": "string",
-              "example": "eyJhbGciOiJSUzI1NiIs..."
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Health check completed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": {
-                      "type": "boolean",
-                      "example": true
-                    },
-                    "data": {
-                      "type": "object",
-                      "properties": {
-                        "health": {
-                          "$ref": "#/components/schemas/ClusterHealth"
-                        },
-                        "metadata": {
-                          "$ref": "#/components/schemas/ResponseMetadata"
-                        }
-                      }
-                    },
-                    "message": {
-                      "type": "string",
-                      "example": "Cluster is healthy"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": { "description": "Authentication required." },
-          "403": { "description": "Permission denied." },
-          "500": { "description": "Health check failed." }
-        }
-      }
-    },
     "/accessio_ops/cluster/info": {
       "get": {
-        "tags": ["Accessio Operations - Cluster Management"],
+        "tags": ["Accessio Operations - Cluster Information"],
         "operationId": "aoGetClusterInfo",
-        "summary": "Get cluster metadata and nodes",
-        "description": "Retrieves cluster information including metadata, node count, and system details. Fast endpoint for cluster overview.",
+        "summary": "Get cluster metadata and node information",
+        "description": "Retrieves cluster metadata, node inventory, and system details. Fast, lightweight endpoint for cluster overview and capacity planning.",
         "responses": {
           "200": {
             "description": "Cluster information retrieved successfully",
@@ -470,10 +284,10 @@
     },
     "/accessio_ops/cluster/namespaces": {
       "get": {
-        "tags": ["Accessio Operations - Cluster Management"],
+        "tags": ["Accessio Operations - Cluster Information"],
         "operationId": "aoGetClusterNamespaces",
-        "summary": "Get filtered namespaces",
-        "description": "Retrieves Kubernetes namespaces with automatic filtering of system namespaces. Fast endpoint for namespace listing.",
+        "summary": "Get filtered Kubernetes namespaces",
+        "description": "Retrieves all Kubernetes namespaces with automatic filtering of system namespaces. Fast endpoint for namespace discovery and listing.",
         "responses": {
           "200": {
             "description": "Namespaces retrieved successfully",
@@ -526,10 +340,10 @@
     },
     "/accessio_ops/cluster/workloads": {
       "get": {
-        "tags": ["Accessio Operations - Cluster Management"],
+        "tags": ["Accessio Operations - Workload Management"],
         "operationId": "aoGetClusterWorkloads",
-        "summary": "Get workloads and pods",
-        "description": "Retrieves all workloads (deployments, statefulsets, cronjobs) and their pod status. Medium performance endpoint with detailed workload information.",
+        "summary": "Get all workloads and pod status",
+        "description": "Retrieves all Kubernetes workloads (Deployments, StatefulSets, CronJobs) with pod status, replica counts, and resource information. Medium-performance endpoint for comprehensive workload inventory.",
         "responses": {
           "200": {
             "description": "Workloads retrieved successfully",
@@ -593,12 +407,24 @@
         }
       }
     },
+    "/accessio_ops/cluster/metrics": {
+      "get": {
+        "tags": ["Accessio Operations - Workload Management"],
+        "operationId": "aoGetClusterMetrics",
+        "summary": "Get live CPU and memory metrics for workloads",
+        "description": "Retrieves real-time CPU and memory metrics for all workloads using the Kubernetes Metrics API. Includes pod-level usage aggregated by workload with requests and limits.",
+        "responses": {
+          "200": { "description": "Metrics retrieved successfully" },
+          "500": { "description": "Failed to retrieve metrics" }
+        }
+      }
+    },
     "/accessio_ops/cluster": {
       "get": {
-        "tags": ["Accessio Operations - Configuration"],
+        "tags": ["Accessio Operations - Connection Management"],
         "operationId": "aoGetClusterConfiguration",
-        "summary": "Get cluster configuration",
-        "description": "Retrieves cluster connection configuration and settings for the configuration panel.",
+        "summary": "Get cluster connection configuration",
+        "description": "Retrieves Kubernetes cluster connection configuration including API server URL, project ID, region, and connection status. Used by the configuration panel.",
         "responses": {
           "200": {
             "description": "Cluster configuration retrieved successfully",
@@ -633,10 +459,10 @@
     },
     "/accessio_ops/cluster/config/filters": {
       "get": {
-        "tags": ["Accessio Operations - Configuration"],
+        "tags": ["Accessio Operations - Filter Management"],
         "operationId": "aoGetClusterFilterConfig",
-        "summary": "Get cluster filter configuration",
-        "description": "Retrieves saved cluster, namespace, and workload filter selections.",
+        "summary": "Get saved cluster filter selections",
+        "description": "Retrieves user-saved filter selections for clusters, namespaces, and workloads. Used to restore previous filter preferences.",
         "responses": {
           "200": {
             "description": "Filter configuration retrieved successfully",
@@ -681,10 +507,10 @@
         }
       },
       "put": {
-        "tags": ["Accessio Operations - Configuration"],
+        "tags": ["Accessio Operations - Filter Management"],
         "operationId": "aoSaveClusterFilterConfig",
-        "summary": "Save cluster filter configuration",
-        "description": "Saves cluster, namespace, and workload filter selections to module configuration.",
+        "summary": "Save cluster filter selections",
+        "description": "Saves user-selected filters for clusters, namespaces, and workloads to module configuration. Persists filter preferences for future sessions.",
         "requestBody": {
           "required": true,
           "content": {
@@ -756,10 +582,10 @@
     },
     "/accessio_ops/cluster/pods/errors": {
       "get": {
-        "tags": ["Accessio Operations - Cluster Management"],
+        "tags": ["Accessio Operations - Workload Management"],
         "operationId": "aoGetPodErrors",
-        "summary": "Get pod errors",
-        "description": "Retrieves error information for pods. Returns all pods with errors if no pod name specified, or detailed errors for a specific pod.",
+        "summary": "Get pod error analysis and diagnostics",
+        "description": "Retrieves comprehensive error information for pods including phase errors, container states, image pull failures, and resource issues. Returns all error pods or detailed diagnostics for a specific pod.",
         "parameters": [
           {
             "name": "podName",

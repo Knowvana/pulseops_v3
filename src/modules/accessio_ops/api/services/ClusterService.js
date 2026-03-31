@@ -68,21 +68,31 @@ function addCpuValues(value1, value2) {
   return sum >= 1000 ? `${sum / 1000}` : `${sum}m`;
 }
 
+// Helper function to parse CPU values (handles m, cores)
+function parseCpuValue(cpu) {
+  if (!cpu) return 0;
+  if (cpu.toString().endsWith('m')) {
+    return parseInt(cpu.toString().replace('m', ''));
+  }
+  return parseInt(cpu.toString()) * 1000; // Convert cores to millicores
+}
+
+// Helper function to parse memory values (handles Ki, Mi, Gi, K, M, G, bytes)
+function parseMemoryValue(mem) {
+  if (!mem) return 0;
+  const memStr = mem.toString();
+  if (memStr.endsWith('Ki')) return parseInt(memStr.replace('Ki', '')) / 1024;
+  if (memStr.endsWith('Mi')) return parseInt(memStr.replace('Mi', ''));
+  if (memStr.endsWith('Gi')) return parseInt(memStr.replace('Gi', '')) * 1024;
+  if (memStr.endsWith('K')) return parseInt(memStr.replace('K', '')) / 1024;
+  if (memStr.endsWith('M')) return parseInt(memStr.replace('M', ''));
+  if (memStr.endsWith('G')) return parseInt(memStr.replace('G', '')) * 1024;
+  return parseInt(memStr);
+}
+
 // Helper function to add memory values (handles Ki, Mi, Gi)
 function addMemoryValues(value1, value2) {
-  const parseMemory = (mem) => {
-    if (!mem) return 0;
-    const memStr = mem.toString();
-    if (memStr.endsWith('Ki')) return parseInt(memStr.replace('Ki', '')) / 1024;
-    if (memStr.endsWith('Mi')) return parseInt(memStr.replace('Mi', ''));
-    if (memStr.endsWith('Gi')) return parseInt(memStr.replace('Gi', '')) * 1024;
-    if (memStr.endsWith('K')) return parseInt(memStr.replace('K', '')) / 1024;
-    if (memStr.endsWith('M')) return parseInt(memStr.replace('M', ''));
-    if (memStr.endsWith('G')) return parseInt(memStr.replace('G', '')) * 1024;
-    return parseInt(memStr);
-  };
-  
-  const sum = parseMemory(value1) + parseMemory(value2);
+  const sum = parseMemoryValue(value1) + parseMemoryValue(value2);
   return `${sum}Mi`; // Always return in Mi for consistency
 }
 
@@ -827,58 +837,24 @@ export async function getWorkloadsMetrics() {
       
       if (pod.spec && pod.spec.containers) {
         for (const container of pod.spec.containers) {
-          // Parse CPU request using existing parseCpu helper
+          // Parse CPU request using module-level helper
           if (container.resources?.requests?.cpu) {
-            const parseCpu = (cpu) => {
-              if (!cpu) return 0;
-              if (cpu.toString().endsWith('m')) {
-                return parseInt(cpu.toString().replace('m', ''));
-              }
-              return parseInt(cpu.toString()) * 1000; // Convert cores to millicores
-            };
-            cpuRequest += parseCpu(container.resources.requests.cpu);
+            cpuRequest += parseCpuValue(container.resources.requests.cpu);
           }
           
-          // Parse memory request using existing parseMemory helper
+          // Parse memory request using module-level helper
           if (container.resources?.requests?.memory) {
-            const parseMemory = (mem) => {
-              if (!mem) return 0;
-              const memStr = mem.toString();
-              if (memStr.endsWith('Ki')) return parseInt(memStr.replace('Ki', '')) / 1024;
-              if (memStr.endsWith('Mi')) return parseInt(memStr.replace('Mi', ''));
-              if (memStr.endsWith('Gi')) return parseInt(memStr.replace('Gi', '')) * 1024;
-              if (memStr.endsWith('M')) return parseInt(memStr.replace('M', ''));
-              if (memStr.endsWith('G')) return parseInt(memStr.replace('G', '')) * 1024;
-              return parseInt(memStr);
-            };
-            memoryRequest += parseMemory(container.resources.requests.memory);
+            memoryRequest += parseMemoryValue(container.resources.requests.memory);
           }
           
-          // Parse CPU limit using existing parseCpu helper
+          // Parse CPU limit using module-level helper
           if (container.resources?.limits?.cpu) {
-            const parseCpu = (cpu) => {
-              if (!cpu) return 0;
-              if (cpu.toString().endsWith('m')) {
-                return parseInt(cpu.toString().replace('m', ''));
-              }
-              return parseInt(cpu.toString()) * 1000; // Convert cores to millicores
-            };
-            cpuLimit += parseCpu(container.resources.limits.cpu);
+            cpuLimit += parseCpuValue(container.resources.limits.cpu);
           }
           
-          // Parse memory limit using existing parseMemory helper
+          // Parse memory limit using module-level helper
           if (container.resources?.limits?.memory) {
-            const parseMemory = (mem) => {
-              if (!mem) return 0;
-              const memStr = mem.toString();
-              if (memStr.endsWith('Ki')) return parseInt(memStr.replace('Ki', '')) / 1024;
-              if (memStr.endsWith('Mi')) return parseInt(memStr.replace('Mi', ''));
-              if (memStr.endsWith('Gi')) return parseInt(memStr.replace('Gi', '')) * 1024;
-              if (memStr.endsWith('M')) return parseInt(memStr.replace('M', ''));
-              if (memStr.endsWith('G')) return parseInt(memStr.replace('G', '')) * 1024;
-              return parseInt(memStr);
-            };
-            memoryLimit += parseMemory(container.resources.limits.memory);
+            memoryLimit += parseMemoryValue(container.resources.limits.memory);
           }
         }
       }

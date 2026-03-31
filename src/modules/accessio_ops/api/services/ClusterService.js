@@ -738,12 +738,19 @@ export async function getWorkloadsMetrics() {
     const workloadMetrics = new Map();
     
     for (const pod of allPods) {
-      // Skip pods that are not running
-      if (pod.status.phase !== 'Running') continue;
-      
-      // Get metrics for this pod
+      // Get metrics for this pod (may not exist for evicted/not running pods)
       const podMetric = metricsMap.get(`${pod.metadata.namespace}/${pod.metadata.name}`);
-      if (!podMetric) continue; // Skip if no metrics available
+      
+      // Include all pods that belong to a workload (running, evicted, failed, etc.)
+      // Only skip pods that have no clear workload association
+      const hasWorkloadAssociation = pod.metadata.ownerReferences && pod.metadata.ownerReferences.length > 0 ||
+                                     pod.metadata.labels?.['app.kubernetes.io/instance'] ||
+                                     pod.metadata.labels?.['app'] ||
+                                     pod.metadata.labels?.['app.kubernetes.io/name'] ||
+                                     pod.metadata.labels?.['k8s-app'] ||
+                                     pod.metadata.labels?.['name'];
+      
+      if (!hasWorkloadAssociation) continue;
       
       // Identify workload from pod labels
       // 1. Try common labels first
@@ -809,27 +816,93 @@ export async function getWorkloadsMetrics() {
       
       const workload = workloadMetrics.get(workloadKey);
       
-      // Parse pod metrics
+      // Parse pod metrics (usage from metrics API)
       const podMetricsData = parsePodMetrics(podMetric);
+      
+      // Parse requests/limits from pod spec using existing helper functions
+      let cpuRequest = 0;
+      let memoryRequest = 0;
+      let cpuLimit = 0;
+      let memoryLimit = 0;
+      
+      if (pod.spec && pod.spec.containers) {
+        for (const container of pod.spec.containers) {
+          // Parse CPU request using existing parseCpu helper
+          if (container.resources?.requests?.cpu) {
+            const parseCpu = (cpu) => {
+              if (!cpu) return 0;
+              if (cpu.toString().endsWith('m')) {
+                return parseInt(cpu.toString().replace('m', ''));
+              }
+              return parseInt(cpu.toString()) * 1000; // Convert cores to millicores
+            };
+            cpuRequest += parseCpu(container.resources.requests.cpu);
+          }
+          
+          // Parse memory request using existing parseMemory helper
+          if (container.resources?.requests?.memory) {
+            const parseMemory = (mem) => {
+              if (!mem) return 0;
+              const memStr = mem.toString();
+              if (memStr.endsWith('Ki')) return parseInt(memStr.replace('Ki', '')) / 1024;
+              if (memStr.endsWith('Mi')) return parseInt(memStr.replace('Mi', ''));
+              if (memStr.endsWith('Gi')) return parseInt(memStr.replace('Gi', '')) * 1024;
+              if (memStr.endsWith('M')) return parseInt(memStr.replace('M', ''));
+              if (memStr.endsWith('G')) return parseInt(memStr.replace('G', '')) * 1024;
+              return parseInt(memStr);
+            };
+            memoryRequest += parseMemory(container.resources.requests.memory);
+          }
+          
+          // Parse CPU limit using existing parseCpu helper
+          if (container.resources?.limits?.cpu) {
+            const parseCpu = (cpu) => {
+              if (!cpu) return 0;
+              if (cpu.toString().endsWith('m')) {
+                return parseInt(cpu.toString().replace('m', ''));
+              }
+              return parseInt(cpu.toString()) * 1000; // Convert cores to millicores
+            };
+            cpuLimit += parseCpu(container.resources.limits.cpu);
+          }
+          
+          // Parse memory limit using existing parseMemory helper
+          if (container.resources?.limits?.memory) {
+            const parseMemory = (mem) => {
+              if (!mem) return 0;
+              const memStr = mem.toString();
+              if (memStr.endsWith('Ki')) return parseInt(memStr.replace('Ki', '')) / 1024;
+              if (memStr.endsWith('Mi')) return parseInt(memStr.replace('Mi', ''));
+              if (memStr.endsWith('Gi')) return parseInt(memStr.replace('Gi', '')) * 1024;
+              if (memStr.endsWith('M')) return parseInt(memStr.replace('M', ''));
+              if (memStr.endsWith('G')) return parseInt(memStr.replace('G', '')) * 1024;
+              return parseInt(memStr);
+            };
+            memoryLimit += parseMemory(container.resources.limits.memory);
+          }
+        }
+      }
       
       // Add pod data
       workload.pods.push({
         name: pod.metadata.name,
+        status: pod.status.phase || 'Unknown',
+        creationTimestamp: pod.metadata.creationTimestamp,
         cpuUsage: podMetricsData.cpuUsage,
         memoryUsage: podMetricsData.memoryUsage,
-        cpuRequest: podMetricsData.cpuRequest,
-        memoryRequest: podMetricsData.memoryRequest,
-        cpuLimit: podMetricsData.cpuLimit,
-        memoryLimit: podMetricsData.memoryLimit
+        cpuRequest: cpuRequest,
+        memoryRequest: memoryRequest,
+        cpuLimit: cpuLimit,
+        memoryLimit: memoryLimit
       });
       
       // Aggregate totals
       workload.totalCpuUsage += podMetricsData.cpuUsage;
       workload.totalMemoryUsage += podMetricsData.memoryUsage;
-      workload.cpuRequests += podMetricsData.cpuRequest;
-      workload.memoryRequests += podMetricsData.memoryRequest;
-      workload.cpuLimits += podMetricsData.cpuLimit;
-      workload.memoryLimits += podMetricsData.memoryLimit;
+      workload.cpuRequests += cpuRequest;
+      workload.memoryRequests += memoryRequest;
+      workload.cpuLimits += cpuLimit;
+      workload.memoryLimits += memoryLimit;
     }
     
     const result = {
@@ -880,8 +953,9 @@ export async function getWorkloadsMetrics() {
   }
 }
 
+
 /**
- * Parse pod metrics from metrics API response
+ * Parse pod metrics from Metrics API response
  * @param {Object} podMetric - Pod metrics from metrics API
  * @returns {Object} Parsed metrics
  */

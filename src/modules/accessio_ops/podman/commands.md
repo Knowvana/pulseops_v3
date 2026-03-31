@@ -13,6 +13,10 @@
 | 1.5 | `kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\00-metrics-server.yaml` | **INSTALL** metrics-server for live resource usage |
 | 1.6 | `kubectl top nodes` | **VERIFY** live node resource metrics |
 | 1.7 | `kubectl top pods -A` | **VERIFY** live pod resource metrics |
+| 1.8 | `kubectl get apiservices | grep metrics` | **VERIFY** metrics.k8s.io API is available |
+| 1.9 | `kubectl get --raw /apis/metrics.k8s.io/v1beta1/nodes` | **TEST** raw metrics API for nodes |
+| 1.10 | `kubectl get --raw /apis/metrics.k8s.io/v1beta1/pods` | **TEST** raw metrics API for pods |
+| 1.11 | `kubectl describe pods -n kube-system -l k8s-app=metrics-server` | **CHECK** metrics-server pod status and logs |
 | 2 | `kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\02-namespaces.yaml` | **CREATE** namespaces (prod-iga, prod, mail) |
 | 3 | `kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\03-accessio-service-account.yaml` | **CREATE** service account with permissions |
 | 4 | `./generate-permanent-token.ps1` | **GENERATE** permanent service account token |
@@ -72,11 +76,21 @@ kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\
 kubectl get pods -n kube-system | findstr metrics
 ```
 
-### Step 5: Verify Metrics Server (Orders 1.6-1.7)
+### Step 5: Verify Metrics Server (Orders 1.6-1.11)
 ```bash
 # Test live resource metrics
 kubectl top nodes
 kubectl top pods -A
+
+# Verify metrics API is available
+kubectl get apiservices | grep metrics
+
+# Test raw metrics API endpoints
+kubectl get --raw /apis/metrics.k8s.io/v1beta1/nodes
+kubectl get --raw /apis/metrics.k8s.io/v1beta1/pods
+
+# Check metrics-server pod status and logs
+kubectl describe pods -n kube-system -l k8s-app=metrics-server
 ```
 
 ### Step 6: Create Namespaces (Order 2)
@@ -294,7 +308,54 @@ Once cluster is created, you can test:
 kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\99-cleanup-all.yaml
 ```
 
-## 🔄 **If Something Goes Wrong:**
+## � **Metrics Server Troubleshooting:**
+
+### If `kubectl top pods` returns "error: Metrics API not available":
+```bash
+# Check if metrics-server is running
+kubectl get pods -n kube-system | findstr metrics
+
+# Check metrics-server logs for errors
+kubectl logs -n kube-system -l k8s-app=metrics-server
+
+# Verify API service is registered
+kubectl get apiservices | grep metrics
+
+# Restart metrics-server
+kubectl delete pods -n kube-system -l k8s-app=metrics-server
+
+# Reinstall metrics-server
+kubectl delete -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\00-metrics-server.yaml --ignore-not-found
+kubectl apply -f C:\MyDevelopment\Knowvana\pulseops_v3\src\modules\accessio_ops\podman\00-metrics-server.yaml
+```
+
+### Common Metrics Server Issues:
+1. **"Metrics API not available"** - Wait 2-3 minutes after installation
+2. **"no metrics known for pod"** - Pod is still starting or has no containers
+3. **"server is currently unable to handle"** - metrics-server needs more time
+4. **"connection refused"** - Check if metrics-server pod is running
+
+### Expected `kubectl top pods -A` Output:
+```
+NAMESPACE     NAME                                      CPU(cores)   MEMORY(bytes)
+kube-system   coredns-7d764666f9-9998f                4m           13Mi
+kube-system   coredns-7d764666f9-vxp9t                5m           14Mi
+kube-system   etcd-prod1-cluster-control-plane        56m          46Mi
+kube-system   kindnet-27fgz                           1m           12Mi
+kube-system   kube-apiserver-prod1-cluster-control-plane 95m        232Mi
+kube-system   kube-controller-manager-prod1-cluster-control-plane 45m 52Mi
+kube-system   kube-proxy-hpccc                        1m           17Mi
+kube-system   kube-scheduler-prod1-cluster-control-plane 16m        25Mi
+kube-system   metrics-server-6bc6c6dfd-j9x6t         5m           16Mi
+local-path-storage local-path-provisioner-67b8995b4b-fxs96 1m           8Mi
+prod          jobserver-7668d4c5ff-p6rmg              1m           11Mi
+prod          talend-7ccdb9f567-4k8kw                1m           11Mi
+prod-iga      ig-959c86887-nkt7v                      1m           11Mi
+prod-iga      iga-api-6f76657ccf-wm7xd                1m           11Mi
+prod-iga      jas-ff8cd646c-92bfq                    1m           13Mi
+```
+
+## �🔄 **If Something Goes Wrong:**
 ```bash
 # Start over from Step 2 (cleanup)
 kubectl delete serviceaccount accessio-service --ignore-not-found

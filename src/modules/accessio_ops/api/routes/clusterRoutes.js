@@ -650,100 +650,193 @@ function analyzePodErrors(pod) {
         podData.errors.push({
           type: 'container_waiting',
           severity: containerStatus.state.waiting.reason === 'ImagePullBackOff' ? 'critical' : 'warning',
-          message: `Container ${containerStatus.name} waiting: ${containerStatus.state.waiting.reason}`,
-          details: containerStatus.state.waiting.message || `Container is waiting: ${containerStatus.state.waiting.reason}`,
+          message: containerStatus.state.waiting.message || `Container is waiting: ${containerStatus.state.waiting.reason}`,
           container: containerStatus.name,
           errorTime: pod.metadata.creationTimestamp
         });
       }
       if (containerStatus.state?.terminated?.reason && containerStatus.state.terminated.reason !== 'Completed') {
         podData.hasErrors = true;
+        let terminationMessage = containerStatus.state.terminated.message || `Container terminated with exit code ${containerStatus.state.terminated.exitCode}`;
+        
+        // Add specific reason for OOMKilled
+        if (containerStatus.state.terminated.reason === 'OOMKilled') {
+          terminationMessage = `Container OOMKilled: Out of memory. Exit code: ${containerStatus.state.terminated.exitCode}`;
+        }
+        
         podData.errors.push({
           type: 'container_terminated',
           severity: 'critical',
-          message: `Container ${containerStatus.name} terminated: ${containerStatus.state.terminated.reason}`,
-          details: containerStatus.state.terminated.message || `Container terminated with exit code ${containerStatus.state.terminated.exitCode}`,
+          message: terminationMessage,
+          details: `Reason: ${containerStatus.state.terminated.reason}`,
           container: containerStatus.name,
-          exitCode: containerStatus.state.terminated.exitCode
+          exitCode: containerStatus.state.terminated.exitCode,
+          terminationReason: containerStatus.state.terminated.reason
         });
       }
     });
   }
   
-  // Check pod conditions
+  // Check pod conditions for all failure reasons
   if (pod.status.conditions) {
-    const failedConditions = pod.status.conditions.filter(condition => 
-      condition.type === 'Ready' && condition.status === 'False'
-    );
-    
-    failedConditions.forEach(condition => {
-      podData.hasErrors = true;
-      podData.errors.push({
-        type: 'ready_condition',
-        severity: 'warning',
-        message: `Pod not ready: ${condition.reason || 'Unknown reason'}`,
-        details: condition.message || 'Pod readiness check failed',
-        condition: condition.type,
-        errorTime: condition.lastTransitionTime || condition.lastProbeTime || pod.metadata.creationTimestamp
-      });
+    pod.status.conditions.forEach(condition => {
+      if (condition.status === 'False') {
+        let errorType = 'pod_condition_failed';
+        let severity = 'warning';
+        
+        // Determine severity based on condition type
+        if (condition.type === 'Ready' || condition.type === 'PodScheduled') {
+          severity = 'critical';
+        }
+        
+        // Map condition types to error types
+        const conditionTypeMap = {
+          'PodScheduled': 'scheduling_error',
+          'Initialized': 'initialization_error',
+          'Ready': 'readiness_error',
+          'ContainersReady': 'container_readiness_error'
+        };
+        
+        errorType = conditionTypeMap[condition.type] || errorType;
+        
+        // Only add if not already added as ready_condition
+        if (condition.type !== 'Ready' || !podData.errors.some(e => e.type === 'ready_condition')) {
+          podData.hasErrors = true;
+          podData.errors.push({
+            type: errorType,
+            severity: severity,
+            message: `${condition.type} condition failed: ${condition.reason || 'Unknown'}`,
+            details: condition.message || `${condition.type} check failed`,
+            condition: condition.type,
+            reason: condition.reason,
+            errorTime: condition.lastTransitionTime || pod.metadata.creationTimestamp
+          });
+        }
+      }
     });
   }
-  
-  // Check for ImagePullBackOff specifically
-  if (pod.status.containerStatuses) {
-    const imagePullErrors = pod.status.containerStatuses.filter(containerStatus => 
-      containerStatus.state?.waiting?.reason === 'ImagePullBackOff'
-    );
-    
-    imagePullErrors.forEach(containerStatus => {
+
+  // Check for scheduling issues
+  if (!pod.spec.nodeName) {
+    const scheduledCondition = pod.status.conditions?.find(c => c.type === 'PodScheduled');
+    if (scheduledCondition?.status === 'False') {
       podData.hasErrors = true;
       podData.errors.push({
-        type: 'image_pull_error',
+        type: 'scheduling_error',
         severity: 'critical',
-        message: `Image pull error for container: ${containerStatus.name}`,
-        details: `Failed to pull image: ${containerStatus.image}`,
-        container: containerStatus.name,
-        image: containerStatus.image
+        message: `Pod cannot be scheduled: ${scheduledCondition.reason || 'Unknown'}`,
+        details: scheduledCondition.message || 'Pod is pending scheduling',
+        reason: scheduledCondition.reason,
+        errorTime: scheduledCondition.lastTransitionTime || pod.metadata.creationTimestamp
       });
+    }
+  }
+
+  // Check for node pressure conditions
+  if (pod.status.conditions) {
+    const nodePressureReasons = ['DiskPressure', 'MemoryPressure', 'PIDPressure', 'NetworkUnavailable'];
+    pod.status.conditions.forEach(condition => {
+      if (nodePressureReasons.includes(condition.reason)) {
+        podData.hasErrors = true;
+        podData.errors.push({
+          type: 'node_pressure_error',
+          severity: 'critical',
+          message: `Node pressure detected: ${condition.reason}`,
+          details: `GKE node is experiencing ${condition.reason} - pod eviction possible`,
+          reason: condition.reason,
+          errorTime: condition.lastTransitionTime || pod.metadata.creationTimestamp
+        });
+      }
     });
   }
-  
-  // Check for GKE/GCP specific errors
+
+  // Check for container probe failures
   if (pod.status.containerStatuses) {
     pod.status.containerStatuses.forEach(containerStatus => {
-      // GKE Resource Quota Issues
-      if (containerStatus.state?.waiting?.reason === 'ResourceQuota') {
+      // Liveness probe failures
+      if (containerStatus.lastState?.terminated?.reason === 'Killed' && containerStatus.restartCount > 0) {
         podData.hasErrors = true;
         podData.errors.push({
-          type: 'resource_quota_error',
-          severity: 'critical',
-          message: `Resource quota exceeded for container: ${containerStatus.name}`,
-          details: `GKE resource quota limits reached - insufficient CPU/memory`,
-          container: containerStatus.name
-        });
-      }
-      
-      // GKE Node Issues
-      if (containerStatus.state?.waiting?.reason === 'NodeLost') {
-        podData.hasErrors = true;
-        podData.errors.push({
-          type: 'node_lost_error',
-          severity: 'critical',
-          message: `Node lost for container: ${containerStatus.name}`,
-          details: `GKE node became unavailable - pod needs rescheduling`,
-          container: containerStatus.name
-        });
-      }
-      
-      // GKE Autopilot Issues
-      if (containerStatus.state?.waiting?.reason === 'Autopilot') {
-        podData.hasErrors = true;
-        podData.errors.push({
-          type: 'autopilot_error',
+          type: 'liveness_probe_failure',
           severity: 'warning',
-          message: `Autopilot scheduling delay for container: ${containerStatus.name}`,
-          details: `GKE Autopilot is provisioning resources - pod pending`,
-          container: containerStatus.name
+          message: `Container ${containerStatus.name} killed by liveness probe`,
+          details: `Liveness probe failed - container was restarted (${containerStatus.restartCount} restarts)`,
+          container: containerStatus.name,
+          restartCount: containerStatus.restartCount
+        });
+      }
+    });
+  }
+
+  // Check for insufficient resources at pod level
+  if (pod.status.conditions) {
+    const insufficientCondition = pod.status.conditions.find(c => 
+      c.reason === 'Insufficient' || c.reason === 'InsufficientMemory' || c.reason === 'InsufficientCPU'
+    );
+    if (insufficientCondition) {
+      podData.hasErrors = true;
+      podData.errors.push({
+        type: 'insufficient_resources_error',
+        severity: 'critical',
+        message: `Insufficient resources: ${insufficientCondition.reason}`,
+        details: insufficientCondition.message || 'Cluster does not have enough CPU or memory',
+        reason: insufficientCondition.reason,
+        errorTime: insufficientCondition.lastTransitionTime || pod.metadata.creationTimestamp
+      });
+    }
+  }
+
+  // Check for affinity/topology errors
+  if (pod.status.conditions) {
+    const affinityCondition = pod.status.conditions.find(c => 
+      c.reason === 'Unschedulable' && (c.message?.includes('affinity') || c.message?.includes('topology'))
+    );
+    if (affinityCondition) {
+      podData.hasErrors = true;
+      podData.errors.push({
+        type: 'affinity_error',
+        severity: 'warning',
+        message: `Pod affinity/topology constraint violation`,
+        details: affinityCondition.message || 'Pod cannot be scheduled due to affinity rules',
+        reason: affinityCondition.reason,
+        errorTime: affinityCondition.lastTransitionTime || pod.metadata.creationTimestamp
+      });
+    }
+  }
+
+  // Check for pull image errors (more comprehensive)
+  if (pod.status.containerStatuses) {
+    pod.status.containerStatuses.forEach(containerStatus => {
+      if (containerStatus.state?.waiting?.reason?.includes('Pull') || 
+          containerStatus.state?.waiting?.reason === 'ImagePullBackOff' ||
+          containerStatus.state?.waiting?.reason === 'ErrImagePull') {
+        podData.hasErrors = true;
+        podData.errors.push({
+          type: 'image_pull_error',
+          severity: 'critical',
+          message: `Image pull failed for container: ${containerStatus.name}`,
+          details: containerStatus.state.waiting.message || `Failed to pull image: ${containerStatus.image}`,
+          container: containerStatus.name,
+          image: containerStatus.image,
+          reason: containerStatus.state.waiting.reason
+        });
+      }
+    });
+  }
+
+  // Check for back-off errors
+  if (pod.status.containerStatuses) {
+    pod.status.containerStatuses.forEach(containerStatus => {
+      if (containerStatus.state?.waiting?.reason?.includes('BackOff')) {
+        podData.hasErrors = true;
+        podData.errors.push({
+          type: 'backoff_error',
+          severity: 'warning',
+          message: `Container in back-off state: ${containerStatus.name}`,
+          details: containerStatus.state.waiting.message || `Container ${containerStatus.name} is in back-off state after repeated failures`,
+          container: containerStatus.name,
+          reason: containerStatus.state.waiting.reason,
+          restartCount: containerStatus.restartCount
         });
       }
     });

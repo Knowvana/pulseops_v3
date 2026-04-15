@@ -236,32 +236,29 @@
       <p>Built with enterprise-grade security (JWT, RBAC, rate limiting), centralized structured logging with DB persistence, modular plug-and-play architecture with zero-downtime hot-deployment, and a shared design system for rapid module development.</p>
     </div>
     <div class="card card-green">
-      <h3>📦 4 Production-Ready Modules</h3>
-      <p><strong>System HealthCheck</strong> — URL monitoring, uptime SLA, planned downtime integration.<br>
-      <strong>ServiceNow ITSM</strong> — Incident management, auto-ack, business-hour SLA reports.<br>
-      <strong>Google GKE</strong> — K8s workloads, CronJobs, Dataflow, Pub/Sub, log alerting.<br>
-      <strong>Accessio Operations</strong> — Multi-cluster identity platform monitoring.</p>
+      <h3>📦 2 Production-Ready Modules</h3>
+      <p><strong>System HealthCheck</strong> — Real-time URL monitoring, uptime SLA reports, poll verification, and planned downtime integration.<br>
+      <strong>ServiceNow ITSM</strong> — Incident management, automated acknowledgment, intelligent SLA reports with business-hour calculations.</p>
     </div>
   </div>
   <div style="background:linear-gradient(135deg, var(--purple-light), var(--brand-light)); border-radius:12px; padding:16px 24px; margin-bottom:16px;">
-    <h3 style="color:var(--purple); margin-bottom:8px; font-size:14px;">� Next on Roadmap</h3>
+    <h3 style="color:var(--purple); margin-bottom:8px; font-size:14px;">� Future Scope — Work In Progress</h3>
     <div class="grid-3" style="gap:12px;">
       <div>
-        <p style="font-size:12px; margin:0;"><strong>Sailpoint IIQ Module</strong><br>Access requests, tasks, RACF provisioning. Direct PGSQL database integration.</p>
+        <p style="font-size:12px; margin:0;"><strong>Sailpoint IIQ Module</strong><br>Monitor Sailpoint systems, access requests, tasks, RACF request provisioning. Direct PGSQL database integration for data monitoring.</p>
       </div>
       <div>
-        <p style="font-size:12px; margin:0;"><strong>Forgerock IGA Module</strong><br>Campaign monitoring, reconciliation tracking, certification workflows.</p>
+        <p style="font-size:12px; margin:0;"><strong>Forgerock IGA Module</strong><br>Campaign monitoring, reconciliation tracking, certification workflows. Direct ElasticSearch and PGSQL backend database integration.</p>
       </div>
       <div>
-        <p style="font-size:12px; margin:0;"><strong>Database Monitoring</strong><br>Direct PostgreSQL + ElasticSearch monitoring for identity platform backends.</p>
+        <p style="font-size:12px; margin:0;"><strong>Database Monitoring</strong><br>Direct integration with PostgreSQL and ElasticSearch databases used by Forgerock IGA and Sailpoint IIQ for real-time data monitoring.</p>
       </div>
     </div>
   </div>
-  <div class="grid-4">
-    <div class="stat"><div class="stat-value" style="color:var(--brand);">4</div><div class="stat-label">Production Modules</div></div>
+  <div class="grid-3">
+    <div class="stat"><div class="stat-value" style="color:var(--brand);">Modular</div><div class="stat-label">Plug & Play Architecture</div></div>
     <div class="stat"><div class="stat-value" style="color:var(--green);">Zero</div><div class="stat-label">Downtime Deployments</div></div>
-    <div class="stat"><div class="stat-value" style="color:var(--teal);">GKE</div><div class="stat-label">Kubernetes Native</div></div>
-    <div class="stat"><div class="stat-value" style="color:var(--purple);">180+</div><div class="stat-label">Source Files</div></div>
+    <div class="stat"><div class="stat-value" style="color:var(--teal);">GKE</div><div class="stat-label">Kubernetes Ready</div></div>
   </div>
   <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">2</span></div>
 </div>
@@ -404,35 +401,19 @@
       <div class="roi-after">1 unified platform</div>
       <div class="roi-savings">Single pane of glass</div>
     </div>
-    <div class="roi-row">
-      <div class="roi-label">Kubernetes Monitoring</div>
-      <div class="roi-before">Manual kubectl checks</div>
-      <div class="roi-after">Live GKE dashboard</div>
-      <div class="roi-savings">7 monitoring views</div>
-    </div>
-    <div class="roi-row">
-      <div class="roi-label">CronJob &amp; Dataflow Tracking</div>
-      <div class="roi-before">Not monitored</div>
-      <div class="roi-after">Success/failure rates</div>
-      <div class="roi-savings">Proactive alerting</div>
-    </div>
   </div>
-  <div class="grid-4">
+  <div class="grid-3">
     <div class="highlight-card">
       <div class="big-num" style="color:var(--green);">100%</div>
       <div class="label">Automated Incident Ack</div>
     </div>
     <div class="highlight-card">
-      <div class="big-num" style="color:var(--brand);">4</div>
-      <div class="label">Production Modules</div>
+      <div class="big-num" style="color:var(--brand);">500+</div>
+      <div class="label">FTE Hours Saved Per Year</div>
     </div>
     <div class="highlight-card">
-      <div class="big-num" style="color:var(--teal);">7+</div>
-      <div class="label">Live Monitoring Views</div>
-    </div>
-    <div class="highlight-card">
-      <div class="big-num" style="color:var(--purple);">500+</div>
-      <div class="label">FTE Hours Saved / Year</div>
+      <div class="big-num" style="color:var(--teal);">3</div>
+      <div class="label">New Client Reports Delivered</div>
     </div>
   </div>
   <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">5</span></div>
@@ -504,40 +485,43 @@
   <h2>Platform Architecture</h2>
   <p style="font-size:13px; margin-bottom:16px;">PulseOps V3 uses a <strong>Microkernel + Micro-Frontend</strong> architecture — a thin core platform with self-contained, hot-deployable modules.</p>
   <div class="code-block" style="margin-bottom:16px;">
-<pre style="margin:0; white-space:pre; font-size:11px;">
-<span class="comment">┌──────────────────────────────────────────────────────────────────────────────┐</span>
-<span class="comment">│                      PulseOps V3 — Platform Architecture                     │</span>
-<span class="comment">├──────────────────────────────────────────────────────────────────────────────┤</span>
-│  <span class="keyword">BROWSER</span>                                                                      │
-│  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐  │
-│  │<span class="string">Core Admin</span>  │  │<span class="comment">HealthCheck</span> │  │<span class="comment">ServiceNow</span> │  │<span class="comment">Google GKE</span> │  │<span class="comment">Accessio</span>   │  │
-│  │Dashboard   │  │Uptime/SLA  │  │Incidents   │  │Workloads   │  │Dashboard   │  │
-│  │Auth · Logs │  │Polling     │  │Auto-Ack    │  │CronJobs    │  │Workloads   │  │
-│  │Settings    │  │Reports     │  │SLA Reports │  │Dataflow    │  │Identity    │  │
-│  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘  │
-│        └───────────────┴──────────────┴──────────────┴───────────────┘        │
-│                  <span class="keyword">moduleRegistry.js</span> — Hot-Drop Dynamic Import Loader           │
-│  ┌────────────────────────────────────────────────────────────────────────┐   │
-│  │ <span class="keyword">SERVER</span>  <span class="string">Express.js API</span>              │   <span class="keyword">JWT Auth</span> · <span class="keyword">RBAC</span> · <span class="keyword">Rate Limit</span>   │   │
-│  ├───────────┬───────────┬───────────┼───────────┬────────────────────────┤   │
-│  │<span class="keyword">Core</span>       │<span class="comment">HC Module</span>  │<span class="comment">SN Module</span>  │<span class="comment">GKE Module</span> │ <span class="comment">Accessio Module</span>        │   │
-│  │Auth/DB    │Poller     │SNOW API   │K8s Client │ K8s Client             │   │
-│  │Modules    │Reports    │SLA/Ack    │7 Services │ Cluster Service        │   │
-│  └─────┬─────┴─────┬─────┴─────┬─────┴─────┬─────┴──────────┬────────────┘   │
-│        │           │           │           │                │                 │
-│  <span class="keyword">DATA LAYER</span>                                                                   │
-│  ┌─────┴───────────┴───────────┴─────┐  ┌──┴────────────────┴──────────────┐  │
-│  │  <span class="string">PostgreSQL</span>                        │  │  <span class="string">Kubernetes API</span> (live queries)   │  │
-│  │  Core(9) HC(6) SN(5) GKE(1) AO(1) │  │  GKE Clusters · Kind · Podman   │  │
-│  └────────────────────────────────────┘  └──────────────────────────────────┘  │
-<span class="comment">└──────────────────────────────────────────────────────────────────────────────┘</span>
+<pre style="margin:0; white-space:pre; font-size:12px;">
+<span class="comment">┌──────────────────────────────────────────────────────────────────────┐</span>
+<span class="comment">│                    PulseOps V3 — Platform Architecture               │</span>
+<span class="comment">├──────────────────────────────────────────────────────────────────────┤</span>
+│                                                                      │
+│  <span class="keyword">BROWSER</span>                                                              │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐      │
+│  │  <span class="string">Core Platform</span>   │  │ <span class="comment">HealthCheck Mod</span> │  │ <span class="comment">ServiceNow Mod</span>  │      │
+│  │  Admin Dashboard │  │  Dashboard      │  │  Dashboard      │      │
+│  │  Module Manager  │  │  Uptime Report  │  │  Incidents      │      │
+│  │  Log Manager     │  │  Applications   │  │  SLA Reports    │      │
+│  │  Settings/Auth   │  │  Downtime       │  │  Analytics      │      │
+│  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘      │
+│           │          <span class="keyword">dynamic import()</span>          │                      │
+│  ┌────────┴──────────────────────────────────┴───────────────┐      │
+│  │               <span class="keyword">moduleRegistry.js</span> — Hot-Drop Loader           │      │
+│  └────────────────────────────┬───────────────────────────────┘      │
+│                               │                                      │
+│  <span class="keyword">SERVER</span>   <span class="string">Express.js API</span>        │  <span class="keyword">JWT Auth</span> · <span class="keyword">RBAC</span> · <span class="keyword">Rate Limit</span>    │
+│  ┌────────────────────────────┴───────────────────────────────┐      │
+│  │  <span class="keyword">Core Routes</span>  │  <span class="comment">HC Module Routes</span>  │  <span class="comment">SN Module Routes</span>     │      │
+│  │  Auth/Users   │  Poller/Reports   │  Incidents/SLA       │      │
+│  │  Database     │  Applications     │  Auto-Ack/Sync       │      │
+│  │  Modules      │  SSE Events       │  RITM Reports        │      │
+│  └──────────┬────┴───────────┬───────┴──────────┬────────────┘      │
+│             │                │                  │                    │
+│  <span class="keyword">DATABASE</span>   <span class="string">PostgreSQL</span>                                                  │
+│  ┌──────────┴────────────────┴──────────────────┴────────────┐      │
+│  │  Core Tables (9)  │  HC Tables (6)  │  SN Tables (5)     │      │
+│  └───────────────────────────────────────────────────────────┘      │
+<span class="comment">└──────────────────────────────────────────────────────────────────────┘</span>
 </pre>
   </div>
-  <div class="grid-4">
-    <div class="card card-brand"><h3>Unified Monorepo</h3><p>Single codebase. React + Express + PostgreSQL. No microservice complexity.</p></div>
-    <div class="card card-green"><h3>Hot-Drop Modules</h3><p>Build → drop → enable. No restart. Zero downtime deployment.</p></div>
-    <div class="card card-teal"><h3>K8s Native</h3><p>Live K8s API. GKE + Kind/Podman. Multi-cluster support.</p></div>
-    <div class="card card-purple"><h3>4 Modules Live</h3><p>HealthCheck, ServiceNow, GKE, Accessio Ops — all production ready.</p></div>
+  <div class="grid-3">
+    <div class="card card-brand"><h3>Unified Monorepo</h3><p>Single codebase. One package.json. React + Express + PostgreSQL. No microservice complexity.</p></div>
+    <div class="card card-green"><h3>Hot-Drop Modules</h3><p>Build → drop bundle → enable via UI. No restart. No rebuild. Zero downtime deployment.</p></div>
+    <div class="card card-teal"><h3>K8s Ready</h3><p>Stateless API. DB-only state. Session management via PostgreSQL. Multi-pod safe.</p></div>
   </div>
   <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">8</span></div>
 </div>
@@ -763,153 +747,18 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
-<!-- SLIDE 14 — Module 3: Google GKE Infrastructure Monitoring -->
-<!-- ══════════════════════════════════════════════════════════════════════ -->
-<div class="slide">
-  <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
-    <div style="width:40px; height:40px; border-radius:10px; background:linear-gradient(135deg, var(--indigo-light), white); display:flex; align-items:center; justify-content:center; font-size:20px;">&#9729;</div>
-    <div>
-      <h2 style="margin-bottom:0;">Module 3: Google GKE Infrastructure Monitoring</h2>
-      <p style="margin:0; font-size:12px;">Live Kubernetes cluster monitoring — workloads, CronJobs, Dataflow, Pub/Sub, email delivery, and log-based alerting</p>
-    </div>
-  </div>
-  <div class="grid-2" style="margin-bottom:16px;">
-    <div class="card card-purple">
-      <h3>Live Workload Dashboard</h3>
-      <p>Real-time Kubernetes workload health across Deployments, StatefulSets, and DaemonSets. Pod status, restart counts, resource utilization, and cluster-wide health summary with alerts.</p>
-    </div>
-    <div class="card card-purple">
-      <h3>CronJob Execution Tracking</h3>
-      <p>Live CronJob monitoring with success/failure rates, execution history, human-readable schedules (via cronstrue), alert thresholds, and live ticking relative timestamps.</p>
-    </div>
-    <div class="card card-purple">
-      <h3>Dataflow &amp; Pub/Sub Monitoring</h3>
-      <p>Google Cloud Dataflow job pipeline monitoring (batch &amp; streaming). Pub/Sub topic and subscription metrics with message backlog alerting and throughput tracking.</p>
-    </div>
-    <div class="card card-purple">
-      <h3>Log-Based Alerting &amp; Email</h3>
-      <p>Pattern-matching log monitor with configurable alert rules. Email delivery monitoring with provider-agnostic abstraction (Mailpit for dev, SendGrid for production).</p>
-    </div>
-  </div>
-  <div class="grid-5">
-    <div class="stat"><div class="stat-value" style="color:var(--indigo);">46</div><div class="stat-label">Source Files</div></div>
-    <div class="stat"><div class="stat-value" style="color:var(--indigo);">7</div><div class="stat-label">Views</div></div>
-    <div class="stat"><div class="stat-value" style="color:var(--indigo);">7</div><div class="stat-label">Backend Services</div></div>
-    <div class="stat"><div class="stat-value" style="color:var(--indigo);">6</div><div class="stat-label">Config Tabs</div></div>
-    <div class="stat"><div class="stat-value" style="color:var(--indigo);">10</div><div class="stat-label">API Route Files</div></div>
-  </div>
-  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">14</span></div>
-</div>
-
-<!-- ══════════════════════════════════════════════════════════════════════ -->
-<!-- SLIDE 15 — Google GKE Feature Deep Dive -->
-<!-- ══════════════════════════════════════════════════════════════════════ -->
-<div class="slide">
-  <h2>Google GKE — Feature Deep Dive</h2>
-  <div class="grid-2" style="margin-bottom:16px;">
-    <div>
-      <h3 style="color:var(--indigo);">Infrastructure Monitoring</h3>
-      <ul>
-        <li><strong>Workload Dashboard:</strong> Deployments, StatefulSets, DaemonSets with pod-level detail</li>
-        <li><strong>CronJob Tracker:</strong> Success/failure rates, execution timeline, expanded history per job</li>
-        <li><strong>Dataflow Pipelines:</strong> Batch and streaming job health via K8s Jobs (local) or Dataflow API (GCP)</li>
-        <li><strong>Pub/Sub Metrics:</strong> Topic throughput, subscription backlog, dead-letter queue counts</li>
-        <li><strong>Cluster Poller:</strong> Configurable background polling with per-component toggles</li>
-        <li><strong>Pod Logs:</strong> Real-time pod log streaming via K8s API readNamespacedPodLog</li>
-      </ul>
-      <h3 style="color:var(--indigo); margin-top:12px;">Accessio Components Monitored</h3>
-      <ul>
-        <li><strong>ForgeRock IGA</strong> — Identity Governance (Deployment)</li>
-        <li><strong>Sailpoint IIQ</strong> — Identity Security (Deployment)</li>
-        <li><strong>PostgreSQL</strong> — Primary database (StatefulSet)</li>
-        <li><strong>Elasticsearch</strong> — Search &amp; analytics (StatefulSet)</li>
-        <li><strong>Accessio Web/API</strong> — Frontend &amp; backend services</li>
-      </ul>
-    </div>
-    <div>
-      <h3 style="color:var(--indigo);">Communication &amp; Intelligence</h3>
-      <ul>
-        <li><strong>Email Monitor:</strong> Provider-agnostic delivery tracking (Mailpit dev / SendGrid prod)</li>
-        <li><strong>Log Monitor:</strong> Pattern-matching rules with severity thresholds</li>
-        <li><strong>Alert System:</strong> Threshold-based and log-based triggers with severity levels</li>
-        <li><strong>Live Timestamps:</strong> Combined actual + relative time, ticking every second</li>
-        <li><strong>Auto-Refresh:</strong> Configurable interval with auto-refresh toggle</li>
-      </ul>
-      <h3 style="color:var(--indigo); margin-top:12px;">Architecture Highlights</h3>
-      <ul>
-        <li><strong>Zero Code Change:</strong> Same code runs on local Kind/Podman and production GKE</li>
-        <li><strong>KubernetesClient.js:</strong> Auto-detects in-cluster (GKE) vs kubeconfig (local)</li>
-        <li><strong>@kubernetes/client-node:</strong> ObjectParamAPI pattern with v1.4.0</li>
-        <li><strong>Live API Queries:</strong> No data stored — all metrics queried live from K8s API</li>
-        <li><strong>Local Dev Kit:</strong> Kind cluster config, sample workloads, service account scripts</li>
-      </ul>
-    </div>
-  </div>
-  <div style="background:var(--indigo-light); border:1px solid var(--indigo); border-radius:10px; padding:12px 16px; text-align:center;">
-    <p style="font-size:13px; color:var(--indigo); font-weight:700; margin:0;">
-      &#9729; GKE module provides <strong>7 monitoring views</strong> with live K8s API integration — from workload health to CronJob execution tracking to log-based alerting.
-    </p>
-  </div>
-  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">15</span></div>
-</div>
-
-<!-- ══════════════════════════════════════════════════════════════════════ -->
-<!-- SLIDE 16 — Module 4: Accessio Operations -->
-<!-- ══════════════════════════════════════════════════════════════════════ -->
-<div class="slide">
-  <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
-    <div style="width:40px; height:40px; border-radius:10px; background:linear-gradient(135deg, var(--amber-light), white); display:flex; align-items:center; justify-content:center; font-size:20px;">&#128737;</div>
-    <div>
-      <h2 style="margin-bottom:0;">Module 4: Accessio Operations</h2>
-      <p style="margin:0; font-size:12px;">Centralized operations management for the Accessio identity platform — multi-cluster Kubernetes monitoring</p>
-    </div>
-  </div>
-  <div class="grid-2" style="margin-bottom:16px;">
-    <div class="card card-amber">
-      <h3>Multi-Cluster Dashboard</h3>
-      <p>Centralized view across multiple Kubernetes clusters. Monitor identity platform components — ForgeRock IGA, Sailpoint IIQ, PostgreSQL, Elasticsearch — from a single unified dashboard.</p>
-    </div>
-    <div class="card card-amber">
-      <h3>Workload Monitoring</h3>
-      <p>Real-time workload health for Deployments, StatefulSets, and CronJobs across clusters. Pod status, readiness, and restart tracking for all Accessio components.</p>
-    </div>
-    <div class="card card-amber">
-      <h3>Cluster Configuration</h3>
-      <p>Multi-cluster connection management with encrypted service account tokens. Test connection validation. Cluster filter configuration for namespace and workload scoping.</p>
-    </div>
-    <div class="card card-amber">
-      <h3>Podman Local Development</h3>
-      <p>Full local dev environment with Podman/Kind clusters. Pre-built K8s manifests for namespaces, service accounts, deployments, statefulsets, and CronJobs. One-command setup.</p>
-    </div>
-  </div>
-  <div class="grid-5">
-    <div class="stat"><div class="stat-value" style="color:var(--amber);">44</div><div class="stat-label">Source Files</div></div>
-    <div class="stat"><div class="stat-value" style="color:var(--amber);">2</div><div class="stat-label">Views</div></div>
-    <div class="stat"><div class="stat-value" style="color:var(--amber);">4</div><div class="stat-label">Config Tabs</div></div>
-    <div class="stat"><div class="stat-value" style="color:var(--amber);">2</div><div class="stat-label">Backend Services</div></div>
-    <div class="stat"><div class="stat-value" style="color:var(--amber);">10</div><div class="stat-label">K8s Manifests</div></div>
-  </div>
-  <div style="background:var(--amber-light); border:1px solid var(--amber); border-radius:10px; padding:12px 16px; text-align:center; margin-top:16px;">
-    <p style="font-size:13px; color:var(--amber); font-weight:700; margin:0;">
-      &#128737; Accessio Ops brings <strong>identity platform operations</strong> into PulseOps — monitoring the very systems that manage enterprise access control.
-    </p>
-  </div>
-  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">16</span></div>
-</div>
-
-<!-- ══════════════════════════════════════════════════════════════════════ -->
-<!-- SLIDE 17 — Section Divider: How It Works -->
+<!-- SLIDE 14 — Section Divider: How It Works -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="slide slide-section" style="background:linear-gradient(135deg, var(--teal) 0%, #065f46 100%);">
   <span class="tag" style="background:rgba(255,255,255,0.2); color:white; margin-bottom:20px;">PART III</span>
   <h1>How It Works</h1>
   <p>Technical architecture, deployment model, engineering standards, and what makes PulseOps V3 enterprise-ready.</p>
   <div class="section-num">III</div>
-  <div class="slide-footer" style="color:rgba(255,255,255,0.4);"><span>Confidential — Management Presentation</span><span class="slide-num">17</span></div>
+  <div class="slide-footer" style="color:rgba(255,255,255,0.4);"><span>Confidential — Management Presentation</span><span class="slide-num">14</span></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
-<!-- SLIDE 18 — Zero-Downtime Module Deployment -->
+<!-- SLIDE 15 — Zero-Downtime Module Deployment -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="slide">
   <h2>Zero-Downtime Module Deployment</h2>
@@ -987,11 +836,11 @@
       </div>
     </div>
   </div>
-  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">18</span></div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">15</span></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
-<!-- SLIDE 19 — Technology Stack -->
+<!-- SLIDE 16 — Technology Stack -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="slide">
   <h2>Technology Stack</h2>
@@ -1038,11 +887,11 @@
       <p>Docker Compose included. PostgreSQL in container. Ready for Kubernetes deployment with StatefulSets.</p>
     </div>
   </div>
-  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">19</span></div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">16</span></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
-<!-- SLIDE 20 — Engineering Standards -->
+<!-- SLIDE 17 — Engineering Standards -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="slide">
   <h2>Engineering Standards & Quality</h2>
@@ -1095,15 +944,15 @@
       </ul>
     </div>
   </div>
-  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">20</span></div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">17</span></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
-<!-- SLIDE 21 — Database Schema Overview -->
+<!-- SLIDE 18 — Database Schema Overview -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="slide">
-  <h2>Database Schema — 22 Tables Across 5 Domains</h2>
-  <div class="grid-3" style="margin-bottom:12px;">
+  <h2>Database Schema — 20 Tables Across 3 Domains</h2>
+  <div class="grid-3" style="margin-bottom:16px;">
     <div>
       <h3 style="color:var(--brand); margin-bottom:8px;">Core Platform (9 tables)</h3>
       <table>
@@ -1149,28 +998,6 @@
       </table>
     </div>
   </div>
-  <div class="grid-2" style="margin-bottom:16px;">
-    <div>
-      <h3 style="color:var(--indigo); margin-bottom:8px;">Google GKE (1 table)</h3>
-      <table>
-        <thead><tr><th>Table</th><th>Purpose</th></tr></thead>
-        <tbody>
-          <tr><td><strong>gke_module_config</strong></td><td>Module config (JSONB key-value)</td></tr>
-        </tbody>
-      </table>
-      <p style="font-size:11px; color:var(--surface-600); margin-top:6px;">All workload, CronJob, Dataflow, and Pub/Sub data is queried <strong>live from K8s API</strong> — no local storage needed.</p>
-    </div>
-    <div>
-      <h3 style="color:var(--amber); margin-bottom:8px;">Accessio Operations (1 table)</h3>
-      <table>
-        <thead><tr><th>Table</th><th>Purpose</th></tr></thead>
-        <tbody>
-          <tr><td><strong>ao_module_config</strong></td><td>Module config (JSONB key-value)</td></tr>
-        </tbody>
-      </table>
-      <p style="font-size:11px; color:var(--surface-600); margin-top:6px;">Cluster connections and workload data queried <strong>live from K8s API</strong>. Additional tables added as features expand.</p>
-    </div>
-  </div>
   <div style="background:var(--surface-50); border:1px solid var(--surface-200); border-radius:10px; padding:14px 20px;">
     <p style="font-size:12px; margin:0;">
       <strong>Key Design Principles:</strong>
@@ -1181,11 +1008,11 @@
       🔹 Auto-provisioned from JSON schema on module enable
     </p>
   </div>
-  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">21</span></div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">18</span></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
-<!-- SLIDE 22 — Shared Design System -->
+<!-- SLIDE 19 — Shared Design System -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="slide">
   <h2>Shared Design System & Components</h2>
@@ -1222,22 +1049,22 @@
     <div class="card"><h3>PageLoader</h3><p>Loading state with branded spinner</p></div>
     <div class="card"><h3>StatsCount</h3><p>Animated metric cards</p></div>
   </div>
-  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">22</span></div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">19</span></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
-<!-- SLIDE 23 — Section Divider: Future Roadmap -->
+<!-- SLIDE 20 — Section Divider: Future Roadmap -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="slide slide-section" style="background:linear-gradient(135deg, var(--purple) 0%, #4c1d95 100%);">
   <span class="tag" style="background:rgba(255,255,255,0.2); color:white; margin-bottom:20px;">PART IV</span>
   <h1>Roadmap & Vision</h1>
   <p>Where we are today, where we're going, and how PulseOps V3 scales to meet future operations challenges.</p>
   <div class="section-num">IV</div>
-  <div class="slide-footer" style="color:rgba(255,255,255,0.4);"><span>Confidential — Management Presentation</span><span class="slide-num">23</span></div>
+  <div class="slide-footer" style="color:rgba(255,255,255,0.4);"><span>Confidential — Management Presentation</span><span class="slide-num">20</span></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
-<!-- SLIDE 24 — Future Module Roadmap -->
+<!-- SLIDE 21 — Future Module Roadmap -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="slide">
   <h2>Future Module Roadmap</h2>
@@ -1278,11 +1105,11 @@
       ⏱️ Estimated time to build a new module: <strong>2–4 weeks</strong> (module template + shared components + zero platform changes required)
     </p>
   </div>
-  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">24</span></div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">21</span></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
-<!-- SLIDE 25 — Deployment Options -->
+<!-- SLIDE 22 — Deployment Options -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="slide">
   <h2>Deployment Architecture — GKE on Google Cloud</h2>
@@ -1338,11 +1165,11 @@
       🔄 Zero-Downtime Module Updates: Build module → push to PV → enable via UI → all pods pick up the new module instantly. No rolling restart needed.
     </p>
   </div>
-  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">25</span></div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">22</span></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
-<!-- SLIDE 26 — Summary & Key Takeaways -->
+<!-- SLIDE 23 — Summary & Key Takeaways -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="slide">
   <h2>Summary & Key Takeaways</h2>
@@ -1351,12 +1178,12 @@
       <h3 style="color:var(--brand); margin-bottom:12px;">What We've Built</h3>
       <ul style="line-height:2.2;">
         <li><strong>Enterprise Operations Platform</strong> — unified, modular, extensible</li>
-        <li><strong>4 Production Modules</strong> — HealthCheck + ServiceNow + GKE + Accessio Ops</li>
-        <li><strong>Live K8s Monitoring</strong> — 7 views: workloads, CronJobs, Dataflow, Pub/Sub</li>
+        <li><strong>2 Production Modules</strong> — System HealthCheck + ServiceNow ITSM</li>
         <li><strong>Enterprise-grade security</strong> — JWT auth, RBAC, rate limiting</li>
         <li><strong>Centralized structured logging</strong> — Winston + DB persistence</li>
         <li><strong>Plug-and-play architecture</strong> — zero-downtime hot-deployment</li>
-        <li><strong>GKE-native</strong> — stateless pods, Cloud SQL, multi-cluster support</li>
+        <li><strong>GKE-ready</strong> — stateless pods, Cloud SQL, PersistentVolume</li>
+        <li><strong>4 future modules planned</strong> — Sailpoint, Forgerock, PGSQL, ES</li>
       </ul>
     </div>
     <div>
@@ -1367,7 +1194,6 @@
         <li><strong>Intelligent business-hour SLA</strong> — fair, accurate calculations</li>
         <li><strong>Planned downtime exclusion</strong> — ServiceNow integration</li>
         <li><strong>60-second downtime detection</strong> — was reactive</li>
-        <li><strong>K8s infrastructure visibility</strong> — was manual kubectl</li>
         <li><strong>500+ FTE hours saved</strong> per year on manual tasks</li>
         <li><strong>Single pane of glass</strong> — unified monitoring for all systems</li>
       </ul>
@@ -1376,15 +1202,15 @@
   <div style="background:linear-gradient(135deg, var(--surface-900), #1a1a2e); border-radius:14px; padding:24px; text-align:center;">
     <h3 style="color:white; font-size:18px; margin-bottom:8px;">🚀 PulseOps V3 is not just a tool — it's a platform.</h3>
     <p style="color:#94a3b8; font-size:14px; margin:0; max-width:700px; margin-left:auto; margin-right:auto;">
-      4 modules live, 180+ source files, 22 database tables. Sailpoint IIQ, Forgerock IGA, and Database monitoring modules are next.
+      Every new module we build makes the platform more valuable. Sailpoint IIQ, Forgerock IGA, PGSQL, and ElasticSearch modules are next.
       The modular architecture ensures we <strong style="color:white;">build once, deploy on GKE, and add capabilities without risk</strong>.
     </p>
   </div>
-  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">26</span></div>
+  <div class="slide-footer"><span>Confidential — Management Presentation</span><span class="slide-num">23</span></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
-<!-- SLIDE 27 — Thank You / Q&A -->
+<!-- SLIDE 24 — Thank You / Q&A -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="slide slide-title" style="min-height:576px;">
   <div style="margin-bottom:28px;">
@@ -1399,13 +1225,13 @@
     <div style="display:flex; gap:24px; justify-content:center; flex-wrap:wrap;">
       <div><strong style="color:#94a3b8;">Platform</strong><br>PulseOps V3</div>
       <div><strong style="color:#94a3b8;">Version</strong><br>3.0.0</div>
-      <div><strong style="color:#94a3b8;">Modules</strong><br>HealthCheck · ServiceNow · GKE · Accessio</div>
+      <div><strong style="color:#94a3b8;">Modules</strong><br>HealthCheck · ServiceNow</div>
     </div>
   </div>
   <div style="margin-top:32px; font-size:12px; color:#475569;">
     <em>A live working demo is available for walkthrough.</em>
   </div>
-  <div class="slide-footer" style="color:#475569;"><span>Confidential — Management Presentation</span><span class="slide-num">27</span></div>
+  <div class="slide-footer" style="color:#475569;"><span>Confidential — Management Presentation</span><span class="slide-num">24</span></div>
 </div>
 
 </body>

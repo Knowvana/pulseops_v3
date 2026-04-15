@@ -71,7 +71,7 @@
  * - urls.json: API endpoint configuration
  * ============================================================================
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect,useCallback  } from 'react';
 import { LayoutDashboard, Bell, XCircle, AlertTriangle, AlertCircle, RefreshCw, Loader2, X } from 'lucide-react';
 import { createLogger } from '@shared';
 import ApiClient from '@shared/services/apiClient';
@@ -293,219 +293,221 @@ export default function AccessioOpsDashboard() {
   const [selectedPodErrors, setSelectedPodErrors] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
+    // Fetch dashboard data from API
+  const loadDashboardData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Load general settings, cluster data, workloads, and pod errors
+      const [generalSettingsResponse, clusterInfoResponse, workloadsResponse, podErrorsResponse] = await Promise.all([
+        ApiClient.get('/api/settings'),
+        ApiClient.get(urls.api.clusterInfo),
+        ApiClient.get(urls.api.clusterWorkloads),
+        ApiClient.get('/api/accessio_ops/cluster/pods/errors')
+      ]);
+      
+      // Get general settings
+      const settings = generalSettingsResponse.success ? generalSettingsResponse.data || {} : {};
+      setGeneralSettings(settings);
+      
+      if (!clusterInfoResponse.success) {
+        throw new Error(clusterInfoResponse.error?.message || 'Failed to load cluster info');
+      }
+      
+      if (!workloadsResponse.success) {
+        throw new Error(workloadsResponse.error?.message || 'Failed to load workloads');
+      }
+
+      // Get pod errors data
+      const podErrors = podErrorsResponse.success ? podErrorsResponse.data?.podErrors || [] : [];
+      const podErrorsSummary = podErrorsResponse.success ? podErrorsResponse.data?.summary || {} : {};
+
+      // Generate alerts from workload data
+      const alerts = [];
+      const workloads = Array.isArray(workloadsResponse.data?.workloads?.items) ? workloadsResponse.data.workloads.items : [];
+      
+      // Debug: Log the structure
+      log.debug('Workloads response structure', {
+        workloadsResponse: workloadsResponse,
+        workloadsData: workloadsResponse.data,
+        workloadsArray: workloadsResponse.data?.workloads?.items,
+        isArray: Array.isArray(workloadsResponse.data?.workloads?.items),
+        workloadsCount: workloads.length
+      });
+      
+      workloads.forEach(workload => {
+        // Find associated pod errors for this workload
+        const associatedPodErrors = podErrors.filter(pe => 
+          pe.labels?.app === workload.name || 
+          pe.name?.includes(workload.name)
+        );
+        
+        // Get the most recent error time from associated pods
+        let errorTime = workload.createdAt || workload.creationTime || new Date().toISOString();
+        if (associatedPodErrors.length > 0) {
+          const podErrorTimes = associatedPodErrors
+            .flatMap(pe => pe.errors?.map(err => err.errorTime) || [])
+            .filter(time => time);
+          if (podErrorTimes.length > 0) {
+            errorTime = podErrorTimes.sort().reverse()[0];
+          }
+        }
+        
+        // Check for failed/pending workloads
+        if (workload.status === 'pending') {
+          alerts.push({
+            severity: 'warning',
+            type: 'pending',
+            component: alertComponentLabel(workload),
+            workloadName: workload.name,
+            workloadType: workload.type,
+            namespace: workload.namespace,
+            message: `${workload.type} '${workload.name}' is pending`,
+            timestamp: errorTime,
+            logMessage: `Ready: ${workload.pods?.ready || 0}/${workload.pods?.total || 0} | Replica mismatch detected`,
+            podErrors: []
+          });
+        }
+        
+        // Check for failed replicas
+        else if (workload.pods && workload.pods.ready < workload.pods.total) 
+        {
+          alerts.push({
+            severity: workload.pods.ready === 0 ? 'critical' : 'warning',
+            type: 'failure',
+            component: alertComponentLabel(workload),
+            workloadName: workload.name,
+            workloadType: workload.type,
+            namespace: workload.namespace,
+            message: `${workload.type} '${workload.name}' has ${workload.pods.ready}/${workload.pods.total} ready pods`,
+            timestamp: errorTime,
+            logMessage: `Replica mismatch detected`,
+            podErrors: []
+          });
+        }
+      });
+
+      // Add alerts for pod errors
+      podErrors.forEach(podError => {
+        // Get the most recent error time from all errors
+        let errorTime = podError.creationTime;
+        if (podError.errors && podError.errors.length > 0) {
+          const errorTimes = podError.errors
+            .map(err => err.errorTime)
+            .filter(time => time);
+          if (errorTimes.length > 0) {
+            // Use the most recent error time
+            errorTime = errorTimes.sort().reverse()[0];
+          }
+        }
+        
+        alerts.push({
+          severity: 'critical',
+          type: 'pod_error',
+          component: 'Pods',
+          workloadName: podError.name,
+          workloadType: 'Pod',
+          namespace: podError.namespace,
+          message: `Pod '${podError.name}' has ${podError.errors.length} error(s)`,
+          timestamp: errorTime || podError.createdAt || new Date().toISOString(),
+          logMessage: `Phase: ${podError.phase}, Restarts: ${podError.restartCount}`,
+          podErrors: podError.errors
+        });
+      });
+
+      // Calculate pod summary statistics
+      const podSummary = {
+        totalPods: 0,
+        runningPods: 0,
+        pendingPods: 0,
+        errorPods: 0,
+        failedPods: 0
+      };
+
+      // Count pods from workloads
+      workloads.forEach(workload => {
+        if (workload.pods) {
+          podSummary.totalPods += workload.pods.total || 0;
+          podSummary.runningPods += workload.pods.ready || 0;
+          // Don't calculate pending here - we'll get it from actual pod data
+        }
+      });
+
+      // Count pods with errors (unique pod names to avoid double counting)
+      const errorPodNames = new Set();
+      podErrors.forEach(podError => {
+        if (podError.name) {
+          errorPodNames.add(podError.name);
+        }
+      });
+      podSummary.errorPods = errorPodNames.size;
+
+      // Calculate pending as total - running - error
+      podSummary.pendingPods = podSummary.totalPods - podSummary.runningPods - podSummary.errorPods;
+
+      // Calculate workload types
+      const workloadTypes = {
+        deployments: 0,
+        statefulSets: 0,
+        cronJobs: 0,
+        jobs: 0,
+        daemonSets: 0
+      };
+
+      workloads.forEach(workload => {
+        switch (workload.type?.toLowerCase()) {
+          case 'deployment':
+            workloadTypes.deployments++;
+            break;
+          case 'statefulset':
+            workloadTypes.statefulSets++;
+            break;
+          case 'cronjob':
+            workloadTypes.cronJobs++;
+            break;
+          case 'job':
+            workloadTypes.jobs++;
+            break;
+          case 'daemonset':
+            workloadTypes.daemonSets++;
+            break;
+        }
+      });
+
+      const dashboardData = {
+        cluster: clusterInfoResponse.data,
+        workloads: workloadsResponse.data,
+        alerts: alerts,
+        podErrors: podErrors,
+        podErrorsSummary: podErrorsSummary,
+        podSummary: podSummary,
+        workloadTypes: workloadTypes,
+        summary: {
+          totalWorkloads: workloads.length,
+          healthyWorkloads: workloads.filter(w => w.status === 'running').length,
+          pendingWorkloads: workloads.filter(w => w.status === 'pending').length,
+          totalAlerts: alerts.length,
+          criticalAlerts: alerts.filter(a => a.severity === 'critical').length,
+          warningAlerts: alerts.filter(a => a.severity === 'warning').length,
+        }
+      };
+
+      setData(dashboardData);
+      setLastRefreshed(new Date());
+      
+    } catch (err) {
+      setError(err.message);
+      log.error('loadDashboardData', 'Failed to load dashboard data', { error: err.message });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // Load dashboard data
   useEffect(() => {
-    const loadDashboardData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        // Load general settings, cluster data, workloads, and pod errors
-        const [generalSettingsResponse, clusterInfoResponse, workloadsResponse, podErrorsResponse] = await Promise.all([
-          ApiClient.get('/api/settings'),
-          ApiClient.get(urls.api.clusterInfo),
-          ApiClient.get(urls.api.clusterWorkloads),
-          ApiClient.get('/api/accessio_ops/cluster/pods/errors')
-        ]);
-        
-        // Get general settings
-        const settings = generalSettingsResponse.success ? generalSettingsResponse.data || {} : {};
-        setGeneralSettings(settings);
-        
-        if (!clusterInfoResponse.success) {
-          throw new Error(clusterInfoResponse.error?.message || 'Failed to load cluster info');
-        }
-        
-        if (!workloadsResponse.success) {
-          throw new Error(workloadsResponse.error?.message || 'Failed to load workloads');
-        }
-
-        // Get pod errors data
-        const podErrors = podErrorsResponse.success ? podErrorsResponse.data?.podErrors || [] : [];
-        const podErrorsSummary = podErrorsResponse.success ? podErrorsResponse.data?.summary || {} : {};
-
-        // Generate alerts from workload data
-        const alerts = [];
-        const workloads = Array.isArray(workloadsResponse.data?.workloads?.items) ? workloadsResponse.data.workloads.items : [];
-        
-        // Debug: Log the structure
-        log.debug('Workloads response structure', {
-          workloadsResponse: workloadsResponse,
-          workloadsData: workloadsResponse.data,
-          workloadsArray: workloadsResponse.data?.workloads?.items,
-          isArray: Array.isArray(workloadsResponse.data?.workloads?.items),
-          workloadsCount: workloads.length
-        });
-        
-        workloads.forEach(workload => {
-          // Find associated pod errors for this workload
-          const associatedPodErrors = podErrors.filter(pe => 
-            pe.labels?.app === workload.name || 
-            pe.name?.includes(workload.name)
-          );
-          
-          // Get the most recent error time from associated pods
-          let errorTime = workload.createdAt || workload.creationTime || new Date().toISOString();
-          if (associatedPodErrors.length > 0) {
-            const podErrorTimes = associatedPodErrors
-              .flatMap(pe => pe.errors?.map(err => err.errorTime) || [])
-              .filter(time => time);
-            if (podErrorTimes.length > 0) {
-              errorTime = podErrorTimes.sort().reverse()[0];
-            }
-          }
-          
-          // Check for failed/pending workloads
-          if (workload.status === 'pending') {
-            alerts.push({
-              severity: 'warning',
-              type: 'pending',
-              component: alertComponentLabel(workload),
-              workloadName: workload.name,
-              workloadType: workload.type,
-              namespace: workload.namespace,
-              message: `${workload.type} '${workload.name}' is pending`,
-              timestamp: errorTime,
-              logMessage: `Ready: ${workload.pods?.ready || 0}/${workload.pods?.total || 0}`,
-              podErrors: []
-            });
-          }
-          
-          // Check for failed replicas
-          if (workload.pods && workload.pods.ready < workload.pods.total) {
-            alerts.push({
-              severity: workload.pods.ready === 0 ? 'critical' : 'warning',
-              type: 'failure',
-              component: alertComponentLabel(workload),
-              workloadName: workload.name,
-              workloadType: workload.type,
-              namespace: workload.namespace,
-              message: `${workload.type} '${workload.name}' has ${workload.pods.ready}/${workload.pods.total} ready pods`,
-              timestamp: errorTime,
-              logMessage: `Replica mismatch detected`,
-              podErrors: []
-            });
-          }
-        });
-
-        // Add alerts for pod errors
-        podErrors.forEach(podError => {
-          // Get the most recent error time from all errors
-          let errorTime = podError.creationTime;
-          if (podError.errors && podError.errors.length > 0) {
-            const errorTimes = podError.errors
-              .map(err => err.errorTime)
-              .filter(time => time);
-            if (errorTimes.length > 0) {
-              // Use the most recent error time
-              errorTime = errorTimes.sort().reverse()[0];
-            }
-          }
-          
-          alerts.push({
-            severity: 'critical',
-            type: 'pod_error',
-            component: 'Pods',
-            workloadName: podError.name,
-            workloadType: 'Pod',
-            namespace: podError.namespace,
-            message: `Pod '${podError.name}' has ${podError.errors.length} error(s)`,
-            timestamp: errorTime || podError.createdAt || new Date().toISOString(),
-            logMessage: `Phase: ${podError.phase}, Restarts: ${podError.restartCount}`,
-            podErrors: podError.errors
-          });
-        });
-
-        // Calculate pod summary statistics
-        const podSummary = {
-          totalPods: 0,
-          runningPods: 0,
-          pendingPods: 0,
-          errorPods: 0,
-          failedPods: 0
-        };
-
-        // Count pods from workloads
-        workloads.forEach(workload => {
-          if (workload.pods) {
-            podSummary.totalPods += workload.pods.total || 0;
-            podSummary.runningPods += workload.pods.ready || 0;
-            // Don't calculate pending here - we'll get it from actual pod data
-          }
-        });
-
-        // Count pods with errors (unique pod names to avoid double counting)
-        const errorPodNames = new Set();
-        podErrors.forEach(podError => {
-          if (podError.name) {
-            errorPodNames.add(podError.name);
-          }
-        });
-        podSummary.errorPods = errorPodNames.size;
-
-        // Calculate pending as total - running - error
-        podSummary.pendingPods = podSummary.totalPods - podSummary.runningPods - podSummary.errorPods;
-
-        // Calculate workload types
-        const workloadTypes = {
-          deployments: 0,
-          statefulSets: 0,
-          cronJobs: 0,
-          jobs: 0,
-          daemonSets: 0
-        };
-
-        workloads.forEach(workload => {
-          switch (workload.type?.toLowerCase()) {
-            case 'deployment':
-              workloadTypes.deployments++;
-              break;
-            case 'statefulset':
-              workloadTypes.statefulSets++;
-              break;
-            case 'cronjob':
-              workloadTypes.cronJobs++;
-              break;
-            case 'job':
-              workloadTypes.jobs++;
-              break;
-            case 'daemonset':
-              workloadTypes.daemonSets++;
-              break;
-          }
-        });
-
-        const dashboardData = {
-          cluster: clusterInfoResponse.data,
-          workloads: workloadsResponse.data,
-          alerts: alerts,
-          podErrors: podErrors,
-          podErrorsSummary: podErrorsSummary,
-          podSummary: podSummary,
-          workloadTypes: workloadTypes,
-          summary: {
-            totalWorkloads: workloads.length,
-            healthyWorkloads: workloads.filter(w => w.status === 'running').length,
-            pendingWorkloads: workloads.filter(w => w.status === 'pending').length,
-            totalAlerts: alerts.length,
-            criticalAlerts: alerts.filter(a => a.severity === 'critical').length,
-            warningAlerts: alerts.filter(a => a.severity === 'warning').length,
-          }
-        };
-
-        setData(dashboardData);
-        setLastRefreshed(new Date());
-        
-      } catch (err) {
-        setError(err.message);
-        log.error('loadDashboardData', 'Failed to load dashboard data', { error: err.message });
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadDashboardData();
-  }, []);
+  }, [loadDashboardData]);
 
   // ── Render: dashboard ───────────────────────────────────────────────────
   const allAlerts = data?.alerts || [];
@@ -524,7 +526,7 @@ export default function AccessioOpsDashboard() {
             <span>Last refreshed: {formatTimeFromNow(lastRefreshed, generalSettings)}</span>
           )}
           <button
-            onClick={() => window.location.reload()}
+            onClick={loadDashboardData}
             className="p-1.5 rounded hover:bg-surface-100 text-surface-400 hover:text-surface-600"
             title="Refresh dashboard"
           >

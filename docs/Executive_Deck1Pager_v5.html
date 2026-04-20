@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PulseOps V3 — Executive 1-Pager</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+  :root {
+    --brand: #2563eb;
+    --brand-light: #dbeafe;
+    --surface-100: #f1f5f9;
+    --surface-200: #e2e8f0;
+    --surface-600: #475569;
+    --surface-800: #1e293b;
+    --surface-900: #0f172a;
+    --green: #059669;
+    --green-light: #d1fae5;
+    --rose: #dc2626;
+    --rose-light: #ffe4e6;
+    --teal: #0d9488;
+    --teal-light: #ccfbf1;
+    --purple: #7c3aed;
+    --purple-light: #ede9fe;
+    --amber: #d97706;
+    --amber-light: #fef3c7;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: var(--surface-100); }
+
+  .slide {
+    width: 1280px; min-height: 720px; margin: 24px auto; background: white;
+    border-radius: 16px; box-shadow: 0 8px 48px rgba(0,0,0,0.1);
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+    padding: 24px 48px; display: flex; align-items: center; justify-content: space-between;
+    position: relative;
+  }
+  .header::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, var(--rose), var(--brand), var(--green));
+  }
+  .logo { font-size: 32px; font-weight: 900; color: white; letter-spacing: -1px; }
+  .logo span { color: var(--teal); }
+  .header-sub { font-size: 13px; color: #94a3b8; margin-left: 20px; border-left: 1px solid #334155; padding-left: 20px; }
+  .header-left { display: flex; align-items: center; }
+  .header-tags { display: flex; gap: 8px; }
+  .htag {
+    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
+    padding: 4px 10px; border-radius: 99px; color: white;
+  }
+  .ht-1 { background: rgba(13,148,136,0.3); border: 1px solid rgba(13,148,136,0.5); }
+  .ht-2 { background: rgba(37,99,235,0.3); border: 1px solid rgba(37,99,235,0.5); }
+  .ht-3 { background: rgba(124,58,237,0.3); border: 1px solid rgba(124,58,237,0.5); }
+
+  /* ── Body ── */
+  .body { flex: 1; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; }
+  .col { padding: 26px 30px 18px; display: flex; flex-direction: column; }
+  .col + .col { border-left: 1px solid var(--surface-200); }
+
+  /* Section Header */
+  .sec-header {
+    padding: 16px 18px; border-radius: 12px; margin-bottom: 18px;
+  }
+  .sec-label {
+    font-size: 9px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 1px; margin-bottom: 6px;
+  }
+  .sec-title { font-size: 20px; font-weight: 900; letter-spacing: -0.5px; margin-bottom: 8px; }
+  .sec-desc { font-size: 10.5px; line-height: 1.65; font-weight: 400; }
+
+  /* Problem */
+  .col-problem .sec-header { background: linear-gradient(135deg, #fef2f2, #fff1f2); border: 1px solid #fecaca; }
+  .col-problem .sec-label { color: var(--rose); }
+  .col-problem .sec-title { color: #991b1b; }
+  .col-problem .sec-desc { color: #7f1d1d; }
+
+  /* Solution */
+  .col-solution .sec-header { background: linear-gradient(135deg, #eff6ff, #e0f2fe); border: 1px solid #bfdbfe; }
+  .col-solution .sec-label { color: var(--brand); }
+  .col-solution .sec-title { color: #1e40af; }
+  .col-solution .sec-desc { color: #1e3a5f; }
+
+  /* Impact */
+  .col-impact .sec-header { background: linear-gradient(135deg, #ecfdf5, #d1fae5); border: 1px solid #a7f3d0; }
+  .col-impact .sec-label { color: var(--green); }
+  .col-impact .sec-title { color: #065f46; }
+  .col-impact .sec-desc { color: #064e3b; }
+
+  /* Highlights */
+  .highlights { list-style: none; padding: 0; flex: 1; }
+  .highlights li {
+    position: relative;
+    padding: 8px 0 8px 22px;
+    font-size: 12.5px; font-weight: 600;
+    border-bottom: 1px solid #f8fafc;
+  }
+  .highlights li:last-child { border-bottom: none; }
+  .highlights li::before {
+    content: ''; position: absolute; left: 0; top: 14px;
+    width: 9px; height: 9px; border-radius: 3px;
+  }
+
+  .col-problem .highlights li { color: #7f1d1d; }
+  .col-problem .highlights li::before { content: '\2717'; background: none; color: var(--rose); font-size: 13px; font-weight: 700; top: 8px; }
+
+  .col-solution .highlights li { color: #1e3a5f; }
+  .col-solution .highlights li::before { content: '\2611'; background: none; color: var(--brand); font-size: 14px; font-weight: 400; top: 7px; }
+
+  .col-impact .highlights li { color: #064e3b; }
+  .col-impact .highlights li::before { background: var(--green); }
+
+  /* Module strip */
+  .modules {
+    margin-top: auto; padding-top: 12px;
+    display: flex; gap: 6px; flex-wrap: wrap;
+    border-top: 1px dashed var(--surface-200);
+  }
+  .mod { font-size: 9px; font-weight: 700; padding: 4px 9px; border-radius: 6px; }
+  .m1 { background: var(--teal-light); color: var(--teal); }
+  .m2 { background: var(--brand-light); color: var(--brand); }
+  .m3 { background: var(--purple-light); color: var(--purple); }
+  .m4 { background: var(--amber-light); color: var(--amber); }
+
+  /* Roadmap */
+  .roadmap {
+    margin-top: auto; padding: 9px 14px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--purple-light), var(--brand-light));
+    border: 1px solid #c4b5fd;
+    font-size: 10.5px; color: var(--purple); font-weight: 600; text-align: center;
+  }
+
+  /* ── Footer ── */
+  .footer {
+    background: linear-gradient(135deg, var(--surface-900), #1a1a2e);
+    padding: 16px 48px; display: flex; align-items: center; justify-content: space-between;
+    position: relative;
+  }
+  .footer::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--rose), var(--brand), var(--green));
+  }
+  .stats { display: flex; gap: 32px; }
+  .stat { text-align: center; position: relative; }
+  .stat + .stat::before {
+    content: ''; position: absolute; left: -16px; top: 2px; bottom: 2px;
+    width: 1px; background: rgba(255,255,255,0.08);
+  }
+  .sv { font-size: 24px; font-weight: 900; line-height: 1; margin-bottom: 2px; }
+  .sl { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; }
+  .footer-r { display: flex; align-items: center; gap: 16px; }
+  .cta {
+    padding: 7px 18px; border-radius: 8px; font-size: 11px; font-weight: 700;
+    color: white; background: linear-gradient(135deg, var(--green), #047857);
+  }
+  .fn { font-size: 10px; color: #64748b; font-style: italic; }
+
+  @media print {
+    body { background: white; }
+    .slide { box-shadow: none; margin: 0; border-radius: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="slide">
+
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">Pulse<span>Ops</span> V3</div>
+      <div class="header-sub">Enterprise Operations Intelligence Platform</div>
+    </div>
+    <div class="header-tags">
+      <span class="htag ht-1">Modular</span>
+      <span class="htag ht-2">Zero-Downtime</span>
+      <span class="htag ht-3">GKE Native</span>
+    </div>
+  </div>
+
+  <div class="body">
+
+    <!-- ── PROBLEM ── -->
+    <div class="col col-problem">
+      <div class="sec-header">
+        <div class="sec-label">The Challenge</div>
+        <div class="sec-title">Problem Statement</div>
+        <div class="sec-desc">Operations teams has to monitor and manage multiple components in different systems like - GCP, Kubernetes, ETL jobs, Cron Jobs, Business Reporting Jobs, Sailpoint, Forgerock, and ServiceNow with no unified monitoring. This leads to significant manual overhead for monitoring.</div>
+      </div>
+      <ul class="highlights">
+        <li>No single pane of glass across 6+ systems</li>
+        <li>Manual incident acknowledgment</li>
+        <li>No automated SLA reports</li>
+        <li>No business-hour SLA calculations</li>
+        <li>No planned downtime exclusion</li>
+        <li>Reactive outage detection</li>
+        <li>Hundreds of FTE hours wasted annually</li>
+      </ul>
+    </div>
+
+    <!-- ── SOLUTION ── -->
+    <div class="col col-solution">
+      <div class="sec-header">
+        <div class="sec-label">What We Built</div>
+        <div class="sec-title">PulseOps V3</div>
+        <div class="sec-desc">A unified, modular operations platform that replaces fragmented manual processes with real-time dashboards, automated incident handling, intelligent SLA reporting, and zero-downtime extensibility.</div>
+      </div>
+      <ul class="highlights">
+        <li>Unified real-time monitoring dashboard</li>
+        <li>Auto-acknowledge engine (&lt;1 min)</li>
+        <li>1-click SLA reports with PDF export</li>
+        <li>Business-hour SLA + downtime exclusion</li>
+        <li>60-second proactive health polling</li>
+        <li>Hot-drop modular architecture</li>
+        <li>Live Kubernetes cluster monitoring</li>
+      </ul>
+      <div class="modules">
+        <span class="mod m1">HealthCheck</span>
+        <span class="mod m2">ServiceNow</span>
+        <span class="mod m3">Google GKE</span>
+        <span class="mod m4">Accessio Ops</span>
+      </div>
+    </div>
+
+    <!-- ── IMPACT ── -->
+    <div class="col col-impact">
+      <div class="sec-header">
+        <div class="sec-label">Value Delivered</div>
+        <div class="sec-title">Business Impact</div>
+        <div class="sec-desc">Measurable outcomes in automation, client reporting, and operational efficiency. Built as a reusable enterprise asset deployable across multiple client engagements without rebuilds.</div>
+      </div>
+      <ul class="highlights">
+        <li>3 new client SLA report deliverables</li>
+        <li>100% automated incident acknowledgment</li>
+        <li>Fair &amp; accurate SLA metrics</li>
+        <li>Proactive outage detection (60s polling)</li>
+        <li>Reusable cross-engagement asset</li>
+        <li>Innovation &amp; client trust showcase</li>
+      </ul>
+      <div class="roadmap">
+        Next: <strong>Sailpoint IIQ</strong> &middot; <strong>Forgerock IGA</strong> &middot; <strong>DB Monitor</strong>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <div class="stats">
+      <div class="stat"><div class="sv" style="color:var(--brand);">4</div><div class="sl">Modules</div></div>
+      <div class="stat"><div class="sv" style="color:var(--teal);">7+</div><div class="sl">Views</div></div>
+      <div class="stat"><div class="sv" style="color:var(--purple);">180+</div><div class="sl">Files</div></div>
+      <div class="stat"><div class="sv" style="color:var(--amber);">22</div><div class="sl">Tables</div></div>
+      <div class="stat"><div class="sv" style="color:var(--green);">Zero</div><div class="sl">Downtime</div></div>
+    </div>
+    <div class="footer-r">
+      <span class="cta">&#9654; Live Demo Ready</span>
+      <span class="fn">Confidential</span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

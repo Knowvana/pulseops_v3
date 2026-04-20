@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PulseOps V3 — Executive 1-Pager</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+  :root {
+    --brand: #2563eb;
+    --brand-dark: #1d4ed8;
+    --brand-light: #dbeafe;
+    --surface-50: #f8fafc;
+    --surface-100: #f1f5f9;
+    --surface-200: #e2e8f0;
+    --surface-600: #475569;
+    --surface-700: #334155;
+    --surface-800: #1e293b;
+    --surface-900: #0f172a;
+    --green: #059669;
+    --green-light: #d1fae5;
+    --amber: #d97706;
+    --amber-light: #fef3c7;
+    --rose: #dc2626;
+    --rose-light: #ffe4e6;
+    --teal: #0d9488;
+    --teal-light: #ccfbf1;
+    --purple: #7c3aed;
+    --purple-light: #ede9fe;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    background: var(--surface-100);
+    color: var(--surface-800);
+  }
+
+  /* Single-page slide — 16:9 aspect ratio */
+  .slide {
+    width: 1280px;
+    min-height: 720px;
+    margin: 24px auto;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 8px 48px rgba(0,0,0,0.1);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* ── Top Banner ── */
+  .top-banner {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+    padding: 20px 40px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+  }
+  .top-banner::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--teal), var(--brand), var(--purple));
+  }
+  .banner-left { display: flex; align-items: center; gap: 16px; }
+  .banner-logo {
+    font-size: 28px;
+    font-weight: 900;
+    color: white;
+    letter-spacing: -1px;
+  }
+  .banner-logo span { color: var(--teal); }
+  .banner-tagline {
+    font-size: 11px;
+    color: #94a3b8;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+    border-left: 1px solid #334155;
+    padding-left: 16px;
+    line-height: 1.5;
+  }
+  .banner-right { display: flex; gap: 8px; }
+  .banner-tag {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    padding: 4px 10px;
+    border-radius: 99px;
+    color: white;
+  }
+  .bt-teal { background: rgba(13,148,136,0.3); border: 1px solid rgba(13,148,136,0.5); }
+  .bt-brand { background: rgba(37,99,235,0.3); border: 1px solid rgba(37,99,235,0.5); }
+  .bt-purple { background: rgba(124,58,237,0.3); border: 1px solid rgba(124,58,237,0.5); }
+
+  /* ── Main Content ── */
+  .main-content {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0;
+    min-height: 620px;
+  }
+
+  /* ── Column Styles ── */
+  .column {
+    padding: 22px 28px;
+    position: relative;
+  }
+  .column + .column {
+    border-left: 1px solid var(--surface-200);
+  }
+
+  /* Column Headers */
+  .col-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid transparent;
+  }
+  .col-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 800;
+    color: white;
+    flex-shrink: 0;
+  }
+  .col-title {
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+  }
+  .col-subtitle {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    opacity: 0.7;
+  }
+
+  /* Problem column */
+  .col-problem .col-header { border-bottom-color: var(--rose); }
+  .col-problem .col-icon { background: linear-gradient(135deg, var(--rose), #b91c1c); }
+  .col-problem .col-title { color: var(--rose); }
+  .col-problem .col-subtitle { color: var(--rose); }
+
+  /* Solution column */
+  .col-solution .col-header { border-bottom-color: var(--brand); }
+  .col-solution .col-icon { background: linear-gradient(135deg, var(--brand), var(--teal)); }
+  .col-solution .col-title { color: var(--brand); }
+  .col-solution .col-subtitle { color: var(--brand); }
+
+  /* Benefits column */
+  .col-benefits .col-header { border-bottom-color: var(--green); }
+  .col-benefits .col-icon { background: linear-gradient(135deg, var(--green), #047857); }
+  .col-benefits .col-title { color: var(--green); }
+  .col-benefits .col-subtitle { color: var(--green); }
+
+  /* ── Pain / Solution / Benefit Items ── */
+  .item {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+  }
+  .item:hover { transform: translateX(2px); }
+
+  .item-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .item-content { flex: 1; }
+  .item-title {
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.3;
+    margin-bottom: 2px;
+  }
+  .item-desc {
+    font-size: 9.5px;
+    line-height: 1.5;
+    color: var(--surface-600);
+  }
+
+  /* Problem items */
+  .item-problem {
+    background: linear-gradient(135deg, #fff5f5, white);
+    border-color: #fecaca;
+  }
+  .item-problem .item-icon {
+    background: var(--rose-light);
+    color: var(--rose);
+    font-weight: 900;
+  }
+  .item-problem .item-title { color: #991b1b; }
+
+  /* Solution items */
+  .item-solution {
+    background: linear-gradient(135deg, #eff6ff, white);
+    border-color: #bfdbfe;
+  }
+  .item-solution .item-icon {
+    background: var(--brand-light);
+    color: var(--brand);
+    font-weight: 900;
+  }
+  .item-solution .item-title { color: #1e40af; }
+
+  /* Benefit items */
+  .item-benefit {
+    background: linear-gradient(135deg, #ecfdf5, white);
+    border-color: #a7f3d0;
+  }
+  .item-benefit .item-icon {
+    background: var(--green-light);
+    color: var(--green);
+    font-weight: 900;
+  }
+  .item-benefit .item-title { color: #065f46; }
+
+  /* ── Bottom Stats Bar ── */
+  .bottom-bar {
+    background: linear-gradient(135deg, var(--surface-900), #1a1a2e);
+    padding: 14px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+  }
+  .bottom-bar::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--rose), var(--brand), var(--green));
+  }
+
+  .stat-group {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+  }
+  .stat-item {
+    text-align: center;
+    position: relative;
+  }
+  .stat-item + .stat-item::before {
+    content: '';
+    position: absolute;
+    left: -12px;
+    top: 4px;
+    bottom: 4px;
+    width: 1px;
+    background: rgba(255,255,255,0.1);
+  }
+  .stat-value {
+    font-size: 22px;
+    font-weight: 900;
+    line-height: 1;
+    margin-bottom: 3px;
+  }
+  .stat-label {
+    font-size: 8px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #64748b;
+  }
+
+  .cta-section {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .cta-badge {
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 700;
+    color: white;
+    letter-spacing: 0.3px;
+  }
+  .cta-green { background: linear-gradient(135deg, var(--green), #047857); }
+  .cta-text {
+    font-size: 10px;
+    color: #94a3b8;
+    font-style: italic;
+  }
+
+  /* ── Callout Box ── */
+  .callout {
+    margin-top: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 9.5px;
+    font-weight: 600;
+    line-height: 1.5;
+    text-align: center;
+  }
+  .callout-rose {
+    background: linear-gradient(135deg, #fef2f2, #fff1f2);
+    border: 1px solid #fecaca;
+    color: var(--rose);
+  }
+  .callout-brand {
+    background: linear-gradient(135deg, #eff6ff, #e0f2fe);
+    border: 1px solid #bfdbfe;
+    color: var(--brand);
+  }
+  .callout-green {
+    background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+    border: 1px solid #a7f3d0;
+    color: var(--green);
+  }
+
+  /* ── Module Badges ── */
+  .module-row {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+  .module-badge {
+    font-size: 8px;
+    font-weight: 700;
+    padding: 3px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+  }
+  .mb-teal { background: var(--teal-light); color: var(--teal); }
+  .mb-brand { background: var(--brand-light); color: var(--brand); }
+  .mb-purple { background: var(--purple-light); color: var(--purple); }
+  .mb-amber { background: var(--amber-light); color: var(--amber); }
+
+  /* ── Print ── */
+  @media print {
+    body { background: white; }
+    .slide { box-shadow: none; margin: 0; border-radius: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="slide">
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- TOP BANNER                                                  -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="top-banner">
+    <div class="banner-left">
+      <div class="banner-logo">Pulse<span>Ops</span> V3</div>
+      <div class="banner-tagline">
+        Enterprise Operations Intelligence Platform<br>
+        Modular &middot; Extensible &middot; Zero-Downtime
+      </div>
+    </div>
+    <div class="banner-right">
+      <span class="banner-tag bt-teal">Microkernel Architecture</span>
+      <span class="banner-tag bt-brand">React 19 &middot; Express &middot; PostgreSQL</span>
+      <span class="banner-tag bt-purple">GKE Native</span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- THREE-COLUMN LAYOUT                                         -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="main-content">
+
+    <!-- ── COLUMN 1: PROBLEM STATEMENT ── -->
+    <div class="column col-problem">
+      <div class="col-header">
+        <div class="col-icon">&#10007;</div>
+        <div>
+          <div class="col-title">The Problem</div>
+          <div class="col-subtitle">What Exists Today</div>
+        </div>
+      </div>
+
+      <div class="item item-problem">
+        <div class="item-icon">&#10060;</div>
+        <div class="item-content">
+          <div class="item-title">No Unified Monitoring</div>
+          <div class="item-desc">Teams switch between GCP, K8s, Sailpoint, Forgerock, PGSQL, and ServiceNow separately. No single pane of glass.</div>
+        </div>
+      </div>
+
+      <div class="item item-problem">
+        <div class="item-icon">&#10060;</div>
+        <div class="item-content">
+          <div class="item-title">No Automated Incident Acknowledgment</div>
+          <div class="item-desc">Incidents sit in &ldquo;New&rdquo; status until someone manually acknowledges. Delayed response &amp; SLA breaches.</div>
+        </div>
+      </div>
+
+      <div class="item item-problem">
+        <div class="item-icon">&#10060;</div>
+        <div class="item-content">
+          <div class="item-title">No Automated SLA Reports</div>
+          <div class="item-desc">Uptime and Incident SLA reports require days of manual data gathering, calculation, and formatting.</div>
+        </div>
+      </div>
+
+      <div class="item item-problem">
+        <div class="item-icon">&#10060;</div>
+        <div class="item-content">
+          <div class="item-title">No Business-Hour SLA Logic</div>
+          <div class="item-desc">SLA calculations don't account for business hours. Off-hours resolution inflates times unfairly.</div>
+        </div>
+      </div>
+
+      <div class="item item-problem">
+        <div class="item-icon">&#10060;</div>
+        <div class="item-content">
+          <div class="item-title">No Proactive Health Visibility</div>
+          <div class="item-desc">Outages detected reactively after user complaints. No automated polling or historical uptime tracking.</div>
+        </div>
+      </div>
+
+      <div class="item item-problem">
+        <div class="item-icon">&#10060;</div>
+        <div class="item-content">
+          <div class="item-title">No Planned Downtime Exclusion</div>
+          <div class="item-desc">Maintenance windows not factored into uptime — resulting in inaccurate SLA numbers reported to the client.</div>
+        </div>
+      </div>
+
+      <div class="callout callout-rose">
+        &#9888; Late incident response adds <strong>30-40% to resolution time</strong> &amp; risks SLA penalties
+      </div>
+    </div>
+
+    <!-- ── COLUMN 2: OUR SOLUTION ── -->
+    <div class="column col-solution">
+      <div class="col-header">
+        <div class="col-icon">&#9889;</div>
+        <div>
+          <div class="col-title">PulseOps V3 Solution</div>
+          <div class="col-subtitle">What We Built</div>
+        </div>
+      </div>
+
+      <div class="item item-solution">
+        <div class="item-icon">&#10004;</div>
+        <div class="item-content">
+          <div class="item-title">Unified Monitoring Dashboard</div>
+          <div class="item-desc">Single pane of glass for all systems — apps, K8s, incidents, SLA. Real-time SSE updates. No more tool switching.</div>
+        </div>
+      </div>
+
+      <div class="item item-solution">
+        <div class="item-icon">&#10004;</div>
+        <div class="item-content">
+          <div class="item-title">Automated Incident Auto-Acknowledge</div>
+          <div class="item-desc">Background poller auto-acks incidents within minutes. Configurable frequency, message, full audit trail.</div>
+        </div>
+      </div>
+
+      <div class="item item-solution">
+        <div class="item-icon">&#10004;</div>
+        <div class="item-content">
+          <div class="item-title">1-Click SLA Report Generation</div>
+          <div class="item-desc">Automated Uptime SLA, Resolution SLA, and Response SLA reports. PDF export ready for client delivery.</div>
+        </div>
+      </div>
+
+      <div class="item item-solution">
+        <div class="item-icon">&#10004;</div>
+        <div class="item-content">
+          <div class="item-title">Intelligent Business-Hour SLA Engine</div>
+          <div class="item-desc">Resolution &amp; response times calculated using business hours only. Per-priority thresholds (P1: 4h &ndash; P4: 72h).</div>
+        </div>
+      </div>
+
+      <div class="item item-solution">
+        <div class="item-icon">&#10004;</div>
+        <div class="item-content">
+          <div class="item-title">60-Second Auto-Polling &amp; Alerting</div>
+          <div class="item-desc">Minute-by-minute health monitoring with status validation, response time tracking, and proactive alerting.</div>
+        </div>
+      </div>
+
+      <div class="item item-solution">
+        <div class="item-icon">&#10004;</div>
+        <div class="item-content">
+          <div class="item-title">Modular &amp; Extensible Architecture</div>
+          <div class="item-desc">Hot-drop plug-and-play modules. Zero downtime deployment. New modules in 2-4 weeks using templates.</div>
+        </div>
+      </div>
+
+      <div class="module-row">
+        <span class="module-badge mb-teal">&#128154; HealthCheck</span>
+        <span class="module-badge mb-brand">&#127911; ServiceNow</span>
+        <span class="module-badge mb-purple">&#9729; Google GKE</span>
+        <span class="module-badge mb-amber">&#128737; Accessio Ops</span>
+      </div>
+
+      <div class="callout callout-brand" style="margin-top:6px;">
+        &#128640; Transforms operations from <strong>reactive firefighting</strong> to <strong>proactive intelligence</strong>
+      </div>
+    </div>
+
+    <!-- ── COLUMN 3: BENEFITS ── -->
+    <div class="column col-benefits">
+      <div class="col-header">
+        <div class="col-icon">&#9733;</div>
+        <div>
+          <div class="col-title">Business Impact</div>
+          <div class="col-subtitle">Value Delivered</div>
+        </div>
+      </div>
+
+      <div class="item item-benefit">
+        <div class="item-icon">&#128200;</div>
+        <div class="item-content">
+          <div class="item-title">500+ FTE Hours Saved / Year</div>
+          <div class="item-desc">Eliminates manual monitoring, incident acknowledgment, SLA report generation, and cross-system checks.</div>
+        </div>
+      </div>
+
+      <div class="item item-benefit">
+        <div class="item-icon">&#128196;</div>
+        <div class="item-content">
+          <div class="item-title">3 New Client Deliverables</div>
+          <div class="item-desc">Monthly Uptime SLA, Incident Resolution SLA, and Incident Response SLA reports — previously unavailable.</div>
+        </div>
+      </div>
+
+      <div class="item item-benefit">
+        <div class="item-icon">&#9889;</div>
+        <div class="item-content">
+          <div class="item-title">100% Automated Incident Ack</div>
+          <div class="item-desc">Zero manual effort. Sub-minute acknowledgment. Configurable with full audit trail and DB-safe dedup.</div>
+        </div>
+      </div>
+
+      <div class="item item-benefit">
+        <div class="item-icon">&#128161;</div>
+        <div class="item-content">
+          <div class="item-title">Fair &amp; Accurate SLA Metrics</div>
+          <div class="item-desc">Business-hour calculations + planned downtime exclusion = accurate numbers the client can trust.</div>
+        </div>
+      </div>
+
+      <div class="item item-benefit">
+        <div class="item-icon">&#128640;</div>
+        <div class="item-content">
+          <div class="item-title">Reusable Enterprise Asset</div>
+          <div class="item-desc">Deploy across multiple client engagements. Modular design allows client-specific customization without rebuilds.</div>
+        </div>
+      </div>
+
+      <div class="item item-benefit">
+        <div class="item-icon">&#127942;</div>
+        <div class="item-content">
+          <div class="item-title">Innovation Showcase</div>
+          <div class="item-desc">Demonstrates enterprise-grade platform engineering. Strengthens proposals and builds client trust.</div>
+        </div>
+      </div>
+
+      <div class="callout callout-green">
+        &#127919; Next: <strong>Sailpoint IIQ</strong>, <strong>Forgerock IGA</strong>, <strong>DB Monitoring</strong> modules &mdash; zero platform changes
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!-- BOTTOM STATS BAR                                            -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="bottom-bar">
+    <div class="stat-group">
+      <div class="stat-item">
+        <div class="stat-value" style="color:var(--brand);">4</div>
+        <div class="stat-label">Production Modules</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" style="color:var(--teal);">7+</div>
+        <div class="stat-label">Live Monitoring Views</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" style="color:var(--purple);">180+</div>
+        <div class="stat-label">Source Files</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" style="color:var(--amber);">22</div>
+        <div class="stat-label">Database Tables</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" style="color:var(--green);">Zero</div>
+        <div class="stat-label">Downtime Deploys</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" style="color:var(--rose);">500+</div>
+        <div class="stat-label">FTE Hours Saved / Yr</div>
+      </div>
+    </div>
+    <div class="cta-section">
+      <span class="cta-badge cta-green">&#9654; Live Demo Ready</span>
+      <span class="cta-text">Confidential &mdash; Management Presentation</span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

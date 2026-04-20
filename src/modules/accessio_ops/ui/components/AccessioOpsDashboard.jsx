@@ -416,35 +416,17 @@ export default function AccessioOpsDashboard() {
         });
       });
 
-      // Calculate pod summary statistics
+      // Use actual pod counts from backend (workloadsResponse.data.pods)
+      // instead of deriving from workload replica counts which excludes CronJob pods
+      // and causes mismatches with error pod counts
+      const backendPods = workloadsResponse.data?.pods || {};
       const podSummary = {
-        totalPods: 0,
-        runningPods: 0,
-        pendingPods: 0,
-        errorPods: 0,
-        failedPods: 0
+        totalPods: backendPods.total || 0,
+        runningPods: backendPods.running || 0,
+        pendingPods: backendPods.pending || 0,
+        errorPods: podErrors.length,
+        failedPods: backendPods.failed || 0
       };
-
-      // Count pods from workloads
-      workloads.forEach(workload => {
-        if (workload.pods) {
-          podSummary.totalPods += workload.pods.total || 0;
-          podSummary.runningPods += workload.pods.ready || 0;
-          // Don't calculate pending here - we'll get it from actual pod data
-        }
-      });
-
-      // Count pods with errors (unique pod names to avoid double counting)
-      const errorPodNames = new Set();
-      podErrors.forEach(podError => {
-        if (podError.name) {
-          errorPodNames.add(podError.name);
-        }
-      });
-      podSummary.errorPods = errorPodNames.size;
-
-      // Calculate pending as total - running - error
-      podSummary.pendingPods = podSummary.totalPods - podSummary.runningPods - podSummary.errorPods;
 
       // Calculate workload types
       const workloadTypes = {

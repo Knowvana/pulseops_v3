@@ -100,7 +100,7 @@ function addMemoryValues(value1, value2) {
  * Get filtered namespaces (excluding core/system namespaces)
  * @returns {Promise<Array>} Array of namespace names to exclude
  */
-async function getFilteredNamespaces() {
+export async function getFilteredNamespaces() {
   try {
     const filterConfig = await loadModuleConfig('filter_namespaces_default');
     return filterConfig?.namespaces || [];

@@ -25,7 +25,7 @@ import { Router } from 'express';
 import { getConfigFile, saveConfigFile } from '../services/ModuleConfigService.js';
 import { testConnection, getK8sCoreApi } from '../lib/KubernetesClient.js';
 import { createAoLogger } from '../lib/moduleLogger.js';
-import { getClusterInfo, getNamespaces, getWorkloads, getWorkloadsMetrics } from '../services/ClusterService.js';
+import { getClusterInfo, getNamespaces, getWorkloads, getWorkloadsMetrics, getFilteredNamespaces } from '../services/ClusterService.js';
 import { saveModuleConfig, loadModuleConfig } from './helpers.js';
 
 const log = createAoLogger('clusterRoutes.js');
@@ -553,10 +553,20 @@ router.get('/cluster/pods/errors', async (req, res) => {
         });
       }
       
+      // Apply the same namespace filtering used by workloads to keep data consistent
+      const excludedNamespaces = await getFilteredNamespaces();
+      const filteredPods = allPods.filter(pod => !excludedNamespaces.includes(pod.metadata.namespace));
+      log.debug('Filtered pods for error analysis', {
+        totalPods: allPods.length,
+        excludedNamespaces,
+        excluded: allPods.length - filteredPods.length,
+        remaining: filteredPods.length
+      });
+      
       // Filter pods with errors
       const podErrors = [];
       
-      allPods.forEach(pod => {
+      filteredPods.forEach(pod => {
         const podData = analyzePodErrors(pod);
         if (podData.hasErrors) {
           podErrors.push(podData);
@@ -567,7 +577,7 @@ router.get('/cluster/pods/errors', async (req, res) => {
       podErrors.sort((a, b) => new Date(b.creationTime) - new Date(a.creationTime));
       
       log.debug('GET all pod errors completed', {
-        totalPods: allPods.length,
+        totalPods: filteredPods.length,
         errorPods: podErrors.length,
         duration: Date.now() - startTime
       });
@@ -577,7 +587,7 @@ router.get('/cluster/pods/errors', async (req, res) => {
         data: {
           podErrors: podErrors,
           summary: {
-            totalPods: allPods.length,
+            totalPods: filteredPods.length,
             errorPods: podErrors.length,
             errorTypes: {
               phase_error: podErrors.filter(p => p.errors.some(e => e.type === 'phase_error')).length,

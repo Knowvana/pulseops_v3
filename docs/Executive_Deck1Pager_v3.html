@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PulseOps V3 — Executive 1-Pager</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+  :root {
+    --brand: #2563eb;
+    --brand-light: #dbeafe;
+    --surface-50: #f8fafc;
+    --surface-100: #f1f5f9;
+    --surface-200: #e2e8f0;
+    --surface-600: #475569;
+    --surface-700: #334155;
+    --surface-800: #1e293b;
+    --surface-900: #0f172a;
+    --green: #059669;
+    --green-light: #d1fae5;
+    --rose: #dc2626;
+    --rose-light: #ffe4e6;
+    --teal: #0d9488;
+    --teal-light: #ccfbf1;
+    --purple: #7c3aed;
+    --purple-light: #ede9fe;
+    --amber: #d97706;
+    --amber-light: #fef3c7;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    background: var(--surface-100);
+    color: var(--surface-800);
+  }
+
+  .slide {
+    width: 1280px;
+    min-height: 720px;
+    margin: 24px auto;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 8px 48px rgba(0,0,0,0.1);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+    padding: 22px 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+  }
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--rose), var(--brand), var(--green));
+  }
+  .header-left { display: flex; align-items: center; gap: 20px; }
+  .logo { font-size: 30px; font-weight: 900; color: white; letter-spacing: -1px; }
+  .logo span { color: var(--teal); }
+  .tagline {
+    font-size: 12px; color: #94a3b8; font-weight: 500;
+    border-left: 1px solid #334155; padding-left: 20px; line-height: 1.5;
+  }
+  .header-tags { display: flex; gap: 8px; }
+  .htag {
+    font-size: 9px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.8px; padding: 4px 10px; border-radius: 99px; color: white;
+  }
+  .ht-1 { background: rgba(13,148,136,0.3); border: 1px solid rgba(13,148,136,0.5); }
+  .ht-2 { background: rgba(37,99,235,0.3); border: 1px solid rgba(37,99,235,0.5); }
+  .ht-3 { background: rgba(124,58,237,0.3); border: 1px solid rgba(124,58,237,0.5); }
+
+  /* ── Body ── */
+  .body {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0;
+  }
+  .col { padding: 28px 34px 20px; display: flex; flex-direction: column; }
+  .col + .col { border-left: 1px solid var(--surface-200); }
+  .sec-header { min-height: 130px; }
+
+  /* Section Header */
+  .sec-label {
+    font-size: 9px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 1.2px; margin-bottom: 4px;
+  }
+  .sec-title {
+    font-size: 22px; font-weight: 900; letter-spacing: -0.5px; margin-bottom: 8px;
+  }
+  .sec-brief {
+    font-size: 12px; line-height: 1.7; font-weight: 500;
+    color: var(--surface-600); margin-bottom: 16px;
+    padding-bottom: 14px;
+    border-bottom: 2px solid transparent;
+  }
+
+  /* Column themes */
+  .col-problem .sec-label { color: var(--rose); }
+  .col-problem .sec-title { color: #991b1b; }
+  .col-problem .sec-brief { border-bottom-color: var(--rose); }
+
+  .col-solution .sec-label { color: var(--brand); }
+  .col-solution .sec-title { color: #1e40af; }
+  .col-solution .sec-brief { border-bottom-color: var(--brand); }
+
+  .col-impact .sec-label { color: var(--green); }
+  .col-impact .sec-title { color: #065f46; }
+  .col-impact .sec-brief { border-bottom-color: var(--green); }
+
+  /* Bullets */
+  .bullets { list-style: none; padding: 0; }
+  .bullets li {
+    position: relative;
+    padding: 7px 0 7px 18px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--surface-700);
+  }
+  .bullets li::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 13px;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+  }
+  .bullets li strong { font-weight: 700; }
+
+  .col-problem .bullets li::before { background: var(--rose); }
+  .col-problem .bullets li strong { color: #991b1b; }
+
+  .col-solution .bullets li::before { background: var(--brand); }
+  .col-solution .bullets li strong { color: #1e40af; }
+
+  .col-impact .bullets li::before { background: var(--green); }
+  .col-impact .bullets li strong { color: #065f46; }
+
+  /* Module + Roadmap strips */
+  .module-strip {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    margin-top: 16px; padding-top: 12px;
+    border-top: 1px dashed var(--surface-200);
+  }
+  .mod-badge {
+    font-size: 9px; font-weight: 700;
+    padding: 3px 8px; border-radius: 5px;
+  }
+  .mb-teal { background: var(--teal-light); color: var(--teal); }
+  .mb-brand { background: var(--brand-light); color: var(--brand); }
+  .mb-purple { background: var(--purple-light); color: var(--purple); }
+  .mb-amber { background: var(--amber-light); color: var(--amber); }
+
+  .roadmap {
+    margin-top: 16px; padding: 8px 12px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, var(--purple-light), var(--brand-light));
+    border: 1px solid #c4b5fd;
+    font-size: 10px; color: var(--purple);
+    font-weight: 600; text-align: center;
+  }
+
+  /* ── Footer ── */
+  .footer {
+    background: linear-gradient(135deg, var(--surface-900), #1a1a2e);
+    padding: 14px 48px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: relative;
+  }
+  .footer::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--rose), var(--brand), var(--green));
+  }
+  .stats { display: flex; gap: 28px; align-items: center; }
+  .stat { text-align: center; position: relative; }
+  .stat + .stat::before {
+    content: ''; position: absolute;
+    left: -14px; top: 2px; bottom: 2px;
+    width: 1px; background: rgba(255,255,255,0.08);
+  }
+  .stat-val { font-size: 22px; font-weight: 900; line-height: 1; margin-bottom: 2px; }
+  .stat-lbl { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #64748b; }
+  .footer-right { display: flex; align-items: center; gap: 16px; }
+  .cta {
+    padding: 6px 16px; border-radius: 8px;
+    font-size: 10px; font-weight: 700; color: white;
+    background: linear-gradient(135deg, var(--green), #047857);
+  }
+  .footer-note { font-size: 10px; color: #64748b; font-style: italic; }
+
+  @media print {
+    body { background: white; }
+    .slide { box-shadow: none; margin: 0; border-radius: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="slide">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">Pulse<span>Ops</span> V3</div>
+      <div class="tagline">Enterprise Operations Intelligence Platform<br>Modular &middot; Extensible &middot; Zero-Downtime</div>
+    </div>
+    <div class="header-tags">
+      <span class="htag ht-1">Microkernel Architecture</span>
+      <span class="htag ht-2">React 19 &middot; Express &middot; PostgreSQL</span>
+      <span class="htag ht-3">GKE Native</span>
+    </div>
+  </div>
+
+  <!-- THREE COLUMNS -->
+  <div class="body">
+
+    <!-- PROBLEM -->
+    <div class="col col-problem">
+      <div class="sec-header">
+        <div class="sec-label">01 &mdash; The Challenge</div>
+        <div class="sec-title">Problem</div>
+        <div class="sec-brief">Operations manage a complex ecosystem of multiple systems with no unified monitoring &mdash; leading to manual effort, delayed response, and human monitoring errors and misses.</div>
+      </div>
+      <ul class="bullets">
+        <li><strong>Fragmented tooling</strong> &mdash; GCP, K8s, Sailpoint, Forgerock, ServiceNow monitored separately</li>
+        <li><strong>No Automated SLA and Uptime reports</strong> &mdash; manual data gathering for each monthly report</li>
+        <li><strong>Reactive outage detection</strong> &mdash; issues found only after user complaints</li>
+      </ul>
+    </div>
+
+    <!-- SOLUTION -->
+    <div class="col col-solution">
+      <div class="sec-header">
+        <div class="sec-label">02 &mdash; What We Built</div>
+        <div class="sec-title">Solution</div>
+        <div class="sec-brief">A unified, modular platform replacing fragmented processes with real-time dashboards, automated workflows, and enterprise reporting.</div>
+      </div>
+      <ul class="bullets">
+        <li><strong>Single pane of glass</strong> &mdash; unified dashboard with real-time Monitoring of all components at 1 place</li>
+        <li><strong>1-click SLA reports</strong> &mdash; Uptime, Resolution, and Response SLA with PDF export</li>
+        <li><strong>Plug and Play, Modular and Zero-downtime Deployment Architecture</strong> &mdash; hot-drop architecture; build, drop, enable &mdash; no restarts</li>
+      </ul>
+      <div class="module-strip">
+        <span class="mod-badge mb-teal">HealthCheck</span>
+        <span class="mod-badge mb-brand">ServiceNow ITSM</span>
+        <span class="mod-badge mb-purple">Google GKE</span>
+        <span class="mod-badge mb-amber">Accessio Ops</span>
+      </div>
+    </div>
+
+    <!-- IMPACT -->
+    <div class="col col-impact">
+      <div class="sec-header">
+        <div class="sec-label">03 &mdash; Value Delivered</div>
+        <div class="sec-title">Impact</div>
+        <div class="sec-brief">Measurable outcomes in automation, client reporting, and operational efficiency &mdash; built as a reusable, Modular and hot deployable enterprise asset.</div>
+      </div>
+      <ul class="bullets">
+        <li><strong>3 new client deliverables as opertaional Value Adds</strong> &mdash; Uptime, Resolution, and Response SLA reports</li>
+        <li><strong>Accurate SLA metrics</strong> &mdash; business-hour logic + downtime exclusion</li>
+        <li><strong>Reusable platform</strong> &mdash; deploy across engagements with modular customization</li>
+      </ul>
+      <div class="roadmap">Next: <strong>Sailpoint IIQ</strong> &middot; <strong>Forgerock IGA</strong> &middot; <strong>DB Monitoring</strong> &mdash; zero platform changes</div>
+    </div>
+
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <div class="stats">
+      <div class="stat"><div class="stat-val" style="color:var(--brand);">4</div><div class="stat-lbl">Production Modules</div></div>
+      <div class="stat"><div class="stat-val" style="color:var(--purple);">180+</div><div class="stat-lbl">Source Files</div></div>
+      <div class="stat"><div class="stat-val" style="color:var(--amber);">22</div><div class="stat-lbl">Database Tables</div></div>
+      <div class="stat"><div class="stat-val" style="color:var(--green);">Zero</div><div class="stat-lbl">Downtime Deploys</div></div>
+    </div>
+    <div class="footer-right">
+      <span class="cta">&#9654; Live Demo Ready</span>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
